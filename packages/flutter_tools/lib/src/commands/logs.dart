@@ -4,37 +4,61 @@
 
 import 'dart:async';
 
+import '../android/android_device.dart';
+import '../application_package.dart';
 import '../base/common.dart';
 import '../base/io.dart';
-import '../cache.dart';
+import '../base/logger.dart';
+import '../context/tool_context.dart';
 import '../device.dart';
-import '../globals.dart' as globals;
 import '../runner/flutter_command.dart';
 
+/// Show log output for running Flutter apps.
 class LogsCommand extends FlutterCommand {
-  LogsCommand() {
-    argParser.addFlag('clear',
+  LogsCommand({
+    required ToolContext super.toolContext,
+    ApplicationPackageFactory? applicationPackageFactory,
+    ProcessSignal? sigint,
+    ProcessSignal? sigterm,
+  }) : _sigint = sigint ?? ProcessSignal.sigint,
+       _sigterm = sigterm ?? ProcessSignal.sigterm {
+    applicationPackages = applicationPackageFactory;
+    argParser.addFlag(
+      'clear',
       negatable: false,
       abbr: 'c',
       help: 'Clear log history before reading from logs.',
     );
-    usesDeviceTimeoutOption();
+    registerOptionBundle(const DeviceDiscoveryOptionsBundle());
+    DebuggingOptionDescriptors.adbLogFiltering.addTo(argParser, hideOverride: false);
   }
 
-  @override
-  final String name = 'logs';
+  final ProcessSignal _sigint;
+  final ProcessSignal _sigterm;
 
   @override
-  final String description = 'Show log output for running Flutter apps.';
+  ToolContext get toolContext => super.toolContext!;
+
+  @override
+  final name = 'logs';
+
+  @override
+  final description = 'Show log output for running Flutter apps.';
+
+  @override
+  final String category = FlutterCommandCategory.tools;
+
+  @override
+  bool get refreshWirelessDevices => true;
 
   @override
   Future<Set<DevelopmentArtifact>> get requiredArtifacts async => const <DevelopmentArtifact>{};
 
-  Device device;
+  Device? device;
 
   @override
-  Future<FlutterCommandResult> verifyThenRunCommand(String commandPath) async {
-    device = await findTargetDevice(includeUnsupportedDevices: true);
+  Future<FlutterCommandResult> verifyThenRunCommand(String? commandPath) async {
+    device = await findTargetDevice(includeDevicesUnsupportedByProject: true);
     if (device == null) {
       throwToolExit(null);
     }
@@ -43,36 +67,54 @@ class LogsCommand extends FlutterCommand {
 
   @override
   Future<FlutterCommandResult> runCommand() async {
+    final Logger logger = toolContext.logger;
+    final Device cachedDevice = device!;
     if (boolArg('clear')) {
-      device.clearLogs();
+      cachedDevice.clearLogs();
     }
 
-    final DeviceLogReader logReader = await device.getLogReader();
+    final ApplicationPackage? app = await applicationPackages?.getPackageForPlatform(
+      await cachedDevice.targetPlatform,
+    );
 
-    globals.printStatus('Showing $logReader logs:');
+    final bool filtering =
+        argParser.options.containsKey('adb-log-filtering') && boolArg('adb-log-filtering');
+    final DeviceLogReader logReader;
+    if (cachedDevice is AndroidDevice) {
+      logReader = await cachedDevice.getLogReader(app: app, adbLogFiltering: filtering);
+    } else {
+      logReader = await cachedDevice.getLogReader(app: app);
+    }
 
-    final Completer<int> exitCompleter = Completer<int>();
+    logger.printStatus('Showing $logReader logs:');
+
+    final exitCompleter = Completer<int>();
+
+    // First check if we already completed by another branch before completing
+    // with [exitCode].
+    void maybeComplete([int exitCode = 0]) {
+      if (exitCompleter.isCompleted) {
+        return;
+      }
+      exitCompleter.complete(exitCode);
+    }
 
     // Start reading.
     final StreamSubscription<String> subscription = logReader.logLines.listen(
-      (String message) => globals.printStatus(message, wrap: false),
-      onDone: () {
-        exitCompleter.complete(0);
-      },
-      onError: (dynamic error) {
-        exitCompleter.complete(error is int ? error : 1);
-      },
+      (String message) => logger.printStatus(message, wrap: false),
+      onDone: () => maybeComplete(),
+      onError: (Object error) => maybeComplete(error is int ? error : 1),
     );
 
     // When terminating, close down the log reader.
-    ProcessSignal.SIGINT.watch().listen((ProcessSignal signal) {
+    _sigint.watch().listen((ProcessSignal signal) {
       subscription.cancel();
-      globals.printStatus('');
-      exitCompleter.complete(0);
+      maybeComplete();
+      logger.printStatus('');
     });
-    ProcessSignal.SIGTERM.watch().listen((ProcessSignal signal) {
+    _sigterm.watch().listen((ProcessSignal signal) {
       subscription.cancel();
-      exitCompleter.complete(0);
+      maybeComplete();
     });
 
     // Wait for the log reader to be finished.

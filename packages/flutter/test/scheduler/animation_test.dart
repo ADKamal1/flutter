@@ -2,17 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'scheduler_tester.dart';
 
-class TestSchedulerBinding extends BindingBase with SchedulerBinding, ServicesBinding { }
+class TestSchedulerBinding extends BindingBase with SchedulerBinding, ServicesBinding {}
 
 void main() {
   final SchedulerBinding scheduler = TestSchedulerBinding();
@@ -22,10 +19,10 @@ void main() {
   });
 
   test('Can cancel queued callback', () {
-    int secondId;
+    late int secondId;
 
-    bool firstCallbackRan = false;
-    bool secondCallbackRan = false;
+    var firstCallbackRan = false;
+    var secondCallbackRan = false;
 
     void firstCallback(Duration timeStamp) {
       expect(firstCallbackRan, isFalse);

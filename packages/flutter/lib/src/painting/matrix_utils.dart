@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
-import 'dart:typed_data';
+/// @docImport 'package:flutter/rendering.dart';
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart';
@@ -11,35 +11,33 @@ import 'package:vector_math/vector_math_64.dart';
 import 'basic_types.dart';
 
 /// Utility functions for working with matrices.
-class MatrixUtils {
-  // This class is not meant to be instantiated or extended; this constructor
-  // prevents instantiation and extension.
-  // ignore: unused_element
-  MatrixUtils._();
-
+abstract final class MatrixUtils {
   /// Returns the given [transform] matrix as an [Offset], if the matrix is
   /// nothing but a 2D translation.
   ///
   /// Otherwise, returns null.
   static Offset? getAsTranslation(Matrix4 transform) {
-    assert(transform != null);
-    final Float64List values = transform.storage;
-    // Values are stored in column-major order.
-    if (values[0] == 1.0 && // col 1
-        values[1] == 0.0 &&
-        values[2] == 0.0 &&
-        values[3] == 0.0 &&
-        values[4] == 0.0 && // col 2
-        values[5] == 1.0 &&
-        values[6] == 0.0 &&
-        values[7] == 0.0 &&
-        values[8] == 0.0 && // col 3
-        values[9] == 0.0 &&
-        values[10] == 1.0 &&
-        values[11] == 0.0 &&
-        values[14] == 0.0 && // bottom of col 4 (values 12 and 13 are the x and y offsets)
-        values[15] == 1.0) {
-      return Offset(values[12], values[13]);
+    // Values are stored in column-major order, so the appearance
+    // of dx is transposed from the top-right to the bottom-left.
+    if (transform.storage case [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      final double dx,
+      final double dy,
+      0.0,
+      1.0,
+    ]) {
+      return Offset(dx, dy);
     }
     return null;
   }
@@ -49,77 +47,149 @@ class MatrixUtils {
   ///
   /// Otherwise, returns null.
   static double? getAsScale(Matrix4 transform) {
-    assert(transform != null);
-    final Float64List values = transform.storage;
-    // Values are stored in column-major order.
-    if (values[1] == 0.0 && // col 1 (value 0 is the scale)
-        values[2] == 0.0 &&
-        values[3] == 0.0 &&
-        values[4] == 0.0 && // col 2 (value 5 is the scale)
-        values[6] == 0.0 &&
-        values[7] == 0.0 &&
-        values[8] == 0.0 && // col 3
-        values[9] == 0.0 &&
-        values[10] == 1.0 &&
-        values[11] == 0.0 &&
-        values[12] == 0.0 && // col 4
-        values[13] == 0.0 &&
-        values[14] == 0.0 &&
-        values[15] == 1.0 &&
-        values[0] == values[5]) { // uniform scale
-      return values[0];
+    // Values are stored in column-major order
+    // (but this symmetric matrix is unaffected).
+    if (transform.storage
+        case [
+          final double diagonal1,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          final double diagonal2,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+        ]
+        when diagonal1 == diagonal2) {
+      return diagonal1;
     }
     return null;
+  }
+
+  /// Computes the result of matrix multiplication `a x b` and stores the result
+  /// in `b`.
+  ///
+  /// This function does not alter the argument `a`, and is thus useful when you
+  /// want to left-multiply in-place. For right-multiply in-place, see
+  /// [Matrix4.multiply].
+  static void multiplyInPlace(Matrix4 a, Matrix4 b) {
+    final Float64List aStorage = a.storage;
+    final double m00 = aStorage[0];
+    final double m01 = aStorage[4];
+    final double m02 = aStorage[8];
+    final double m03 = aStorage[12];
+    final double m10 = aStorage[1];
+    final double m11 = aStorage[5];
+    final double m12 = aStorage[9];
+    final double m13 = aStorage[13];
+    final double m20 = aStorage[2];
+    final double m21 = aStorage[6];
+    final double m22 = aStorage[10];
+    final double m23 = aStorage[14];
+    final double m30 = aStorage[3];
+    final double m31 = aStorage[7];
+    final double m32 = aStorage[11];
+    final double m33 = aStorage[15];
+    final Float64List bStorage = b.storage;
+    final double n00 = bStorage[0];
+    final double n01 = bStorage[4];
+    final double n02 = bStorage[8];
+    final double n03 = bStorage[12];
+    final double n10 = bStorage[1];
+    final double n11 = bStorage[5];
+    final double n12 = bStorage[9];
+    final double n13 = bStorage[13];
+    final double n20 = bStorage[2];
+    final double n21 = bStorage[6];
+    final double n22 = bStorage[10];
+    final double n23 = bStorage[14];
+    final double n30 = bStorage[3];
+    final double n31 = bStorage[7];
+    final double n32 = bStorage[11];
+    final double n33 = bStorage[15];
+    bStorage[0] = (m00 * n00) + (m01 * n10) + (m02 * n20) + (m03 * n30);
+    bStorage[4] = (m00 * n01) + (m01 * n11) + (m02 * n21) + (m03 * n31);
+    bStorage[8] = (m00 * n02) + (m01 * n12) + (m02 * n22) + (m03 * n32);
+    bStorage[12] = (m00 * n03) + (m01 * n13) + (m02 * n23) + (m03 * n33);
+    bStorage[1] = (m10 * n00) + (m11 * n10) + (m12 * n20) + (m13 * n30);
+    bStorage[5] = (m10 * n01) + (m11 * n11) + (m12 * n21) + (m13 * n31);
+    bStorage[9] = (m10 * n02) + (m11 * n12) + (m12 * n22) + (m13 * n32);
+    bStorage[13] = (m10 * n03) + (m11 * n13) + (m12 * n23) + (m13 * n33);
+    bStorage[2] = (m20 * n00) + (m21 * n10) + (m22 * n20) + (m23 * n30);
+    bStorage[6] = (m20 * n01) + (m21 * n11) + (m22 * n21) + (m23 * n31);
+    bStorage[10] = (m20 * n02) + (m21 * n12) + (m22 * n22) + (m23 * n32);
+    bStorage[14] = (m20 * n03) + (m21 * n13) + (m22 * n23) + (m23 * n33);
+    bStorage[3] = (m30 * n00) + (m31 * n10) + (m32 * n20) + (m33 * n30);
+    bStorage[7] = (m30 * n01) + (m31 * n11) + (m32 * n21) + (m33 * n31);
+    bStorage[11] = (m30 * n02) + (m31 * n12) + (m32 * n22) + (m33 * n32);
+    bStorage[15] = (m30 * n03) + (m31 * n13) + (m32 * n23) + (m33 * n33);
   }
 
   /// Returns true if the given matrices are exactly equal, and false
   /// otherwise. Null values are assumed to be the identity matrix.
   static bool matrixEquals(Matrix4? a, Matrix4? b) {
-    if (identical(a, b))
+    if (identical(a, b)) {
       return true;
+    }
     assert(a != null || b != null);
-    if (a == null)
+    if (a == null) {
       return isIdentity(b!);
-    if (b == null)
+    }
+    if (b == null) {
       return isIdentity(a);
-    assert(a != null && b != null);
-    return a.storage[0] == b.storage[0]
-        && a.storage[1] == b.storage[1]
-        && a.storage[2] == b.storage[2]
-        && a.storage[3] == b.storage[3]
-        && a.storage[4] == b.storage[4]
-        && a.storage[5] == b.storage[5]
-        && a.storage[6] == b.storage[6]
-        && a.storage[7] == b.storage[7]
-        && a.storage[8] == b.storage[8]
-        && a.storage[9] == b.storage[9]
-        && a.storage[10] == b.storage[10]
-        && a.storage[11] == b.storage[11]
-        && a.storage[12] == b.storage[12]
-        && a.storage[13] == b.storage[13]
-        && a.storage[14] == b.storage[14]
-        && a.storage[15] == b.storage[15];
+    }
+    return a.storage[0] == b.storage[0] &&
+        a.storage[1] == b.storage[1] &&
+        a.storage[2] == b.storage[2] &&
+        a.storage[3] == b.storage[3] &&
+        a.storage[4] == b.storage[4] &&
+        a.storage[5] == b.storage[5] &&
+        a.storage[6] == b.storage[6] &&
+        a.storage[7] == b.storage[7] &&
+        a.storage[8] == b.storage[8] &&
+        a.storage[9] == b.storage[9] &&
+        a.storage[10] == b.storage[10] &&
+        a.storage[11] == b.storage[11] &&
+        a.storage[12] == b.storage[12] &&
+        a.storage[13] == b.storage[13] &&
+        a.storage[14] == b.storage[14] &&
+        a.storage[15] == b.storage[15];
   }
 
   /// Whether the given matrix is the identity matrix.
   static bool isIdentity(Matrix4 a) {
-    assert(a != null);
-    return a.storage[0] == 1.0 // col 1
-        && a.storage[1] == 0.0
-        && a.storage[2] == 0.0
-        && a.storage[3] == 0.0
-        && a.storage[4] == 0.0 // col 2
-        && a.storage[5] == 1.0
-        && a.storage[6] == 0.0
-        && a.storage[7] == 0.0
-        && a.storage[8] == 0.0 // col 3
-        && a.storage[9] == 0.0
-        && a.storage[10] == 1.0
-        && a.storage[11] == 0.0
-        && a.storage[12] == 0.0 // col 4
-        && a.storage[13] == 0.0
-        && a.storage[14] == 0.0
-        && a.storage[15] == 1.0;
+    return a.storage[0] ==
+            1.0 // col 1
+            &&
+        a.storage[1] == 0.0 &&
+        a.storage[2] == 0.0 &&
+        a.storage[3] == 0.0 &&
+        a.storage[4] ==
+            0.0 // col 2
+            &&
+        a.storage[5] == 1.0 &&
+        a.storage[6] == 0.0 &&
+        a.storage[7] == 0.0 &&
+        a.storage[8] ==
+            0.0 // col 3
+            &&
+        a.storage[9] == 0.0 &&
+        a.storage[10] == 1.0 &&
+        a.storage[11] == 0.0 &&
+        a.storage[12] ==
+            0.0 // col 4
+            &&
+        a.storage[13] == 0.0 &&
+        a.storage[14] == 0.0 &&
+        a.storage[15] == 1.0;
   }
 
   /// Applies the given matrix as a perspective transform to the given point.
@@ -160,19 +230,17 @@ class MatrixUtils {
   /// if it can.
   static Rect _safeTransformRect(Matrix4 transform, Rect rect) {
     final Float64List storage = transform.storage;
-    final bool isAffine = storage[3] == 0.0 &&
-        storage[7] == 0.0 &&
-        storage[15] == 1.0;
+    final bool isAffine = storage[3] == 0.0 && storage[7] == 0.0 && storage[15] == 1.0;
 
-    _accumulate(storage, rect.left,  rect.top,    true,  isAffine);
-    _accumulate(storage, rect.right, rect.top,    false, isAffine);
-    _accumulate(storage, rect.left,  rect.bottom, false, isAffine);
+    _accumulate(storage, rect.left, rect.top, true, isAffine);
+    _accumulate(storage, rect.right, rect.top, false, isAffine);
+    _accumulate(storage, rect.left, rect.bottom, false, isAffine);
     _accumulate(storage, rect.right, rect.bottom, false, isAffine);
 
     return Rect.fromLTRB(_minMax[0], _minMax[1], _minMax[2], _minMax[3]);
   }
 
-  static late final Float64List _minMax = Float64List(4);
+  static final Float64List _minMax = Float64List(4);
   static void _accumulate(Float64List m, double x, double y, bool first, bool isAffine) {
     final double w = isAffine ? 1.0 : 1.0 / (m[3] * x + m[7] * y + m[15]);
     final double tx = (m[0] * x + m[4] * y + m[12]) * w;
@@ -236,17 +304,17 @@ class MatrixUtils {
     // First, consider that a full point transform using the vector math
     // package involves expanding it out into a vector3 with a Z coordinate
     // of 0.0 and then performing 3 multiplies and 3 adds per coordinate:
-    // ```
-    // xt = x*m00 + y*m10 + z*m20 + m30;
-    // yt = x*m01 + y*m11 + z*m21 + m31;
-    // zt = x*m02 + y*m12 + z*m22 + m32;
-    // wt = x*m03 + y*m13 + z*m23 + m33;
-    // ```
+    //
+    //     xt = x*m00 + y*m10 + z*m20 + m30;
+    //     yt = x*m01 + y*m11 + z*m21 + m31;
+    //     zt = x*m02 + y*m12 + z*m22 + m32;
+    //     wt = x*m03 + y*m13 + z*m23 + m33;
+    //
     // Immediately we see that we can get rid of the 3rd column of multiplies
     // since we know that Z=0.0. We can also get rid of the 3rd row because
     // we ignore the resulting Z coordinate. Finally we can get rid of the
     // last row if we don't have a perspective transform since we can verify
-    // that the results are 1.0 for all points.  This gets us down to 16
+    // that the results are 1.0 for all points. This gets us down to 16
     // multiplies and 16 adds in the non-perspective case and 24 of each for
     // the perspective case. (Plus the 12 comparisons to turn them back into
     // a bounding box.)
@@ -283,7 +351,7 @@ class MatrixUtils {
     // continue to hold with respect to the non-normalized coordinates so
     // we can still save a lot of multiplications by computing the 4
     // non-normalized coordinates using relative additions before we normalize
-    // them and they lose their "pseudo-parallelogram" relationships.  We still
+    // them and they lose their "pseudo-parallelogram" relationships. We still
     // have to do the normalization divisions and min/max all 4 points to
     // get the resulting transformed bounding box, but we save a lot of
     // calculations over blindly transforming all 4 coordinates independently.
@@ -308,26 +376,26 @@ class MatrixUtils {
     // you combine both of them, the resulting "opposite corner" will
     // actually be between the limits they established by pushing the walls
     // away from each other, as below:
-    // ```
-    //         +---------(originx,originy)--------------+
-    //         |            -----^----                  |
-    //         |       -----          ----              |
-    //         |  -----                   ----          |
-    // (+hx,+hy)<                             ----      |
-    //         |  ----                            ----  |
-    //         |      ----                             >(+wx,+wy)
-    //         |          ----                   -----  |
-    //         |              ----          -----       |
-    //         |                  ---- -----            |
-    //         |                      v                 |
-    //         +---------------(+wx+hx,+wy+hy)----------+
-    // ```
+    //
+    //             +---------(originx,originy)--------------+
+    //             |            -----^----                  |
+    //             |       -----          ----              |
+    //             |  -----                   ----          |
+    //     (+hx,+hy)<                             ----      |
+    //             |  ----                            ----  |
+    //             |      ----                             >(+wx,+wy)
+    //             |          ----                   -----  |
+    //             |              ----          -----       |
+    //             |                  ---- -----            |
+    //             |                      v                 |
+    //             +---------------(+wx+hx,+wy+hy)----------+
+    //
     // In this diagram, consider that:
-    // ```
-    // wx would be a positive number
-    // hx would be a negative number
-    // wy and hy would both be positive numbers
-    // ```
+    //
+    //  * wx would be a positive number
+    //  * hx would be a negative number
+    //  * wy and hy would both be positive numbers
+    //
     // As a result, wx pushes out the right wall, hx pushes out the left wall,
     // and both wy and hy push down the bottom wall of the bounding box. The
     // wx,hx pair (of opposite signs) worked on opposite walls and the final
@@ -345,8 +413,8 @@ class MatrixUtils {
     // for a total of 8 multiplies, 8 adds, and 4 comparisons.
     //
     // An astute observer will note that we do need to do 2 subtractions at
-    // the top of the method to compute the width and height.  Add those to
-    // all of the relative solutions listed above.  The test for perspective
+    // the top of the method to compute the width and height. Add those to
+    // all of the relative solutions listed above. The test for perspective
     // also adds 3 compares to the affine case and up to 3 compares to the
     // perspective case (depending on which test fails, the rest are omitted).
     //
@@ -370,28 +438,28 @@ class MatrixUtils {
     final double ry = storage[1] * x + storage[5] * y + storage[13];
 
     if (storage[3] == 0.0 && storage[7] == 0.0 && storage[15] == 1.0) {
-      double left  = rx;
-      double right = rx;
+      var left = rx;
+      var right = rx;
       if (wx < 0) {
-        left  += wx;
+        left += wx;
       } else {
         right += wx;
       }
       if (hx < 0) {
-        left  += hx;
+        left += hx;
       } else {
         right += hx;
       }
 
-      double top    = ry;
-      double bottom = ry;
+      var top = ry;
+      var bottom = ry;
       if (wy < 0) {
-        top    += wy;
+        top += wy;
       } else {
         bottom += wy;
       }
       if (hy < 0) {
-        top    += hy;
+        top += hy;
       } else {
         bottom += hy;
       }
@@ -402,12 +470,12 @@ class MatrixUtils {
       final double hw = storage[7] * h;
       final double rw = storage[3] * x + storage[7] * y + storage[15];
 
-      final double ulx =  rx            /  rw;
-      final double uly =  ry            /  rw;
-      final double urx = (rx + wx)      / (rw + ww);
-      final double ury = (ry + wy)      / (rw + ww);
-      final double llx = (rx      + hx) / (rw      + hw);
-      final double lly = (ry      + hy) / (rw      + hw);
+      final double ulx = rx / rw;
+      final double uly = ry / rw;
+      final double urx = (rx + wx) / (rw + ww);
+      final double ury = (ry + wy) / (rw + ww);
+      final double llx = (rx + hx) / (rw + hw);
+      final double lly = (ry + hy) / (rw + hw);
       final double lrx = (rx + wx + hx) / (rw + ww + hw);
       final double lry = (ry + wy + hy) / (rw + ww + hw);
 
@@ -421,13 +489,14 @@ class MatrixUtils {
   }
 
   static double _min4(double a, double b, double c, double d) {
-    final double e = (a < b) ? a : b;
-    final double f = (c < d) ? c : d;
+    final e = (a < b) ? a : b;
+    final f = (c < d) ? c : d;
     return (e < f) ? e : f;
   }
+
   static double _max4(double a, double b, double c, double d) {
-    final double e = (a > b) ? a : b;
-    final double f = (c > d) ? c : d;
+    final e = (a > b) ? a : b;
+    final f = (c > d) ? c : d;
     return (e > f) ? e : f;
   }
 
@@ -438,13 +507,13 @@ class MatrixUtils {
   /// The transformed rect is then projected back into the plane with z equals
   /// 0.0 before computing its bounding rect.
   static Rect inverseTransformRect(Matrix4 transform, Rect rect) {
-    assert(rect != null);
     // As exposed by `unrelated_type_equality_checks`, this assert was a no-op.
     // Fixing it introduces a bunch of runtime failures; for more context see:
     // https://github.com/flutter/flutter/pull/31568
     // assert(transform.determinant != 0.0);
-    if (isIdentity(transform))
+    if (isIdentity(transform)) {
       return rect;
+    }
     transform = Matrix4.copy(transform)..invert();
     return transformRect(transform, rect);
   }
@@ -455,8 +524,8 @@ class MatrixUtils {
   ///
   /// The `radius` simulates the radius of the cylinder the plane is being
   /// wrapped onto. If the transformation is applied to a 0-dimensional dot
-  /// instead of a plane, the dot would simply translate by +/- `radius` pixels
-  /// along the `orientation` [Axis] when rotating from 0 to +/- 90 degrees.
+  /// instead of a plane, the dot would translate by ± `radius` pixels
+  /// along the `orientation` [Axis] when rotating from 0 to ±90 degrees.
   ///
   /// A positive radius means the object is closest at 0 `angle` and a negative
   /// radius means the object is closest at π `angle` or 180 degrees.
@@ -478,7 +547,7 @@ class MatrixUtils {
   /// The `orientation` is the direction of the rotation axis.
   ///
   /// Because the viewing position is a point, it's never possible to see the
-  /// outer side of the cylinder at or past +/- π / 2 or 90 degrees and it's
+  /// outer side of the cylinder at or past ±π/2 or 90 degrees and it's
   /// almost always possible to end up seeing the inner side of the cylinder
   /// or the back side of the transformed plane before π / 2 when perspective > 0.
   static Matrix4 createCylindricalProjectionTransform({
@@ -487,10 +556,7 @@ class MatrixUtils {
     double perspective = 0.001,
     Axis orientation = Axis.vertical,
   }) {
-    assert(radius != null);
-    assert(angle != null);
     assert(perspective >= 0 && perspective <= 1.0);
-    assert(orientation != null);
 
     // Pre-multiplied matrix of a projection matrix and a view matrix.
     //
@@ -509,18 +575,21 @@ class MatrixUtils {
     //  [0.0, 1.0, 0.0, 0.0],
     //  [0.0, 0.0, 1.0, -radius],
     //  [0.0, 0.0, 0.0, 1.0]]
-    Matrix4 result = Matrix4.identity()
-        ..setEntry(3, 2, -perspective)
-        ..setEntry(2, 3, -radius)
-        ..setEntry(3, 3, perspective * radius + 1.0);
+    var result = Matrix4.identity()
+      ..setEntry(3, 2, -perspective)
+      ..setEntry(2, 3, -radius)
+      ..setEntry(3, 3, perspective * radius + 1.0);
 
     // Model matrix by first translating the object from the origin of the world
     // by radius in the z axis and then rotating against the world.
-    result = result * ((
-        orientation == Axis.horizontal
-            ? Matrix4.rotationY(angle)
-            : Matrix4.rotationX(angle)
-    ) * Matrix4.translationValues(0.0, 0.0, radius)) as Matrix4;
+    result =
+        result *
+                (switch (orientation) {
+                      Axis.horizontal => Matrix4.rotationY(angle),
+                      Axis.vertical => Matrix4.rotationX(angle),
+                    } *
+                    Matrix4.translationValues(0.0, 0.0, radius))
+            as Matrix4;
 
     // Essentially perspective * view * model.
     return result;
@@ -528,9 +597,15 @@ class MatrixUtils {
 
   /// Returns a matrix that transforms every point to [offset].
   static Matrix4 forceToPoint(Offset offset) {
-    return Matrix4.identity()
-      ..setRow(0, Vector4(0, 0, 0, offset.dx))
-      ..setRow(1, Vector4(0, 0, 0, offset.dy));
+    final result = Matrix4.zero();
+    final Float64List storage = result.storage;
+    // Matrix4 is column-major.
+    // The first two columns (indices 0, 1, 4, 5) are zero, so x and y are ignored.
+    storage[10] = 1; // Row 2, Column 2: z' = z
+    storage[12] = offset.dx; // Row 0, Column 3: x' = offset.dx
+    storage[13] = offset.dy; // Row 1, Column 3: y' = offset.dy
+    storage[15] = 1; // Row 3, Column 3: w' = w
+    return result;
   }
 }
 
@@ -539,8 +614,9 @@ class MatrixUtils {
 ///
 /// If the argument is null, returns a list with the single string "null".
 List<String> debugDescribeTransform(Matrix4? transform) {
-  if (transform == null)
+  if (transform == null) {
     return const <String>['null'];
+  }
   return <String>[
     '[0] ${debugFormatDouble(transform.entry(0, 0))},${debugFormatDouble(transform.entry(0, 1))},${debugFormatDouble(transform.entry(0, 2))},${debugFormatDouble(transform.entry(0, 3))}',
     '[1] ${debugFormatDouble(transform.entry(1, 0))},${debugFormatDouble(transform.entry(1, 1))},${debugFormatDouble(transform.entry(1, 2))},${debugFormatDouble(transform.entry(1, 3))}',
@@ -552,30 +628,20 @@ List<String> debugDescribeTransform(Matrix4? transform) {
 /// Property which handles [Matrix4] that represent transforms.
 class TransformProperty extends DiagnosticsProperty<Matrix4> {
   /// Create a diagnostics property for [Matrix4] objects.
-  ///
-  /// The [showName] and [level] arguments must not be null.
   TransformProperty(
-    String name,
-    Matrix4? value, {
-    bool showName = true,
-    Object? defaultValue = kNoDefaultValue,
-    DiagnosticLevel level = DiagnosticLevel.info,
-  }) : assert(showName != null),
-       assert(level != null),
-       super(
-         name,
-         value,
-         showName: showName,
-         defaultValue: defaultValue,
-         level: level,
-       );
+    String super.name,
+    super.value, {
+    super.showName,
+    super.defaultValue,
+    super.level,
+  });
 
   @override
-  String valueToString({ TextTreeConfiguration? parentConfiguration }) {
+  String valueToString({TextTreeConfiguration? parentConfiguration}) {
     if (parentConfiguration != null && !parentConfiguration.lineBreakProperties) {
       // Format the value on a single line to be compatible with the parent's
       // style.
-      final List<String> values = <String>[
+      final values = <String>[
         '${debugFormatDouble(value!.entry(0, 0))},${debugFormatDouble(value!.entry(0, 1))},${debugFormatDouble(value!.entry(0, 2))},${debugFormatDouble(value!.entry(0, 3))}',
         '${debugFormatDouble(value!.entry(1, 0))},${debugFormatDouble(value!.entry(1, 1))},${debugFormatDouble(value!.entry(1, 2))},${debugFormatDouble(value!.entry(1, 3))}',
         '${debugFormatDouble(value!.entry(2, 0))},${debugFormatDouble(value!.entry(2, 1))},${debugFormatDouble(value!.entry(2, 2))},${debugFormatDouble(value!.entry(2, 3))}',

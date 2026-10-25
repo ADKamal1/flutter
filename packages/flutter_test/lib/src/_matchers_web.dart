@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'matchers.dart';
+library;
+
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:test_api/src/frontend/async_matcher.dart'; // ignore: implementation_imports
-// ignore: deprecated_member_use
-import 'package:test_api/test_api.dart' hide TypeMatcher, isInstanceOf;
+import 'package:matcher/expect.dart';
+import 'package:matcher/src/expect/async_matcher.dart'; // ignore: implementation_imports
+import 'package:test_api/hooks.dart' show TestFailure;
 
 import 'binding.dart';
 import 'finders.dart';
@@ -18,6 +22,15 @@ import 'goldens.dart';
 Future<ui.Image> captureImage(Element element) {
   throw UnsupportedError('captureImage is not supported on the web.');
 }
+
+/// Whether or not [captureImage] is supported.
+///
+/// This can be used to skip tests on platforms that don't support
+/// capturing images.
+///
+/// Currently this is true except when tests are running in the context of a web
+/// browser (`flutter test --platform chrome`).
+const bool canCaptureImage = false;
 
 /// The matcher created by [matchesGoldenFile]. This class is enabled when the
 /// test is running in a web browser using conditional import.
@@ -46,60 +59,42 @@ class MatchesGoldenFile extends AsyncMatcher {
       return 'matched too many widgets';
     }
     final Element element = elements.single;
-    final RenderObject renderObject = _findRepaintBoundary(element);
-    final Size size = renderObject.paintBounds.size;
-    final TestWidgetsFlutterBinding binding = TestWidgetsFlutterBinding.ensureInitialized() as TestWidgetsFlutterBinding;
-    final Element e = binding.renderViewElement!;
 
-    // Unlike `flutter_tester`, we don't have the ability to render an element
-    // to an image directly. Instead, we will use `window.render()` to render
-    // only the element being requested, and send a request to the test server
-    // requesting it to take a screenshot through the browser's debug interface.
-    _renderElement(binding.window, renderObject);
-    final String? result = await binding.runAsync<String?>(() async {
-      if (autoUpdateGoldenFiles) {
-        await webGoldenComparator.update(size.width, size.height, key);
-        return null;
+    // In CanvasKit and Skwasm, use Layer.toImage to generate the screenshot.
+    final TestWidgetsFlutterBinding binding = TestWidgetsFlutterBinding.instance;
+    return binding.runAsync<String?>(() async {
+      assert(element.renderObject != null);
+      RenderObject renderObject = element.renderObject!;
+      while (!renderObject.isRepaintBoundary) {
+        renderObject = renderObject.parent!;
       }
+      assert(!renderObject.debugNeedsPaint);
+      final layer = renderObject.debugLayer! as OffsetLayer;
+      final ui.Image image = await layer.toImage(renderObject.paintBounds);
       try {
-        final bool success = await webGoldenComparator.compare(size.width, size.height, key);
-        return success ? null : 'does not match';
-      } on TestFailure catch (ex) {
-        return ex.message;
+        final ByteData? bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (bytes == null) {
+          return 'could not encode screenshot.';
+        }
+        if (autoUpdateGoldenFiles) {
+          await goldenFileComparator.update(key, bytes.buffer.asUint8List());
+          return null;
+        }
+        try {
+          final bool success = await goldenFileComparator.compare(bytes.buffer.asUint8List(), key);
+          return success ? null : 'does not match';
+        } on TestFailure catch (ex) {
+          return ex.message;
+        }
+      } finally {
+        image.dispose();
       }
-    }, additionalTime: const Duration(seconds: 22));
-    _renderElement(binding.window, _findRepaintBoundary(e));
-    return result;
+    });
   }
 
   @override
   Description describe(Description description) {
-    final Uri testNameUri = webGoldenComparator.getTestUri(key, version);
+    final Uri testNameUri = goldenFileComparator.getTestUri(key, version);
     return description.add('one widget whose rasterized image matches golden image "$testNameUri"');
   }
-}
-
-RenderObject _findRepaintBoundary(Element element) {
-  assert(element.renderObject != null);
-  RenderObject renderObject = element.renderObject!;
-  while (!renderObject.isRepaintBoundary) {
-    renderObject = renderObject.parent as RenderObject;
-    assert(renderObject != null);
-  }
-  return renderObject;
-}
-
-void _renderElement(ui.Window window, RenderObject renderObject) {
-  assert(renderObject.debugLayer != null);
-  final Layer layer = renderObject.debugLayer!;
-  final ui.SceneBuilder sceneBuilder = ui.SceneBuilder();
-  if (layer is OffsetLayer) {
-    sceneBuilder.pushOffset(-layer.offset.dx, -layer.offset.dy);
-  }
-  // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
-  layer.updateSubtreeNeedsAddToScene();
-  // ignore: invalid_use_of_protected_member
-  layer.addToScene(sceneBuilder);
-  sceneBuilder.pop();
-  window.render(sceneBuilder.build());
 }

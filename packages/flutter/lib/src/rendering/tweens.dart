@@ -20,8 +20,7 @@ class FractionalOffsetTween extends Tween<FractionalOffset?> {
   ///
   /// The [begin] and [end] properties may be null; the null value
   /// is treated as meaning the center.
-  FractionalOffsetTween({ FractionalOffset? begin, FractionalOffset? end })
-    : super(begin: begin, end: end);
+  FractionalOffsetTween({super.begin, super.end});
 
   /// Returns the value this variable has at the given animation clock value.
   @override
@@ -39,17 +38,16 @@ class FractionalOffsetTween extends Tween<FractionalOffset?> {
 ///
 ///  * [AlignmentGeometryTween], which interpolates between two
 ///    [AlignmentGeometry] objects.
-class AlignmentTween extends Tween<Alignment?> {
+class AlignmentTween extends Tween<Alignment> {
   /// Creates a fractional offset tween.
   ///
   /// The [begin] and [end] properties may be null; the null value
   /// is treated as meaning the center.
-  AlignmentTween({ Alignment? begin, Alignment? end })
-    : super(begin: begin, end: end);
+  AlignmentTween({super.begin, super.end});
 
   /// Returns the value this variable has at the given animation clock value.
   @override
-  Alignment? lerp(double t) => Alignment.lerp(begin, end, t);
+  Alignment lerp(double t) => Alignment.lerp(begin, end, t)!;
 }
 
 /// An interpolation between two [AlignmentGeometry].
@@ -67,10 +65,7 @@ class AlignmentGeometryTween extends Tween<AlignmentGeometry?> {
   ///
   /// The [begin] and [end] properties may be null; the null value
   /// is treated as meaning the center.
-  AlignmentGeometryTween({
-    AlignmentGeometry? begin,
-    AlignmentGeometry? end,
-  }) : super(begin: begin, end: end);
+  AlignmentGeometryTween({super.begin, super.end});
 
   /// Returns the value this variable has at the given animation clock value.
   @override

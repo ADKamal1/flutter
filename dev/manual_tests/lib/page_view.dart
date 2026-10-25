@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class CardModel {
@@ -15,6 +14,8 @@ class CardModel {
 }
 
 class PageViewApp extends StatefulWidget {
+  const PageViewApp({super.key});
+
   @override
   PageViewAppState createState() => PageViewAppState();
 }
@@ -23,7 +24,7 @@ class PageViewAppState extends State<PageViewApp> {
   @override
   void initState() {
     super.initState();
-    const List<Size> cardSizes = <Size>[
+    const cardSizes = <Size>[
       Size(100.0, 300.0),
       Size(300.0, 100.0),
       Size(200.0, 400.0),
@@ -32,15 +33,22 @@ class PageViewAppState extends State<PageViewApp> {
     ];
 
     cardModels = List<CardModel>.generate(cardSizes.length, (int i) {
-      final Color color = Color.lerp(Colors.red.shade300, Colors.blue.shade900, i / cardSizes.length);
-      return CardModel(i, cardSizes[i], color);
+      final Color? color = Color.lerp(
+        Colors.red.shade300,
+        Colors.blue.shade900,
+        i / cardSizes.length,
+      );
+      return CardModel(i, cardSizes[i], color!);
     });
   }
 
-  static const TextStyle cardLabelStyle =
-    TextStyle(color: Colors.white, fontSize: 18.0, fontWeight: FontWeight.bold);
+  static const TextStyle cardLabelStyle = TextStyle(
+    color: Colors.white,
+    fontSize: 18.0,
+    fontWeight: FontWeight.bold,
+  );
 
-  List<CardModel> cardModels;
+  List<CardModel> cardModels = <CardModel>[];
   Size pageSize = const Size(200.0, 200.0);
   Axis scrollDirection = Axis.horizontal;
   bool itemsWrap = false;
@@ -56,9 +64,9 @@ class PageViewAppState extends State<PageViewApp> {
       ),
     );
 
-    final BoxConstraints constraints = (scrollDirection == Axis.vertical)
-      ? BoxConstraints.tightFor(height: pageSize.height)
-      : BoxConstraints.tightFor(width: pageSize.width);
+    final constraints = (scrollDirection == Axis.vertical)
+        ? BoxConstraints.tightFor(height: pageSize.height)
+        : BoxConstraints.tightFor(width: pageSize.width);
 
     return Container(
       key: cardModel.key,
@@ -69,9 +77,7 @@ class PageViewAppState extends State<PageViewApp> {
 
   void switchScrollDirection() {
     setState(() {
-      scrollDirection = (scrollDirection == Axis.vertical)
-        ? Axis.horizontal
-        : Axis.vertical;
+      scrollDirection = flipAxis(scrollDirection);
     });
   }
 
@@ -110,19 +116,14 @@ class PageViewAppState extends State<PageViewApp> {
   }
 
   AppBar _buildAppBar() {
-    return AppBar(
-      title: const Text('PageView'),
-      actions: <Widget>[
-        Text(scrollDirection == Axis.horizontal ? 'horizontal' : 'vertical'),
-      ],
-    );
+    return AppBar(title: const Text('PageView'), actions: <Widget>[Text(scrollDirection.name)]);
   }
 
   Widget _buildBody(BuildContext context) {
     return PageView(
-      children: cardModels.map<Widget>(buildCard).toList(),
       // TODO(abarth): itemsWrap: itemsWrap,
       scrollDirection: scrollDirection,
+      children: cardModels.map<Widget>(buildCard).toList(),
     );
   }
 
@@ -130,23 +131,11 @@ class PageViewAppState extends State<PageViewApp> {
   Widget build(BuildContext context) {
     return IconTheme(
       data: const IconThemeData(color: Colors.white),
-      child: Scaffold(
-        appBar: _buildAppBar(),
-        drawer: _buildDrawer(),
-        body: _buildBody(context),
-      ),
+      child: Scaffold(appBar: _buildAppBar(), drawer: _buildDrawer(), body: _buildBody(context)),
     );
   }
 }
 
 void main() {
-  runApp(MaterialApp(
-    title: 'PageView',
-    theme: ThemeData(
-      brightness: Brightness.light,
-      primarySwatch: Colors.blue,
-      accentColor: Colors.redAccent,
-    ),
-    home: PageViewApp(),
-  ));
+  runApp(const MaterialApp(title: 'PageView', home: PageViewApp()));
 }

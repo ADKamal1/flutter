@@ -30,5 +30,20 @@
   "pasteButtonLabel": "Wklej",
   "selectAllButtonLabel": "Wybierz wszystkie",
   "tabSemanticsLabel": "Karta $tabIndex z $tabCount",
-  "modalBarrierDismissLabel": "Zamknij"
+  "modalBarrierDismissLabel": "Zamknij",
+  "searchTextFieldPlaceholderLabel": "Szukaj",
+  "noSpellCheckReplacementsLabel": "Brak wyników zamieniania",
+  "menuDismissLabel": "Zamknij menu",
+  "lookUpButtonLabel": "Sprawdź",
+  "searchWebButtonLabel": "Szukaj w internecie",
+  "shareButtonLabel": "Udostępnij…",
+  "clearButtonLabel": "Wyczyść",
+  "cancelButtonLabel": "Anuluj",
+  "backButtonLabel": "Wstecz",
+  "expansionTileExpandedHint": "kliknij dwukrotnie, aby zwinąć",
+  "expansionTileCollapsedHint": "kliknij dwukrotnie, aby rozwinąć",
+  "expansionTileExpandedTapHint": "Zwiń",
+  "expansionTileCollapsedTapHint": "Rozwiń, aby wyświetlić więcej informacji",
+  "expandedHint": "Zwinięto",
+  "collapsedHint": "Rozwinięto"
 }

@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
+/// @docImport 'navigation_bar.dart';
+library;
 
 import 'dart:ui' show lerpDouble;
 
@@ -12,15 +13,16 @@ import 'package:flutter/widgets.dart';
 
 import 'navigation_rail.dart';
 import 'theme.dart';
-import 'theme_data.dart';
+
+// Examples can assume:
+// late BuildContext context;
 
 /// Defines default property values for descendant [NavigationRail]
 /// widgets.
 ///
 /// Descendant widgets obtain the current [NavigationRailThemeData] object
-/// using `NavigationRailTheme.of(context)`. Instances of
-/// [NavigationRailThemeData] can be customized with
-/// [NavigationRailThemeData.copyWith].
+/// using [NavigationRailTheme.of]. Instances of [NavigationRailThemeData]
+/// can be customized with [NavigationRailThemeData.copyWith].
 ///
 /// Typically a [NavigationRailThemeData] is specified as part of the
 /// overall [Theme] with [ThemeData.navigationRailTheme].
@@ -47,49 +49,78 @@ class NavigationRailThemeData with Diagnosticable {
     this.selectedIconTheme,
     this.groupAlignment,
     this.labelType,
+    this.useIndicator,
+    this.indicatorColor,
+    this.indicatorShape,
+    this.minWidth,
+    this.minExtendedWidth,
   });
 
   /// Color to be used for the [NavigationRail]'s background.
-  final Color backgroundColor;
+  final Color? backgroundColor;
 
   /// The z-coordinate to be used for the [NavigationRail]'s elevation.
-  final double elevation;
+  final double? elevation;
 
   /// The style to merge with the default text style for
   /// [NavigationRailDestination] labels, when the destination is not selected.
-  final TextStyle unselectedLabelTextStyle;
+  final TextStyle? unselectedLabelTextStyle;
 
   /// The style to merge with the default text style for
   /// [NavigationRailDestination] labels, when the destination is selected.
-  final TextStyle selectedLabelTextStyle;
+  final TextStyle? selectedLabelTextStyle;
 
   /// The theme to merge with the default icon theme for
   /// [NavigationRailDestination] icons, when the destination is not selected.
-  final IconThemeData unselectedIconTheme;
+  final IconThemeData? unselectedIconTheme;
 
   /// The theme to merge with the default icon theme for
   /// [NavigationRailDestination] icons, when the destination is selected.
-  final IconThemeData selectedIconTheme;
+  final IconThemeData? selectedIconTheme;
 
   /// The alignment for the [NavigationRailDestination]s as they are positioned
   /// within the [NavigationRail].
-  final double groupAlignment;
+  final double? groupAlignment;
 
   /// The type that defines the layout and behavior of the labels in the
   /// [NavigationRail].
-  final NavigationRailLabelType labelType;
+  final NavigationRailLabelType? labelType;
+
+  /// Whether or not the selected [NavigationRailDestination] should include a
+  /// [NavigationIndicator].
+  final bool? useIndicator;
+
+  /// Overrides the default value of [NavigationRail]'s selection indicator color,
+  /// when [useIndicator] is true.
+  final Color? indicatorColor;
+
+  /// Overrides the default shape of the [NavigationRail]'s selection indicator.
+  final ShapeBorder? indicatorShape;
+
+  /// Overrides the default value of [NavigationRail]'s minimum width when it
+  /// is not extended.
+  final double? minWidth;
+
+  /// Overrides the default value of [NavigationRail]'s minimum width when it
+  /// is extended.
+  final double? minExtendedWidth;
 
   /// Creates a copy of this object with the given fields replaced with the
   /// new values.
   NavigationRailThemeData copyWith({
-    Color backgroundColor,
-    double elevation,
-    TextStyle unselectedLabelTextStyle,
-    TextStyle selectedLabelTextStyle,
-    IconThemeData unselectedIconTheme,
-    IconThemeData selectedIconTheme,
-    double groupAlignment,
-    NavigationRailLabelType labelType,
+    Color? backgroundColor,
+    double? elevation,
+    TextStyle? unselectedLabelTextStyle,
+    TextStyle? selectedLabelTextStyle,
+    IconThemeData? unselectedIconTheme,
+    IconThemeData? selectedIconTheme,
+    double? groupAlignment,
+    NavigationRailLabelType? labelType,
+    bool? useIndicator,
+    Color? indicatorColor,
+    ShapeBorder? indicatorShape,
+    double? minWidth,
+    double? minExtendedWidth,
   }) {
     return NavigationRailThemeData(
       backgroundColor: backgroundColor ?? this.backgroundColor,
@@ -100,6 +131,11 @@ class NavigationRailThemeData with Diagnosticable {
       selectedIconTheme: selectedIconTheme ?? this.selectedIconTheme,
       groupAlignment: groupAlignment ?? this.groupAlignment,
       labelType: labelType ?? this.labelType,
+      useIndicator: useIndicator ?? this.useIndicator,
+      indicatorColor: indicatorColor ?? this.indicatorColor,
+      indicatorShape: indicatorShape ?? this.indicatorShape,
+      minWidth: minWidth ?? this.minWidth,
+      minExtendedWidth: minExtendedWidth ?? this.minExtendedWidth,
     );
   }
 
@@ -108,66 +144,152 @@ class NavigationRailThemeData with Diagnosticable {
   /// If both arguments are null then null is returned.
   ///
   /// {@macro dart.ui.shadow.lerp}
-  static NavigationRailThemeData lerp(NavigationRailThemeData a, NavigationRailThemeData b, double t) {
-    assert(t != null);
-    if (a == null && b == null)
-      return null;
+  static NavigationRailThemeData? lerp(
+    NavigationRailThemeData? a,
+    NavigationRailThemeData? b,
+    double t,
+  ) {
+    if (identical(a, b)) {
+      return a;
+    }
     return NavigationRailThemeData(
       backgroundColor: Color.lerp(a?.backgroundColor, b?.backgroundColor, t),
       elevation: lerpDouble(a?.elevation, b?.elevation, t),
-      unselectedLabelTextStyle: TextStyle.lerp(a?.unselectedLabelTextStyle, b?.unselectedLabelTextStyle, t),
-      selectedLabelTextStyle: TextStyle.lerp(a?.selectedLabelTextStyle, b?.selectedLabelTextStyle, t),
-      unselectedIconTheme: IconThemeData.lerp(a?.unselectedIconTheme, b?.unselectedIconTheme, t),
-      selectedIconTheme: IconThemeData.lerp(a?.selectedIconTheme, b?.selectedIconTheme, t),
+      unselectedLabelTextStyle: TextStyle.lerp(
+        a?.unselectedLabelTextStyle,
+        b?.unselectedLabelTextStyle,
+        t,
+      ),
+      selectedLabelTextStyle: TextStyle.lerp(
+        a?.selectedLabelTextStyle,
+        b?.selectedLabelTextStyle,
+        t,
+      ),
+      unselectedIconTheme: a?.unselectedIconTheme == null && b?.unselectedIconTheme == null
+          ? null
+          : IconThemeData.lerp(a?.unselectedIconTheme, b?.unselectedIconTheme, t),
+      selectedIconTheme: a?.selectedIconTheme == null && b?.selectedIconTheme == null
+          ? null
+          : IconThemeData.lerp(a?.selectedIconTheme, b?.selectedIconTheme, t),
       groupAlignment: lerpDouble(a?.groupAlignment, b?.groupAlignment, t),
       labelType: t < 0.5 ? a?.labelType : b?.labelType,
+      useIndicator: t < 0.5 ? a?.useIndicator : b?.useIndicator,
+      indicatorColor: Color.lerp(a?.indicatorColor, b?.indicatorColor, t),
+      indicatorShape: ShapeBorder.lerp(a?.indicatorShape, b?.indicatorShape, t),
+      minWidth: lerpDouble(a?.minWidth, b?.minWidth, t),
+      minExtendedWidth: lerpDouble(a?.minExtendedWidth, b?.minExtendedWidth, t),
     );
   }
 
   @override
-  int get hashCode {
-    return hashValues(
-      backgroundColor,
-      elevation,
-      unselectedLabelTextStyle,
-      selectedLabelTextStyle,
-      unselectedIconTheme,
-      selectedIconTheme,
-      groupAlignment,
-      labelType,
-    );
-  }
+  int get hashCode => Object.hash(
+    backgroundColor,
+    elevation,
+    unselectedLabelTextStyle,
+    selectedLabelTextStyle,
+    unselectedIconTheme,
+    selectedIconTheme,
+    groupAlignment,
+    labelType,
+    useIndicator,
+    indicatorColor,
+    indicatorShape,
+    minWidth,
+    minExtendedWidth,
+  );
 
   @override
   bool operator ==(Object other) {
-    if (identical(this, other))
+    if (identical(this, other)) {
       return true;
-    if (other.runtimeType != runtimeType)
+    }
+    if (other.runtimeType != runtimeType) {
       return false;
-    return other is NavigationRailThemeData
-        && other.backgroundColor == backgroundColor
-        && other.elevation == elevation
-        && other.unselectedLabelTextStyle == unselectedLabelTextStyle
-        && other.selectedLabelTextStyle == selectedLabelTextStyle
-        && other.unselectedIconTheme == unselectedIconTheme
-        && other.selectedIconTheme == selectedIconTheme
-        && other.groupAlignment == groupAlignment
-        && other.labelType == labelType;
+    }
+    return other is NavigationRailThemeData &&
+        other.backgroundColor == backgroundColor &&
+        other.elevation == elevation &&
+        other.unselectedLabelTextStyle == unselectedLabelTextStyle &&
+        other.selectedLabelTextStyle == selectedLabelTextStyle &&
+        other.unselectedIconTheme == unselectedIconTheme &&
+        other.selectedIconTheme == selectedIconTheme &&
+        other.groupAlignment == groupAlignment &&
+        other.labelType == labelType &&
+        other.useIndicator == useIndicator &&
+        other.indicatorColor == indicatorColor &&
+        other.indicatorShape == indicatorShape &&
+        other.minWidth == minWidth &&
+        other.minExtendedWidth == minExtendedWidth;
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    const NavigationRailThemeData defaultData = NavigationRailThemeData();
+    const defaultData = NavigationRailThemeData();
 
-    properties.add(ColorProperty('backgroundColor', backgroundColor, defaultValue: defaultData.backgroundColor));
+    properties.add(
+      ColorProperty('backgroundColor', backgroundColor, defaultValue: defaultData.backgroundColor),
+    );
     properties.add(DoubleProperty('elevation', elevation, defaultValue: defaultData.elevation));
-    properties.add(DiagnosticsProperty<TextStyle>('unselectedLabelTextStyle', unselectedLabelTextStyle, defaultValue: defaultData.unselectedLabelTextStyle));
-    properties.add(DiagnosticsProperty<TextStyle>('selectedLabelTextStyle', selectedLabelTextStyle, defaultValue: defaultData.selectedLabelTextStyle));
-    properties.add(DiagnosticsProperty<IconThemeData>('unselectedIconTheme', unselectedIconTheme, defaultValue: defaultData.unselectedIconTheme));
-    properties.add(DiagnosticsProperty<IconThemeData>('selectedIconTheme', selectedIconTheme, defaultValue: defaultData.selectedIconTheme));
-    properties.add(DoubleProperty('groupAlignment', groupAlignment, defaultValue: defaultData.groupAlignment));
-    properties.add(DiagnosticsProperty<NavigationRailLabelType>('labelType', labelType, defaultValue: defaultData.labelType));
+    properties.add(
+      DiagnosticsProperty<TextStyle>(
+        'unselectedLabelTextStyle',
+        unselectedLabelTextStyle,
+        defaultValue: defaultData.unselectedLabelTextStyle,
+      ),
+    );
+    properties.add(
+      DiagnosticsProperty<TextStyle>(
+        'selectedLabelTextStyle',
+        selectedLabelTextStyle,
+        defaultValue: defaultData.selectedLabelTextStyle,
+      ),
+    );
+    properties.add(
+      DiagnosticsProperty<IconThemeData>(
+        'unselectedIconTheme',
+        unselectedIconTheme,
+        defaultValue: defaultData.unselectedIconTheme,
+      ),
+    );
+    properties.add(
+      DiagnosticsProperty<IconThemeData>(
+        'selectedIconTheme',
+        selectedIconTheme,
+        defaultValue: defaultData.selectedIconTheme,
+      ),
+    );
+    properties.add(
+      DoubleProperty('groupAlignment', groupAlignment, defaultValue: defaultData.groupAlignment),
+    );
+    properties.add(
+      DiagnosticsProperty<NavigationRailLabelType>(
+        'labelType',
+        labelType,
+        defaultValue: defaultData.labelType,
+      ),
+    );
+    properties.add(
+      DiagnosticsProperty<bool>(
+        'useIndicator',
+        useIndicator,
+        defaultValue: defaultData.useIndicator,
+      ),
+    );
+    properties.add(
+      ColorProperty('indicatorColor', indicatorColor, defaultValue: defaultData.indicatorColor),
+    );
+    properties.add(
+      DiagnosticsProperty<ShapeBorder>('indicatorShape', indicatorShape, defaultValue: null),
+    );
+    properties.add(DoubleProperty('minWidth', minWidth, defaultValue: defaultData.minWidth));
+    properties.add(
+      DoubleProperty(
+        'minExtendedWidth',
+        minExtendedWidth,
+        defaultValue: defaultData.minExtendedWidth,
+      ),
+    );
   }
 }
 
@@ -179,20 +301,14 @@ class NavigationRailThemeData with Diagnosticable {
 class NavigationRailTheme extends InheritedTheme {
   /// Creates a navigation rail theme that controls the
   /// [NavigationRailThemeData] properties for a [NavigationRail].
-  ///
-  /// The data argument must not be null.
-  const NavigationRailTheme({
-    Key key,
-    @required this.data,
-    Widget child,
-  }) : assert(data != null), super(key: key, child: child);
+  const NavigationRailTheme({super.key, required this.data, required super.child});
 
   /// Specifies the background color, elevation, label text style, icon theme,
   /// group alignment, and label type and border values for descendant
   /// [NavigationRail] widgets.
   final NavigationRailThemeData data;
 
-  /// The closest instance of this class that encloses the given context.
+  /// Retrieves the [NavigationRailThemeData] from the closest ancestor [NavigationRailTheme].
   ///
   /// If there is no enclosing [NavigationRailTheme] widget, then
   /// [ThemeData.navigationRailTheme] is used.
@@ -200,17 +316,17 @@ class NavigationRailTheme extends InheritedTheme {
   /// Typical usage is as follows:
   ///
   /// ```dart
-  /// NavigationRailTheme theme = NavigationRailTheme.of(context);
+  /// NavigationRailThemeData theme = NavigationRailTheme.of(context);
   /// ```
   static NavigationRailThemeData of(BuildContext context) {
-    final NavigationRailTheme navigationRailTheme = context.dependOnInheritedWidgetOfExactType<NavigationRailTheme>();
+    final NavigationRailTheme? navigationRailTheme = context
+        .dependOnInheritedWidgetOfExactType<NavigationRailTheme>();
     return navigationRailTheme?.data ?? Theme.of(context).navigationRailTheme;
   }
 
   @override
   Widget wrap(BuildContext context, Widget child) {
-    final NavigationRailTheme ancestorTheme = context.findAncestorWidgetOfExactType<NavigationRailTheme>();
-    return identical(this, ancestorTheme) ? child : NavigationRailTheme(data: data, child: child);
+    return NavigationRailTheme(data: data, child: child);
   }
 
   @override

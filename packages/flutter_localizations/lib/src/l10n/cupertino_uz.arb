@@ -20,5 +20,20 @@
   "pasteButtonLabel": "Joylash",
   "selectAllButtonLabel": "Barchasini tanlash",
   "tabSemanticsLabel": "$tabCount varaqdan $tabIndex",
-  "modalBarrierDismissLabel": "Yopish"
+  "modalBarrierDismissLabel": "Yopish",
+  "searchTextFieldPlaceholderLabel": "Qidiruv",
+  "noSpellCheckReplacementsLabel": "Almashtirish uchun soʻz topilmadi",
+  "menuDismissLabel": "Menyuni yopish",
+  "lookUpButtonLabel": "Tepaga qarang",
+  "searchWebButtonLabel": "Internetdan qidirish",
+  "shareButtonLabel": "Ulashish…",
+  "clearButtonLabel": "Tozalash",
+  "cancelButtonLabel": "Bekor qilish",
+  "backButtonLabel": "Orqaga",
+  "expansionTileExpandedHint": "yigʻish uchun ikki marta bosing",
+  "expansionTileCollapsedHint": "yoyish uchun ikki marta bosing",
+  "expansionTileExpandedTapHint": "Yigʻish",
+  "expansionTileCollapsedTapHint": "Batafsil koʻrish uchun yoying",
+  "expandedHint": "Yigʻilgan",
+  "collapsedHint": "Yoyilgan"
 }

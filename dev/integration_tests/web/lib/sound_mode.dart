@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart=2.10
+// @dart = 2.12
 
-import 'dart:html' as html;
+import 'dart:js_interop';
+
+import 'package:web/web.dart' as web;
 
 // Verify that web applications can be run in sound mode.
-void main() {
+void main() async {
   const isWeak = <int?>[] is List<int>;
   String output;
   if (isWeak) {
@@ -15,10 +17,13 @@ void main() {
   } else {
     output = '--- TEST SUCCEEDED ---';
   }
+  await web.window
+      .fetch(
+          '/test-result'.toJS,
+          web.RequestInit(
+            method: 'POST',
+            body: output.toJS,
+          ))
+      .toDart;
   print(output);
-  html.HttpRequest.request(
-    '/test-result',
-    method: 'POST',
-    sendData: '$output',
-  );
 }

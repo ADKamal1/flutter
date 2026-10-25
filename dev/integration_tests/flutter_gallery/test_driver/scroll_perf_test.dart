@@ -7,7 +7,7 @@ import 'package:test/test.dart' hide TypeMatcher, isInstanceOf;
 
 void main() {
   group('scrolling performance test', () {
-    FlutterDriver driver;
+    late FlutterDriver driver;
 
     setUpAll(() async {
       driver = await FlutterDriver.connect();
@@ -16,8 +16,7 @@ void main() {
     });
 
     tearDownAll(() async {
-      if (driver != null)
-        driver.close();
+      await driver.close();
     });
 
     test('measure', () async {
@@ -26,24 +25,20 @@ void main() {
 
         final SerializableFinder demoList = find.byValueKey('GalleryDemoList');
 
-        // TODO(eseidel): These are very artificial scrolls, we should use better
-        // https://github.com/flutter/flutter/issues/3316
-        // Scroll down
-        for (int i = 0; i < 5; i++) {
+        for (var i = 0; i < 5; i++) {
           await driver.scroll(demoList, 0.0, -300.0, const Duration(milliseconds: 300));
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
 
         // Scroll up
-        for (int i = 0; i < 5; i++) {
+        for (var i = 0; i < 5; i++) {
           await driver.scroll(demoList, 0.0, 300.0, const Duration(milliseconds: 300));
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
-      });
+      }, retainPriorEvents: true);
 
-      final TimelineSummary summary = TimelineSummary.summarize(timeline);
-      await summary.writeSummaryToFile('home_scroll_perf', pretty: true);
+      final summary = TimelineSummary.summarize(timeline);
       await summary.writeTimelineToFile('home_scroll_perf', pretty: true);
-    });
+    }, timeout: Timeout.none);
   });
 }

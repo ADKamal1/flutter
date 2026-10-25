@@ -13,21 +13,17 @@ import 'io.dart';
 import 'logger.dart';
 import 'platform.dart';
 
-const int kNetworkProblemExitCode = 50;
+const kNetworkProblemExitCode = 50;
+const kFlutterStorageBaseUrl = 'FLUTTER_STORAGE_BASE_URL';
 
 typedef HttpClientFactory = HttpClient Function();
 
 typedef UrlTunneller = Future<String> Function(String url);
 
 class Net {
-  Net({
-    HttpClientFactory httpClientFactory,
-    @required Logger logger,
-    @required Platform platform,
-  }) :
-    _httpClientFactory = httpClientFactory,
-    _logger = logger,
-    _platform = platform;
+  /// If [httpClientFactory] is `null`, a default [HttpClient] is used.
+  Net({HttpClientFactory? httpClientFactory, required this._logger, required this._platform})
+    : _httpClientFactory = httpClientFactory ?? (() => HttpClient());
 
   final HttpClientFactory _httpClientFactory;
 
@@ -43,15 +39,17 @@ class Net {
   /// returns an empty list.
   ///
   /// If [maxAttempts] is exceeded, returns null.
-  Future<List<int>> fetchUrl(Uri url, {
-    int maxAttempts,
-    File destFile,
+  Future<List<int>?> fetchUrl(
+    Uri url, {
+    int? maxAttempts,
+    File? destFile,
+    @visibleForTesting Duration? durationOverride,
   }) async {
-    int attempts = 0;
-    int durationSeconds = 1;
+    var attempts = 0;
+    var durationSeconds = 1;
     while (true) {
       attempts += 1;
-      _MemoryIOSink memorySink;
+      _MemoryIOSink? memorySink;
       IOSink sink;
       if (destFile == null) {
         memorySink = _MemoryIOSink();
@@ -60,12 +58,9 @@ class Net {
         sink = destFile.openWrite();
       }
 
-      final bool result = await _attempt(
-        url,
-        destSink: sink,
-      );
+      final bool result = await _attempt(url, destSink: sink);
       if (result) {
-        return memorySink?.writes?.takeBytes() ?? <int>[];
+        return memorySink?.writes.takeBytes() ?? <int>[];
       }
 
       if (maxAttempts != null && attempts >= maxAttempts) {
@@ -74,9 +69,9 @@ class Net {
       }
       _logger.printStatus(
         'Download failed -- attempting retry $attempts in '
-        '$durationSeconds second${ durationSeconds == 1 ? "" : "s"}...',
+        '$durationSeconds second${durationSeconds == 1 ? "" : "s"}...',
       );
-      await Future<void>.delayed(Duration(seconds: durationSeconds));
+      await Future<void>.delayed(durationOverride ?? Duration(seconds: durationSeconds));
       if (durationSeconds < 64) {
         durationSeconds *= 2;
       }
@@ -87,20 +82,12 @@ class Net {
   Future<bool> doesRemoteFileExist(Uri url) => _attempt(url, onlyHeaders: true);
 
   // Returns true on success and false on failure.
-  Future<bool> _attempt(Uri url, {
-    IOSink destSink,
-    bool onlyHeaders = false,
-  }) async {
+  Future<bool> _attempt(Uri url, {IOSink? destSink, bool onlyHeaders = false}) async {
     assert(onlyHeaders || destSink != null);
     _logger.printTrace('Downloading: $url');
-    HttpClient httpClient;
-    if (_httpClientFactory != null) {
-      httpClient = _httpClientFactory();
-    } else {
-      httpClient = HttpClient();
-    }
+    final HttpClient httpClient = _httpClientFactory();
     HttpClientRequest request;
-    HttpClientResponse response;
+    HttpClientResponse? response;
     try {
       if (onlyHeaders) {
         request = await httpClient.headUrl(url);
@@ -109,15 +96,16 @@ class Net {
       }
       response = await request.close();
     } on ArgumentError catch (error) {
-      final String overrideUrl = _platform.environment['FLUTTER_STORAGE_BASE_URL'];
+      final String? overrideUrl = _platform.environment[kFlutterStorageBaseUrl];
       if (overrideUrl != null && url.toString().contains(overrideUrl)) {
         _logger.printError(error.toString());
         throwToolExit(
-          'The value of FLUTTER_STORAGE_BASE_URL ($overrideUrl) could not be '
-          'parsed as a valid url. Please see https://flutter.dev/community/china '
+          'The value of $kFlutterStorageBaseUrl ($overrideUrl) could not be '
+          'parsed as a valid url. Please see https://flutter.dev/to/use-mirror-site '
           'for an example of how to use it.\n'
           'Full URL: $url',
-          exitCode: kNetworkProblemExitCode,);
+          exitCode: kNetworkProblemExitCode,
+        );
       }
       _logger.printError(error.toString());
       rethrow;
@@ -136,7 +124,6 @@ class Net {
       _logger.printTrace('Download error: $error');
       return false;
     }
-    assert(response != null);
 
     // If we're making a HEAD request, we're only checking to see if the URL is
     // valid.
@@ -159,7 +146,7 @@ class Net {
     _logger.printTrace('Received response from server, collecting bytes...');
     try {
       assert(destSink != null);
-      await response.forEach(destSink.add);
+      await response.forEach(destSink!.add);
       return true;
     } on IOException catch (error) {
       _logger.printTrace('Download error: $error');
@@ -171,14 +158,12 @@ class Net {
   }
 }
 
-
-
 /// An IOSink that collects whatever is written to it.
 class _MemoryIOSink implements IOSink {
   @override
   Encoding encoding = utf8;
 
-  final BytesBuilder writes = BytesBuilder(copy: false);
+  final writes = BytesBuilder(copy: false);
 
   @override
   void add(List<int> data) {
@@ -187,7 +172,7 @@ class _MemoryIOSink implements IOSink {
 
   @override
   Future<void> addStream(Stream<List<int>> stream) {
-    final Completer<void> completer = Completer<void>();
+    final completer = Completer<void>();
     stream.listen(add).onDone(completer.complete);
     return completer.future;
   }
@@ -198,18 +183,18 @@ class _MemoryIOSink implements IOSink {
   }
 
   @override
-  void write(Object obj) {
+  void write(Object? obj) {
     add(encoding.encode('$obj'));
   }
 
   @override
-  void writeln([ Object obj = '' ]) {
+  void writeln([Object? obj = '']) {
     add(encoding.encode('$obj\n'));
   }
 
   @override
-  void writeAll(Iterable<dynamic> objects, [ String separator = '' ]) {
-    bool addSeparator = false;
+  void writeAll(Iterable<dynamic> objects, [String separator = '']) {
+    var addSeparator = false;
     for (final dynamic object in objects) {
       if (addSeparator) {
         write(separator);
@@ -220,7 +205,7 @@ class _MemoryIOSink implements IOSink {
   }
 
   @override
-  void addError(dynamic error, [ StackTrace stackTrace ]) {
+  void addError(dynamic error, [StackTrace? stackTrace]) {
     throw UnimplementedError();
   }
 
@@ -228,18 +213,8 @@ class _MemoryIOSink implements IOSink {
   Future<void> get done => close();
 
   @override
-  Future<void> close() async { }
+  Future<void> close() async {}
 
   @override
-  Future<void> flush() async { }
-}
-
-/// Returns [true] if [address] is an IPv6 address.
-bool isIPv6Address(String address) {
-  try {
-    Uri.parseIPv6Address(address);
-    return true;
-  } on FormatException {
-    return false;
-  }
+  Future<void> flush() async {}
 }

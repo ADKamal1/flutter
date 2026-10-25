@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:ui';
+// This file is run as part of a reduced test set in CI on Mac and Windows
+// machines.
+@Tags(<String>['reduced-test-set'])
+library;
 
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -15,58 +16,82 @@ void main() {
    * because [matchesGoldenFile] does not use Skia Gold in its native package.
    */
 
-  testWidgets('correctly records frames', (WidgetTester tester) async {
-    final AnimationSheetBuilder builder = AnimationSheetBuilder(frameSize: _DecuplePixels.size);
+  testWidgets(
+    'recording disposes images',
+    (WidgetTester tester) async {
+      final builder = AnimationSheetBuilder(frameSize: _DecuplePixels.size);
+      addTearDown(builder.dispose);
 
-    await tester.pumpFrames(
-      builder.record(
-        const _DecuplePixels(Duration(seconds: 1)),
-      ),
-      const Duration(milliseconds: 200),
-      const Duration(milliseconds: 100),
-    );
+      await tester.pumpFrames(
+        builder.record(const _DecuplePixels(Duration(seconds: 1))),
+        const Duration(milliseconds: 200),
+        const Duration(milliseconds: 100),
+      );
+    },
+    skip: isBrowser, // [intended] https://github.com/flutter/flutter/issues/56001
+  );
 
-    await tester.pumpFrames(
-      builder.record(
-        const _DecuplePixels(Duration(seconds: 1)),
-        recording: false,
-      ),
-      const Duration(milliseconds: 200),
-      const Duration(milliseconds: 100),
-    );
+  testWidgets(
+    'correctly records frames using collate',
+    (WidgetTester tester) async {
+      final builder = AnimationSheetBuilder(frameSize: _DecuplePixels.size);
+      addTearDown(builder.dispose);
 
-    await tester.pumpFrames(
-      builder.record(
-        const _DecuplePixels(Duration(seconds: 1)),
-        recording: true,
-      ),
-      const Duration(milliseconds: 400),
-      const Duration(milliseconds: 100),
-    );
+      await tester.pumpFrames(
+        builder.record(const _DecuplePixels(Duration(seconds: 1))),
+        const Duration(milliseconds: 200),
+        const Duration(milliseconds: 100),
+      );
 
-    final Widget display = await builder.display();
-    await tester.binding.setSurfaceSize(builder.sheetSize());
-    await tester.pumpWidget(display);
+      await tester.pumpFrames(
+        builder.record(const _DecuplePixels(Duration(seconds: 1)), recording: false),
+        const Duration(milliseconds: 200),
+        const Duration(milliseconds: 100),
+      );
 
-    await expectLater(find.byWidget(display), matchesGoldenFile('test.animation_sheet_builder.records.png'));
-  }, skip: isBrowser); // https://github.com/flutter/flutter/issues/42767
+      await tester.pumpFrames(
+        builder.record(const _DecuplePixels(Duration(seconds: 1))),
+        const Duration(milliseconds: 400),
+        const Duration(milliseconds: 100),
+      );
 
-  testWidgets('correctly wraps a row', (WidgetTester tester) async {
-    final AnimationSheetBuilder builder = AnimationSheetBuilder(frameSize: _DecuplePixels.size);
+      await expectLater(
+        builder.collate(5),
+        matchesGoldenFile('test.animation_sheet_builder.collate.png'),
+      );
+    },
+    skip: isBrowser, // [intended] https://github.com/flutter/flutter/issues/56001
+  ); // https://github.com/flutter/flutter/issues/56001
 
-    const Duration duration = Duration(seconds: 2);
-    await tester.pumpFrames(
-      builder.record(const _DecuplePixels(duration)),
-      duration,
-      const Duration(milliseconds: 200),
-    );
+  testWidgets(
+    'use allLayers to record out-of-subtree contents',
+    (WidgetTester tester) async {
+      final builder = AnimationSheetBuilder(frameSize: const Size(8, 2), allLayers: true);
+      addTearDown(builder.dispose);
 
-    final Widget display = await builder.display();
-    await tester.binding.setSurfaceSize(builder.sheetSize(maxWidth: 80));
-    await tester.pumpWidget(display);
+      // The `record` (sized 8, 2) is placed on top of `_DecuplePixels`
+      // (sized 12, 3), aligned at its top left.
+      await tester.pumpFrames(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Stack(
+            children: <Widget>[
+              const _DecuplePixels(Duration(seconds: 1)),
+              Align(alignment: Alignment.topLeft, child: builder.record(Container())),
+            ],
+          ),
+        ),
+        const Duration(milliseconds: 600),
+        const Duration(milliseconds: 100),
+      );
 
-    await expectLater(find.byWidget(display), matchesGoldenFile('test.animation_sheet_builder.wraps.png'));
-  }, skip: isBrowser); // https://github.com/flutter/flutter/issues/42767
+      await expectLater(
+        builder.collate(5),
+        matchesGoldenFile('test.animation_sheet_builder.out_of_tree.png'),
+      );
+    },
+    skip: isBrowser, // [intended] https://github.com/flutter/flutter/issues/56001
+  );
 }
 
 // An animation of a yellow pixel moving from left to right, in a container of
@@ -82,16 +107,14 @@ class _DecuplePixels extends StatefulWidget {
   State<StatefulWidget> createState() => _DecuplePixelsState();
 }
 
-class _DecuplePixelsState extends State<_DecuplePixels> with SingleTickerProviderStateMixin<_DecuplePixels> {
+class _DecuplePixelsState extends State<_DecuplePixels>
+    with SingleTickerProviderStateMixin<_DecuplePixels> {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
     _controller.repeat();
   }
 
@@ -106,9 +129,7 @@ class _DecuplePixelsState extends State<_DecuplePixels> with SingleTickerProvide
     return AnimatedBuilder(
       animation: _controller.view,
       builder: (BuildContext context, Widget? child) {
-        return CustomPaint(
-          painter: _PaintDecuplePixels(_controller.value),
-        );
+        return CustomPaint(painter: _PaintDecuplePixels(_controller.value));
       },
     );
   }
@@ -131,8 +152,8 @@ class _PaintDecuplePixels extends CustomPainter {
       begin: const Rect.fromLTWH(1, 1, 1, 1),
       end: const Rect.fromLTWH(11, 1, 1, 1),
     ).transform(value)!;
-    canvas.drawRect(rect, Paint()..color = Colors.yellow);
-    final Paint black = Paint()..color = Colors.black;
+    canvas.drawRect(rect, Paint()..color = const Color(0xFFFFEB3B));
+    final black = Paint()..color = const Color(0xFF000000);
     canvas
       // Top border
       ..drawRect(const Rect.fromLTRB(0, 0, 12, 1), black)

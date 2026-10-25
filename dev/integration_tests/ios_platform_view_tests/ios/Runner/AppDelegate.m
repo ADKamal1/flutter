@@ -4,52 +4,29 @@
 
 #import "AppDelegate.h"
 #import "GeneratedPluginRegistrant.h"
-
-@interface PlatformView: NSObject<FlutterPlatformView>
-
-@property (strong, nonatomic) UIView *platformView;
-
-@end
-
-@implementation PlatformView
-
-- (instancetype)init
-{
-  self = [super init];
-  if (self) {
-    self.platformView = [[UIView alloc] init];
-    self.platformView.backgroundColor = [UIColor blueColor];
-  }
-  return self;
-}
-
-- (UIView *)view {
-  return self.platformView;
-}
-
-@end
-
-@interface ViewFactory: NSObject<FlutterPlatformViewFactory>
-
-@end
-
-@implementation ViewFactory
-
-- (NSObject<FlutterPlatformView> *)createWithFrame:(CGRect)frame viewIdentifier:(int64_t)viewId arguments:(id)args {
-  PlatformView *platformView = [[PlatformView alloc] init];
-  return platformView;
-}
-
-@end
+#import "ViewFactory.h"
+#import "TextFieldFactory.h"
+#import "ButtonFactory.h"
+#import "WebViewFactory.h"
+#import "DrawingWebViewFactory.h"
+#import "FakeAdMobBannerFactory.h"
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-  [GeneratedPluginRegistrant registerWithRegistry:self];
-  // Override point for customization after application launch.
-  [[self registrarForPlugin:@"flutter"] registerViewFactory:[ViewFactory new] withId:@"platform_view"];
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
+}
+
+- (void)didInitializeImplicitFlutterEngine:(NSObject<FlutterImplicitEngineBridge> *)engineBridge {
+  [GeneratedPluginRegistrant registerWithRegistry:engineBridge.pluginRegistry];
+  id<FlutterPluginRegistrar> registrar = [engineBridge.pluginRegistry registrarForPlugin:@"flutter"];
+  [registrar registerViewFactory:[[ViewFactory alloc] init] withId:@"platform_view"];
+  [registrar registerViewFactory:[[TextFieldFactory alloc] init] withId:@"platform_text_field"];
+  [registrar registerViewFactory:[[ButtonFactory alloc] init] withId:@"platform_button"];
+  [registrar registerViewFactory:[[WebViewFactory alloc] init] withId:@"platform_web_view"];
+  [registrar registerViewFactory:[[DrawingWebViewFactory alloc] init] withId:@"platform_drawing_web_view"];
+  [registrar registerViewFactory:[[FakeAdMobBannerFactory alloc] init] withId:@"platform_fake_admob_banner"];
 }
 
 @end

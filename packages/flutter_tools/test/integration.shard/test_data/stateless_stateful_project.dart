@@ -7,10 +7,10 @@ import 'project.dart';
 
 class HotReloadProject extends Project {
   @override
-  final String pubspec = '''
+  final pubspec = '''
   name: test
   environment:
-    sdk: ">=2.0.0-dev.68.0 <3.0.0"
+    sdk: ^3.7.0-0
 
   dependencies:
     flutter:
@@ -29,8 +29,8 @@ class HotReloadProject extends Project {
 
   void main() async {
     WidgetsFlutterBinding.ensureInitialized();
-    final ByteData message = const StringCodec().encodeMessage('AppLifecycleState.resumed');
-    await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('flutter/lifecycle', message, (_) { });
+    final ByteData message = const StringCodec().encodeMessage('AppLifecycleState.resumed')!;
+    await ServicesBinding.instance!.defaultBinaryMessenger.handlePlatformMessage('flutter/lifecycle', message, (_) { });
     runApp(MyApp());
   }
 
@@ -72,6 +72,10 @@ class HotReloadProject extends Project {
 
   void toggleState() {
     stateful = !stateful;
-    writeFile(fileSystem.path.join(dir.path, 'lib', 'main.dart'), getCode(stateful));
+    writeFile(
+      fileSystem.path.join(dir.path, 'lib', 'main.dart'),
+      getCode(stateful),
+      writeFutureModifiedDate: true,
+    );
   }
 }

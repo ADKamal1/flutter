@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
 import 'framework.dart';
@@ -21,13 +20,11 @@ class AnnotatedRegion<T extends Object> extends SingleChildRenderObjectWidget {
   /// [sized] defaults to true and controls whether the annotated region will
   /// clip its child.
   const AnnotatedRegion({
-    Key? key,
-    required Widget child,
+    super.key,
+    required Widget super.child,
     required this.value,
     this.sized = true,
-  }) : assert(value != null),
-       assert(child != null),
-       super(key: key, child: child);
+  });
 
   /// A value which can be retrieved using [Layer.find].
   final T value;

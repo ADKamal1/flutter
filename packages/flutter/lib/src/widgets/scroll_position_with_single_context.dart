@@ -2,13 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'page_storage.dart';
+/// @docImport 'scroll_controller.dart';
+/// @docImport 'scroll_view.dart';
+/// @docImport 'scrollable.dart';
+/// @docImport 'viewport.dart';
+library;
+
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 
 import 'basic.dart';
-import 'framework.dart';
-import 'gesture_detector.dart';
 import 'scroll_activity.dart';
 import 'scroll_context.dart';
 import 'scroll_notification.dart';
@@ -22,6 +30,8 @@ import 'scroll_position.dart';
 /// single [ScrollContext], such as a [Scrollable]. An instance of this class
 /// manages [ScrollActivity] instances, which change what content is visible in
 /// the [Scrollable]'s [Viewport].
+///
+/// {@macro flutter.widgets.scrollPosition.listening}
 ///
 /// See also:
 ///
@@ -46,25 +56,21 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
   /// saved with [PageStorage] and restored it if this scroll position's scrollable
   /// is recreated.
   ScrollPositionWithSingleContext({
-    required ScrollPhysics physics,
-    required ScrollContext context,
+    required super.physics,
+    required super.context,
     double? initialPixels = 0.0,
-    bool keepScrollOffset = true,
-    ScrollPosition? oldPosition,
-    String? debugLabel,
-  }) : super(
-         physics: physics,
-         context: context,
-         keepScrollOffset: keepScrollOffset,
-         oldPosition: oldPosition,
-         debugLabel: debugLabel,
-       ) {
+    super.keepScrollOffset,
+    super.oldPosition,
+    super.debugLabel,
+  }) {
     // If oldPosition is not null, the superclass will first call absorb(),
     // which may set _pixels and _activity.
-    if (!hasPixels && initialPixels != null)
+    if (!hasPixels && initialPixels != null) {
       correctPixels(initialPixels);
-    if (activity == null)
+    }
+    if (activity == null) {
       goIdle();
+    }
     assert(activity != null);
   }
 
@@ -107,14 +113,16 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
   @override
   void beginActivity(ScrollActivity? newActivity) {
     _heldPreviousVelocity = 0.0;
-    if (newActivity == null)
+    if (newActivity == null) {
       return;
+    }
     assert(newActivity.delegate == this);
     super.beginActivity(newActivity);
     _currentDrag?.dispose();
     _currentDrag = null;
-    if (!activity!.isScrolling)
+    if (!activity!.isScrolling) {
       updateUserScrollDirection(ScrollDirection.idle);
+    }
   }
 
   @override
@@ -142,7 +150,7 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
     assert(hasPixels);
     final Simulation? simulation = physics.createBallisticSimulation(this, velocity);
     if (simulation != null) {
-      beginActivity(BallisticScrollActivity(this, simulation, context.vsync));
+      beginActivity(BallisticScrollActivity(this, simulation, context.vsync, shouldIgnorePointer));
     } else {
       goIdle();
     }
@@ -158,26 +166,22 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
   @protected
   @visibleForTesting
   void updateUserScrollDirection(ScrollDirection value) {
-    assert(value != null);
-    if (userScrollDirection == value)
+    if (userScrollDirection == value) {
       return;
+    }
     _userScrollDirection = value;
     didUpdateScrollDirection(value);
   }
 
   @override
-  Future<void> animateTo(
-    double to, {
-    required Duration duration,
-    required Curve curve,
-  }) {
-    if (nearEqual(to, pixels, physics.tolerance.distance)) {
+  Future<void> animateTo(double to, {required Duration duration, required Curve curve}) {
+    if (nearEqual(to, pixels, physics.toleranceFor(this).distance)) {
       // Skip the animation, go straight to the position as we are already close.
       jumpTo(to);
       return Future<void>.value();
     }
 
-    final DrivenScrollActivity activity = DrivenScrollActivity(
+    final activity = DrivenScrollActivity(
       this,
       from: pixels,
       to: to,
@@ -202,7 +206,37 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
     goBallistic(0.0);
   }
 
-  @Deprecated('This will lead to bugs.') // ignore: flutter_deprecation_syntax, https://github.com/flutter/flutter/issues/44609
+  @override
+  void pointerScroll(double delta) {
+    // If an update is made to pointer scrolling here, consider if the same
+    // (or similar) change should be made in
+    // _NestedScrollCoordinator.pointerScroll.
+    if (delta == 0.0) {
+      goBallistic(0.0);
+      return;
+    }
+
+    final double targetPixels = math.min(
+      math.max(pixels + delta, minScrollExtent),
+      maxScrollExtent,
+    );
+    if (targetPixels != pixels) {
+      goIdle();
+      updateUserScrollDirection(-delta > 0.0 ? ScrollDirection.forward : ScrollDirection.reverse);
+      final double oldPixels = pixels;
+      // Set the notifier before calling force pixels.
+      // This is set to false again after going ballistic below.
+      isScrollingNotifier.value = true;
+      forcePixels(targetPixels);
+      didStartScroll();
+      didUpdateScrollPositionBy(pixels - oldPixels);
+      didEndScroll();
+      goBallistic(0.0);
+    }
+  }
+
+  // flutter_ignore: deprecation_syntax, https://github.com/flutter/flutter/issues/44609
+  @Deprecated('This will lead to bugs.')
   @override
   void jumpToWithoutSettling(double value) {
     goIdle();
@@ -218,10 +252,7 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
   @override
   ScrollHoldController hold(VoidCallback holdCancelCallback) {
     final double previousVelocity = activity!.velocity;
-    final HoldScrollActivity holdActivity = HoldScrollActivity(
-      delegate: this,
-      onHoldCanceled: holdCancelCallback,
-    );
+    final holdActivity = HoldScrollActivity(delegate: this, onHoldCanceled: holdCancelCallback);
     beginActivity(holdActivity);
     _heldPreviousVelocity = previousVelocity;
     return holdActivity;
@@ -231,7 +262,7 @@ class ScrollPositionWithSingleContext extends ScrollPosition implements ScrollAc
 
   @override
   Drag drag(DragStartDetails details, VoidCallback dragCancelCallback) {
-    final ScrollDragController drag = ScrollDragController(
+    final drag = ScrollDragController(
       delegate: this,
       details: details,
       onDragCanceled: dragCancelCallback,

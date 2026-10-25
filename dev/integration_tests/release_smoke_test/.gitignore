@@ -22,8 +22,8 @@
 
 # Flutter/Dart/Pub related
 **/doc/api/
+**/ios/Flutter/.last_build_id
 .dart_tool/
-.flutter-plugins
 .flutter-plugins-dependencies
 .packages
 .pub-cache/
@@ -60,6 +60,7 @@
 **/ios/Flutter/Flutter.framework
 **/ios/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral
 **/ios/Flutter/app.flx
 **/ios/Flutter/app.zip
 **/ios/Flutter/flutter_assets/

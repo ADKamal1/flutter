@@ -4,17 +4,19 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_gallery/demo/shrine/colors.dart';
+import 'colors.dart';
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
-  _LoginPageState createState() => _LoginPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  static const ShapeDecoration _decoration =  ShapeDecoration(
+  static const ShapeDecoration _decoration = ShapeDecoration(
     shape: BeveledRectangleBorder(
       side: BorderSide(color: kShrineBrown900, width: 0.5),
       borderRadius: BorderRadius.all(Radius.circular(7.0)),
@@ -27,7 +29,6 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         elevation: 0.0,
         backgroundColor: Colors.white,
-        brightness: Brightness.light,
         leading: IconButton(
           icon: const BackButtonIcon(),
           tooltip: MaterialLocalizations.of(context).backButtonTooltip,
@@ -48,10 +49,7 @@ class _LoginPageState extends State<LoginPage> {
               children: <Widget>[
                 Image.asset('packages/shrine_images/diamond.png'),
                 const SizedBox(height: 16.0),
-                Text(
-                  'SHRINE',
-                  style: Theme.of(context).textTheme.headline5,
-                ),
+                Text('SHRINE', style: Theme.of(context).textTheme.headlineSmall),
               ],
             ),
             const SizedBox(height: 120.0),
@@ -61,9 +59,7 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: _decoration,
                 child: TextField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Username'),
                 ),
               ),
             ),
@@ -74,40 +70,41 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: _decoration,
                 child: TextField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Password'),
                 ),
               ),
             ),
-            Wrap(
+            const SizedBox(height: 12.0),
+            OverflowBar(
+              spacing: 8,
+              alignment: MainAxisAlignment.end,
               children: <Widget>[
-                ButtonBar(
-                  children: <Widget>[
-                    FlatButton(
-                      child: const Text('CANCEL'),
-                      shape: const BeveledRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(7.0)),
-                      ),
-                      onPressed: () {
-                        // The login screen is immediately displayed on top of
-                        // the Shrine home screen using onGenerateRoute and so
-                        // rootNavigator must be set to true in order to get out
-                        // of Shrine completely.
-                        Navigator.of(context, rootNavigator: true).pop();
-                      },
+                TextButton(
+                  style: TextButton.styleFrom(
+                    shape: const BeveledRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(7.0)),
                     ),
-                    RaisedButton(
-                      child: const Text('NEXT'),
-                      elevation: 8.0,
-                      shape: const BeveledRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(7.0)),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                  ),
+                  onPressed: () {
+                    // The login screen is immediately displayed on top of
+                    // the Shrine home screen using onGenerateRoute and so
+                    // rootNavigator must be set to true in order to get out
+                    // of Shrine completely.
+                    Navigator.of(context, rootNavigator: true).pop();
+                  },
+                  child: Text('CANCEL', style: Theme.of(context).textTheme.bodySmall),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    elevation: 8.0,
+                    shape: const BeveledRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(7.0)),
                     ),
-                  ],
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: Text('NEXT', style: Theme.of(context).textTheme.bodySmall),
                 ),
               ],
             ),
@@ -119,16 +116,16 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 class PrimaryColorOverride extends StatelessWidget {
-  const PrimaryColorOverride({Key key, this.color, this.child}) : super(key: key);
+  const PrimaryColorOverride({super.key, this.color, this.child});
 
-  final Color color;
-  final Widget child;
+  final Color? color;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
     return Theme(
-      child: child,
       data: Theme.of(context).copyWith(primaryColor: color),
+      child: child!,
     );
   }
 }

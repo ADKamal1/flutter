@@ -20,12 +20,11 @@ class BenchSimpleLazyTextScroll extends WidgetRecorder {
 
   @override
   Widget createWidget() {
-    return Directionality(
+    return const Directionality(
       textDirection: TextDirection.ltr,
       child: Row(
-        children: const <Widget>[
+        children: <Widget>[
           Flexible(
-            flex: 1,
             child: _TestScrollingWidget(
               initialScrollOffset: 0,
               scrollDistance: 300,
@@ -33,7 +32,6 @@ class BenchSimpleLazyTextScroll extends WidgetRecorder {
             ),
           ),
           Flexible(
-            flex: 1,
             child: _TestScrollingWidget(
               initialScrollOffset: 1000,
               scrollDistance: 500,
@@ -41,7 +39,6 @@ class BenchSimpleLazyTextScroll extends WidgetRecorder {
             ),
           ),
           Flexible(
-            flex: 1,
             child: _TestScrollingWidget(
               initialScrollOffset: 2000,
               scrollDistance: 700,
@@ -56,9 +53,9 @@ class BenchSimpleLazyTextScroll extends WidgetRecorder {
 
 class _TestScrollingWidget extends StatefulWidget {
   const _TestScrollingWidget({
-    @required this.initialScrollOffset,
-    @required this.scrollDistance,
-    @required this.scrollDuration,
+    required this.initialScrollOffset,
+    required this.scrollDistance,
+    required this.scrollDuration,
   });
 
   final double initialScrollOffset;
@@ -72,30 +69,32 @@ class _TestScrollingWidget extends StatefulWidget {
 }
 
 class _TestScrollingWidgetState extends State<_TestScrollingWidget> {
-  ScrollController scrollController;
+  late ScrollController scrollController;
 
   @override
   void initState() {
     super.initState();
 
-    scrollController = ScrollController(
-      initialScrollOffset: widget.initialScrollOffset,
-    );
+    scrollController = ScrollController(initialScrollOffset: widget.initialScrollOffset);
 
     // Without the timer the animation doesn't begin.
     Timer.run(() async {
-      bool forward = true;
+      var forward = true;
       while (true) {
         await scrollController.animateTo(
-          forward
-              ? widget.initialScrollOffset + widget.scrollDistance
-              : widget.initialScrollOffset,
+          forward ? widget.initialScrollOffset + widget.scrollDistance : widget.initialScrollOffset,
           curve: Curves.linear,
           duration: widget.scrollDuration,
         );
         forward = !forward;
       }
     });
+  }
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
   }
 
   @override

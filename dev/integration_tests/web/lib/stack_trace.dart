@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:html' as html;
-import 'dart:ui';
+// Auto-format is disabled for this file to keep stack trace lines and columns stable.
+
+// dart format off
+
+import 'dart:js_interop';
 
 import 'package:collection/collection.dart';
-import 'package:meta/dart2js.dart';
-
 import 'package:flutter/foundation.dart';
+import 'package:meta/dart2js.dart';
+import 'package:web/web.dart' as web;
 
 /// Expected sequence of method calls.
 const List<String> callChain = <String>['baz', 'bar', 'foo'];
@@ -27,13 +30,12 @@ final List<StackFrame> expectedProfileStackFrames = callChain.map<StackFrame>((S
   );
 }).toList();
 
-// TODO(yjbanov): fix these stack traces when https://github.com/flutter/flutter/issues/50753 is fixed.
 const List<StackFrame> expectedDebugStackFrames = <StackFrame>[
   StackFrame(
     number: -1,
     packageScheme: 'package',
-    package: 'packages',
-    packagePath: 'web_integration/stack_trace.dart',
+    package: 'web_integration',
+    packagePath: 'stack_trace.dart',
     line: 121,
     column: 3,
     className: '<unknown>',
@@ -43,8 +45,8 @@ const List<StackFrame> expectedDebugStackFrames = <StackFrame>[
   StackFrame(
     number: -1,
     packageScheme: 'package',
-    package: 'packages',
-    packagePath: 'web_integration/stack_trace.dart',
+    package: 'web_integration',
+    packagePath: 'stack_trace.dart',
     line: 116,
     column: 3,
     className: '<unknown>',
@@ -54,8 +56,8 @@ const List<StackFrame> expectedDebugStackFrames = <StackFrame>[
   StackFrame(
     number: -1,
     packageScheme: 'package',
-    package: 'packages',
-    packagePath: 'web_integration/stack_trace.dart',
+    package: 'web_integration',
+    packagePath: 'stack_trace.dart',
     line: 111,
     column: 3,
     className: '<unknown>',
@@ -67,8 +69,8 @@ const List<StackFrame> expectedDebugStackFrames = <StackFrame>[
 /// Tests that we do not crash while parsing Web stack traces.
 ///
 /// This test is run in debug, profile, and release modes.
-void main() {
-  final StringBuffer output = StringBuffer();
+void main() async {
+  final output = StringBuffer();
   try {
     try {
       foo();
@@ -77,7 +79,7 @@ void main() {
       if (parsedFrames.isEmpty) {
         throw Exception(
           'Failed to parse stack trace. Got empty list of stack frames.\n'
-          'Stack trace:\n$expectedStackTrace'
+          'Stack trace:\n$expectedStackTrace',
         );
       }
 
@@ -98,12 +100,10 @@ void main() {
     output.writeln(unexpectedStackTrace);
     output.writeln('--- TEST FAILED ---');
   }
+  await web.window
+      .fetch('/test-result'.toJS, web.RequestInit(method: 'POST', body: '$output'.toJS))
+      .toDart;
   print(output);
-  html.HttpRequest.request(
-    '/test-result',
-    method: 'POST',
-    sendData: '$output',
-  );
 }
 
 @noInline
@@ -121,18 +121,24 @@ void baz() {
   throw Exception('Test error message');
 }
 
-void _checkStackFrameContents(List<StackFrame> parsedFrames, List<StackFrame> expectedFrames, dynamic stackTrace) {
+void _checkStackFrameContents(
+  List<StackFrame> parsedFrames,
+  List<StackFrame> expectedFrames,
+  dynamic stackTrace,
+) {
   // Filter out stack frames outside this library so this test is less brittle.
   final List<StackFrame> actual = parsedFrames
-    .where((StackFrame frame) => callChain.contains(frame.method))
-    .toList();
-  final bool stackFramesAsExpected = ListEquality<StackFrame>(StackFrameEquality()).equals(actual, expectedFrames);
+      .where((StackFrame frame) => callChain.contains(frame.method))
+      .toList();
+  final bool stackFramesAsExpected = ListEquality<StackFrame>(
+    StackFrameEquality(),
+  ).equals(actual, expectedFrames);
   if (!stackFramesAsExpected) {
     throw Exception(
       'Stack frames parsed incorrectly:\n'
       'Expected:\n${expectedFrames.join('\n')}\n'
       'Actual:\n${actual.join('\n')}\n'
-      'Stack trace:\n$stackTrace'
+      'Stack trace:\n$stackTrace',
     );
   }
 }
@@ -143,20 +149,29 @@ class StackFrameEquality implements Equality<StackFrame> {
   @override
   bool equals(StackFrame e1, StackFrame e2) {
     return e1.number == e2.number &&
-           e1.packageScheme == e2.packageScheme &&
-           e1.package == e2.package &&
-           e1.packagePath == e2.packagePath &&
-           e1.line == e2.line &&
-           e1.column == e2.column &&
-           e1.className == e2.className &&
-           e1.method == e2.method;
+        e1.packageScheme == e2.packageScheme &&
+        e1.package == e2.package &&
+        e1.packagePath == e2.packagePath &&
+        e1.line == e2.line &&
+        e1.column == e2.column &&
+        e1.className == e2.className &&
+        e1.method == e2.method;
   }
 
   @override
   int hash(StackFrame e) {
-    return hashValues(e.number, e.packageScheme, e.package, e.packagePath, e.line, e.column, e.className, e.method);
+    return Object.hash(
+      e.number,
+      e.packageScheme,
+      e.package,
+      e.packagePath,
+      e.line,
+      e.column,
+      e.className,
+      e.method,
+    );
   }
 
   @override
-  bool isValidKey(Object o) => o is StackFrame;
+  bool isValidKey(Object? o) => o is StackFrame;
 }

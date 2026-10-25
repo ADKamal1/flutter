@@ -2,32 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-buildscript {
-    repositories {
-        google()
-        jcenter()
-    }
-
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.5.0'
-    }
-}
-
 allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
 }
 
-rootProject.buildDir = '../build'
+rootProject.layout.buildDirectory.value(rootProject.layout.buildDirectory.dir("../../build").get())
+
 subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    project.layout.buildDirectory.value(rootProject.layout.buildDirectory.dir(project.name).get())
 }
 subprojects {
     project.evaluationDependsOn(':app')
+
+    dependencyLocking {
+        ignoredDependencies.add('io.flutter:*')
+        lockFile = file("${rootProject.projectDir}/project-${project.name}.lockfile")
+        lockAllConfigurations()
+    }
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
 }

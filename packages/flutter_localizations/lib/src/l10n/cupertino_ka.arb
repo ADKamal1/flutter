@@ -20,5 +20,20 @@
   "pasteButtonLabel": "ჩასმა",
   "selectAllButtonLabel": "ყველას არჩევა",
   "tabSemanticsLabel": "ჩანართი $tabIndex / $tabCount-დან",
-  "modalBarrierDismissLabel": "დახურვა"
+  "modalBarrierDismissLabel": "დახურვა",
+  "searchTextFieldPlaceholderLabel": "ძიება",
+  "noSpellCheckReplacementsLabel": "ჩანაცვლება არ მოიძებნა",
+  "menuDismissLabel": "მენიუს უარყოფა",
+  "lookUpButtonLabel": "აიხედეთ ზემოთ",
+  "searchWebButtonLabel": "ვებში ძიება",
+  "shareButtonLabel": "გაზიარება...",
+  "clearButtonLabel": "გასუფთავება",
+  "cancelButtonLabel": "გაუქმება",
+  "backButtonLabel": "უკან",
+  "expansionTileExpandedHint": "ორმაგად შეეხეთ ჩასაკეცად",
+  "expansionTileCollapsedHint": "გასაფართოებლად ორჯერ შეეხეთ",
+  "expansionTileExpandedTapHint": "ჩაკეცვა",
+  "expansionTileCollapsedTapHint": "მეტი დეტალებისთვის გააფართოეთ",
+  "expandedHint": "ჩაკეცილია",
+  "collapsedHint": "გაფართოებულია"
 }

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+@Tags(<String>['flutter-test-driver'])
+library;
+
 import 'package:file/file.dart';
 import 'package:file_testing/file_testing.dart';
 
@@ -12,7 +15,7 @@ import 'test_driver.dart';
 import 'test_utils.dart';
 
 void main() {
-  Directory tempDir;
+  late Directory tempDir;
 
   setUp(() async {
     tempDir = createResolvedTempDirectorySync('flutter_coverage_collection_test.');
@@ -23,12 +26,18 @@ void main() {
   });
 
   testWithoutContext('Can collect coverage in machine mode', () async {
-    final TestProject project = TestProject();
+    final project = TestProject();
     await project.setUpIn(tempDir);
-    final FlutterTestTestDriver flutter = FlutterTestTestDriver(tempDir);
+    final flutter = FlutterTestTestDriver(tempDir);
     await flutter.test(coverage: true);
     await flutter.done;
 
-    expect(tempDir.childDirectory('coverage').childFile('lcov.info'), exists);
+    final File lcovFile = tempDir.childDirectory('coverage').childFile('lcov.info');
+
+    expect(lcovFile, exists);
+    expect(
+      lcovFile.readAsStringSync(),
+      contains('main.dart'),
+    ); // either 'SF:lib/main.dart or SF:lib\\main.dart
   });
 }

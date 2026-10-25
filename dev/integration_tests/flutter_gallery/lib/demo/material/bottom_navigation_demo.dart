@@ -8,11 +8,11 @@ import '../../gallery/demo.dart';
 
 class NavigationIconView {
   NavigationIconView({
-    Widget icon,
-    Widget activeIcon,
-    String title,
-    Color color,
-    TickerProvider vsync,
+    required Widget icon,
+    Widget? activeIcon,
+    String? title,
+    Color? color,
+    required TickerProvider vsync,
   }) : _icon = icon,
        _color = color,
        _title = title,
@@ -22,31 +22,30 @@ class NavigationIconView {
          label: title,
          backgroundColor: color,
        ),
-       controller = AnimationController(
-         duration: kThemeAnimationDuration,
-         vsync: vsync,
-       ) {
-    _animation = controller.drive(CurveTween(
-      curve: const Interval(0.5, 1.0, curve: Curves.fastOutSlowIn),
-    ));
+       controller = AnimationController(duration: kThemeAnimationDuration, vsync: vsync) {
+    _animation = controller.drive(
+      CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.fastOutSlowIn)),
+    );
   }
 
   final Widget _icon;
-  final Color _color;
-  final String _title;
+  final Color? _color;
+  final String? _title;
   final BottomNavigationBarItem item;
   final AnimationController controller;
-  Animation<double> _animation;
+  late Animation<double> _animation;
 
   FadeTransition transition(BottomNavigationBarType type, BuildContext context) {
-    Color iconColor;
-    if (type == BottomNavigationBarType.shifting) {
-      iconColor = _color;
-    } else {
-      final ThemeData themeData = Theme.of(context);
-      iconColor = themeData.brightness == Brightness.light
-          ? themeData.primaryColor
-          : themeData.accentColor;
+    Color? iconColor;
+    switch (type) {
+      case BottomNavigationBarType.shifting:
+        iconColor = _color;
+      case BottomNavigationBarType.fixed:
+        final ThemeData theme = Theme.of(context);
+        iconColor = switch (theme.brightness) {
+          Brightness.light => theme.colorScheme.primary,
+          Brightness.dark => theme.colorScheme.secondary,
+        };
     }
 
     return FadeTransition(
@@ -59,14 +58,8 @@ class NavigationIconView {
           ),
         ),
         child: IconTheme(
-          data: IconThemeData(
-            color: iconColor,
-            size: 120.0,
-          ),
-          child: Semantics(
-            label: 'Placeholder for $_title tab',
-            child: _icon,
-          ),
+          data: IconThemeData(color: iconColor, size: 120.0),
+          child: Semantics(label: 'Placeholder for $_title tab', child: _icon),
         ),
       ),
     );
@@ -74,45 +67,48 @@ class NavigationIconView {
 }
 
 class CustomIcon extends StatelessWidget {
+  const CustomIcon({super.key});
+
   @override
   Widget build(BuildContext context) {
     final IconThemeData iconTheme = IconTheme.of(context);
     return Container(
       margin: const EdgeInsets.all(4.0),
-      width: iconTheme.size - 8.0,
-      height: iconTheme.size - 8.0,
+      width: iconTheme.size! - 8.0,
+      height: iconTheme.size! - 8.0,
       color: iconTheme.color,
     );
   }
 }
 
 class CustomInactiveIcon extends StatelessWidget {
+  const CustomInactiveIcon({super.key});
+
   @override
   Widget build(BuildContext context) {
     final IconThemeData iconTheme = IconTheme.of(context);
     return Container(
       margin: const EdgeInsets.all(4.0),
-      width: iconTheme.size - 8.0,
-      height: iconTheme.size - 8.0,
-      decoration: BoxDecoration(
-        border: Border.all(color: iconTheme.color, width: 2.0),
-      ),
+      width: iconTheme.size! - 8.0,
+      height: iconTheme.size! - 8.0,
+      decoration: BoxDecoration(border: Border.all(color: iconTheme.color!, width: 2.0)),
     );
   }
 }
 
 class BottomNavigationDemo extends StatefulWidget {
+  const BottomNavigationDemo({super.key});
+
   static const String routeName = '/material/bottom_navigation';
 
   @override
-  _BottomNavigationDemoState createState() => _BottomNavigationDemoState();
+  State<BottomNavigationDemo> createState() => _BottomNavigationDemoState();
 }
 
-class _BottomNavigationDemoState extends State<BottomNavigationDemo>
-    with TickerProviderStateMixin {
+class _BottomNavigationDemoState extends State<BottomNavigationDemo> with TickerProviderStateMixin {
   int _currentIndex = 0;
   BottomNavigationBarType _type = BottomNavigationBarType.shifting;
-  List<NavigationIconView> _navigationViews;
+  late List<NavigationIconView> _navigationViews;
 
   @override
   void initState() {
@@ -125,8 +121,8 @@ class _BottomNavigationDemoState extends State<BottomNavigationDemo>
         vsync: this,
       ),
       NavigationIconView(
-        activeIcon: CustomIcon(),
-        icon: CustomInactiveIcon(),
+        activeIcon: const CustomIcon(),
+        icon: const CustomInactiveIcon(),
         title: 'Box',
         color: Colors.deepOrange,
         vsync: this,
@@ -158,13 +154,14 @@ class _BottomNavigationDemoState extends State<BottomNavigationDemo>
 
   @override
   void dispose() {
-    for (final NavigationIconView view in _navigationViews)
+    for (final NavigationIconView view in _navigationViews) {
       view.controller.dispose();
+    }
     super.dispose();
   }
 
   Widget _buildTransitionsStack() {
-    final List<FadeTransition> transitions = <FadeTransition>[
+    final transitions = <FadeTransition>[
       for (final NavigationIconView view in _navigationViews) view.transition(_type, context),
     ];
 
@@ -182,7 +179,7 @@ class _BottomNavigationDemoState extends State<BottomNavigationDemo>
 
   @override
   Widget build(BuildContext context) {
-    final BottomNavigationBar botNavBar = BottomNavigationBar(
+    final botNavBar = BottomNavigationBar(
       items: _navigationViews
           .map<BottomNavigationBarItem>((NavigationIconView navigationView) => navigationView.item)
           .toList(),
@@ -221,9 +218,7 @@ class _BottomNavigationDemoState extends State<BottomNavigationDemo>
           ),
         ],
       ),
-      body: Center(
-        child: _buildTransitionsStack(),
-      ),
+      body: Center(child: _buildTransitionsStack()),
       bottomNavigationBar: botNavBar,
     );
   }

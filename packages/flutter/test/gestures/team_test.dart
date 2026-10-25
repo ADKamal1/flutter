@@ -2,35 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'gesture_tester.dart';
 
 void main() {
-  setUp(ensureGestureBinding);
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   testGesture('GestureArenaTeam rejection test', (GestureTester tester) {
-    final GestureArenaTeam team = GestureArenaTeam();
-    final HorizontalDragGestureRecognizer horizontalDrag = HorizontalDragGestureRecognizer()..team = team;
-    final VerticalDragGestureRecognizer verticalDrag = VerticalDragGestureRecognizer()..team = team;
-    final TapGestureRecognizer tap = TapGestureRecognizer();
+    final team = GestureArenaTeam();
+    final horizontalDrag = HorizontalDragGestureRecognizer()..team = team;
+    final verticalDrag = VerticalDragGestureRecognizer()..team = team;
+    final tap = TapGestureRecognizer();
 
     expect(horizontalDrag.team, equals(team));
     expect(verticalDrag.team, equals(team));
     expect(tap.team, isNull);
 
-    final List<String> log = <String>[];
+    final log = <String>[];
 
-    horizontalDrag.onStart = (DragStartDetails details) { log.add('horizontal-drag-start'); };
-    verticalDrag.onStart = (DragStartDetails details) { log.add('vertical-drag-start'); };
-    tap.onTap = () { log.add('tap'); };
+    horizontalDrag.onStart = (DragStartDetails details) {
+      log.add('horizontal-drag-start');
+    };
+    verticalDrag.onStart = (DragStartDetails details) {
+      log.add('vertical-drag-start');
+    };
+    tap.onTap = () {
+      log.add('tap');
+    };
 
     void test(Offset delta) {
-      const Offset origin = Offset(10.0, 10.0);
-      final TestPointer pointer = TestPointer(5);
+      const origin = Offset(10.0, 10.0);
+      final pointer = TestPointer(5);
       final PointerDownEvent down = pointer.down(origin);
       horizontalDrag.addPointer(down);
       verticalDrag.addPointer(down);
@@ -58,24 +62,32 @@ void main() {
   });
 
   testGesture('GestureArenaTeam captain', (GestureTester tester) {
-    final GestureArenaTeam team = GestureArenaTeam();
-    final PassiveGestureRecognizer captain = PassiveGestureRecognizer()..team = team;
-    final HorizontalDragGestureRecognizer horizontalDrag = HorizontalDragGestureRecognizer()..team = team;
-    final VerticalDragGestureRecognizer verticalDrag = VerticalDragGestureRecognizer()..team = team;
-    final TapGestureRecognizer tap = TapGestureRecognizer();
+    final team = GestureArenaTeam();
+    final captain = PassiveGestureRecognizer()..team = team;
+    final horizontalDrag = HorizontalDragGestureRecognizer()..team = team;
+    final verticalDrag = VerticalDragGestureRecognizer()..team = team;
+    final tap = TapGestureRecognizer();
 
     team.captain = captain;
 
-    final List<String> log = <String>[];
+    final log = <String>[];
 
-    captain.onGestureAccepted = () { log.add('captain accepted gesture'); };
-    horizontalDrag.onStart = (DragStartDetails details) { log.add('horizontal-drag-start'); };
-    verticalDrag.onStart = (DragStartDetails details) { log.add('vertical-drag-start'); };
-    tap.onTap = () { log.add('tap'); };
+    captain.onGestureAccepted = () {
+      log.add('captain accepted gesture');
+    };
+    horizontalDrag.onStart = (DragStartDetails details) {
+      log.add('horizontal-drag-start');
+    };
+    verticalDrag.onStart = (DragStartDetails details) {
+      log.add('vertical-drag-start');
+    };
+    tap.onTap = () {
+      log.add('tap');
+    };
 
     void test(Offset delta) {
-      const Offset origin = Offset(10.0, 10.0);
-      final TestPointer pointer = TestPointer(5);
+      const origin = Offset(10.0, 10.0);
+      final pointer = TestPointer(5);
       final PointerDownEvent down = pointer.down(origin);
       captain.addPointer(down);
       horizontalDrag.addPointer(down);
@@ -108,7 +120,7 @@ void main() {
 typedef GestureAcceptedCallback = void Function();
 
 class PassiveGestureRecognizer extends OneSequenceGestureRecognizer {
-  GestureAcceptedCallback onGestureAccepted;
+  GestureAcceptedCallback? onGestureAccepted;
 
   @override
   void addPointer(PointerDownEvent event) {
@@ -132,11 +144,9 @@ class PassiveGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void acceptGesture(int pointer) {
-    if (onGestureAccepted != null) {
-      onGestureAccepted();
-    }
+    onGestureAccepted?.call();
   }
 
   @override
-  void rejectGesture(int pointer) { }
+  void rejectGesture(int pointer) {}
 }

@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
+
 import 'package:file/file.dart';
 import 'package:file/local.dart' as local_fs;
 import 'package:meta/meta.dart';
 
-import 'common.dart' show throwToolExit;
+import 'common.dart';
 import 'io.dart';
+import 'logger.dart';
 import 'platform.dart';
 import 'process.dart';
 import 'signals.dart';
+import 'terminal.dart';
 
 // package:file/local.dart must not be exported. This exposes LocalFileSystem,
 // which we override to ensure that temporary directories are cleaned up when
@@ -29,94 +33,26 @@ class FileNotFoundException implements IOException {
 
 /// Various convenience file system methods.
 class FileSystemUtils {
-  FileSystemUtils({
-    @required FileSystem fileSystem,
-    @required Platform platform,
-  }) : _fileSystem = fileSystem,
-       _platform = platform;
+  FileSystemUtils({required this._fileSystem, required this._platform});
 
   final FileSystem _fileSystem;
 
   final Platform _platform;
 
-  /// Create the ancestor directories of a file path if they do not already exist.
-  void ensureDirectoryExists(String filePath) {
-    final String dirPath = _fileSystem.path.dirname(filePath);
-    if (_fileSystem.isDirectorySync(dirPath)) {
-      return;
-    }
-    try {
-      _fileSystem.directory(dirPath).createSync(recursive: true);
-    } on FileSystemException catch (e) {
-      throwToolExit('Failed to create directory "$dirPath": ${e.osError.message}');
-    }
-  }
-
-  /// Creates `destDir` if needed, then recursively copies `srcDir` to
-  /// `destDir`, invoking [onFileCopied], if specified, for each
-  /// source/destination file pair.
-  ///
-  /// Skips files if [shouldCopyFile] returns `false`.
-  void copyDirectorySync(
-    Directory srcDir,
-    Directory destDir, {
-    bool shouldCopyFile(File srcFile, File destFile),
-    void onFileCopied(File srcFile, File destFile),
-  }) {
-    if (!srcDir.existsSync()) {
-      throw Exception('Source directory "${srcDir.path}" does not exist, nothing to copy');
-    }
-
-    if (!destDir.existsSync()) {
-      destDir.createSync(recursive: true);
-    }
-
-    for (final FileSystemEntity entity in srcDir.listSync()) {
-      final String newPath = destDir.fileSystem.path.join(destDir.path, entity.basename);
-      if (entity is File) {
-        final File newFile = destDir.fileSystem.file(newPath);
-        if (shouldCopyFile != null && !shouldCopyFile(entity, newFile)) {
-          continue;
-        }
-        newFile.writeAsBytesSync(entity.readAsBytesSync());
-        onFileCopied?.call(entity, newFile);
-      } else if (entity is Directory) {
-        copyDirectorySync(
-          entity,
-          destDir.fileSystem.directory(newPath),
-          shouldCopyFile: shouldCopyFile,
-          onFileCopied: onFileCopied,
-        );
-      } else {
-        throw Exception('${entity.path} is neither File nor Directory');
-      }
-    }
-  }
-
   /// Appends a number to a filename in order to make it unique under a
   /// directory.
   File getUniqueFile(Directory dir, String baseName, String ext) {
-    final FileSystem fs = dir.fileSystem;
-    int i = 1;
-
-    while (true) {
-      final String name = '${baseName}_${i.toString().padLeft(2, '0')}.$ext';
-      final File file = fs.file(_fileSystem.path.join(dir.path, name));
-      if (!file.existsSync()) {
-        return file;
-      }
-      i += 1;
-    }
+    return _getUniqueFile(dir, baseName, ext);
   }
 
   /// Appends a number to a directory name in order to make it unique under a
   /// directory.
   Directory getUniqueDirectory(Directory dir, String baseName) {
     final FileSystem fs = dir.fileSystem;
-    int i = 1;
+    var i = 1;
 
     while (true) {
-      final String name = '${baseName}_${i.toString().padLeft(2, '0')}';
+      final name = '${baseName}_${i.toString().padLeft(2, '0')}';
       final Directory directory = fs.directory(_fileSystem.path.join(dir.path, name));
       if (!directory.existsSync()) {
         return directory;
@@ -125,18 +61,21 @@ class FileSystemUtils {
     }
   }
 
-  /// Return a relative path if [fullPath] is contained by the cwd, else return an
-  /// absolute path.
-  String getDisplayPath(String fullPath) {
-    final String cwd = _fileSystem.currentDirectory.path + _fileSystem.path.separator;
-    return fullPath.startsWith(cwd) ? fullPath.substring(cwd.length) : fullPath;
-  }
-
   /// Escapes [path].
   ///
   /// On Windows it replaces all '\' with '\\'. On other platforms, it returns the
   /// path unchanged.
-  String escapePath(String path) => _platform.isWindows ? path.replaceAll(r'\', r'\\') : path;
+  String escapePath(String path) {
+    if (_platform.isWindows) {
+      path = path.replaceAll(r'\', r'\\');
+      if (path.startsWith(RegExp('[a-z]:'))) {
+        // ensure that the drive letter is upper case see
+        // https://youtrack.jetbrains.com/issue/IDEA-329756/Importing-symlinked-Gradle-included-build-fails#focus=Comments-27-11721320.0-0
+        return path[0].toUpperCase() + path.substring(1);
+      }
+    }
+    return path;
+  }
 
   /// Returns true if the file system [entity] has not been modified since the
   /// latest modification to [referenceFile].
@@ -144,22 +83,25 @@ class FileSystemUtils {
   /// Returns true, if [entity] does not exist.
   ///
   /// Returns false, if [entity] exists, but [referenceFile] does not.
-  bool isOlderThanReference({
-    @required FileSystemEntity entity,
-    @required File referenceFile,
-  }) {
+  bool isOlderThanReference({required FileSystemEntity entity, required File referenceFile}) {
     if (!entity.existsSync()) {
       return true;
     }
-    return referenceFile.existsSync()
-        && referenceFile.statSync().modified.isAfter(entity.statSync().modified);
+    if (!referenceFile.existsSync()) {
+      return false;
+    }
+
+    final DateTime referenceModified = referenceFile.statSync().modified;
+    final DateTime entityModified = entity.statSync().modified;
+
+    return referenceModified.isAfter(entityModified);
   }
 
   /// Return the absolute path of the user's home directory.
-  String get homeDirPath {
-    String path = _platform.isWindows
-      ? _platform.environment['USERPROFILE']
-      : _platform.environment['HOME'];
+  String? get homeDirPath {
+    String? path = _platform.isWindows
+        ? _platform.environment['USERPROFILE']
+        : _platform.environment['HOME'];
     if (path != null) {
       path = _fileSystem.path.absolute(path);
     }
@@ -167,35 +109,115 @@ class FileSystemUtils {
   }
 }
 
+/// Return a relative path if [fullPath] is contained by the cwd, else return an
+/// absolute path.
+String getDisplayPath(String fullPath, FileSystem fileSystem) {
+  final String cwd = fileSystem.currentDirectory.path + fileSystem.path.separator;
+  return fullPath.startsWith(cwd) ? fullPath.substring(cwd.length) : fullPath;
+}
+
+/// Creates `destDir` if needed, then recursively copies `srcDir` to
+/// `destDir`, invoking [onFileCopied], if specified, for each
+/// source/destination file pair.
+///
+/// Skips files if [shouldCopyFile] returns `false`.
+/// Does not recurse over directories if [shouldCopyDirectory] returns `false`.
+///
+/// If [followLinks] is false, then any symbolic links found are reported as
+/// [Link] objects, rather than as directories or files, and are not recursed into.
+///
+/// If [followLinks] is true, then working links are reported as directories or
+/// files, depending on what they point to.
+void copyDirectory(
+  Directory srcDir,
+  Directory destDir, {
+  bool Function(File srcFile, File destFile)? shouldCopyFile,
+  bool Function(Directory)? shouldCopyDirectory,
+  void Function(File srcFile, File destFile)? onFileCopied,
+  bool followLinks = true,
+}) {
+  if (!srcDir.existsSync()) {
+    throw Exception('Source directory "${srcDir.path}" does not exist, nothing to copy');
+  }
+
+  if (!destDir.existsSync()) {
+    destDir.createSync(recursive: true);
+  }
+
+  for (final FileSystemEntity entity in srcDir.listSync(followLinks: followLinks)) {
+    final String newPath = destDir.fileSystem.path.join(destDir.path, entity.basename);
+    if (entity is Link) {
+      final Link newLink = destDir.fileSystem.link(newPath);
+      newLink.createSync(entity.targetSync());
+    } else if (entity is File) {
+      final File newFile = destDir.fileSystem.file(newPath);
+      if (shouldCopyFile != null && !shouldCopyFile(entity, newFile)) {
+        continue;
+      }
+      newFile.writeAsBytesSync(entity.readAsBytesSync());
+      onFileCopied?.call(entity, newFile);
+    } else if (entity is Directory) {
+      if (shouldCopyDirectory != null && !shouldCopyDirectory(entity)) {
+        continue;
+      }
+      copyDirectory(
+        entity,
+        destDir.fileSystem.directory(newPath),
+        shouldCopyFile: shouldCopyFile,
+        onFileCopied: onFileCopied,
+        followLinks: followLinks,
+        shouldCopyDirectory: shouldCopyDirectory,
+      );
+    } else {
+      throw Exception('${entity.path} is neither File nor Directory, was ${entity.runtimeType}');
+    }
+  }
+}
+
+File _getUniqueFile(Directory dir, String baseName, String ext) {
+  final FileSystem fs = dir.fileSystem;
+  var i = 1;
+
+  while (true) {
+    final name = '${baseName}_${i.toString().padLeft(2, '0')}.$ext';
+    final File file = fs.file(dir.fileSystem.path.join(dir.path, name));
+    if (!file.existsSync()) {
+      file.createSync(recursive: true);
+      return file;
+    }
+    i += 1;
+  }
+}
+
+/// Appends a number to a filename in order to make it unique under a
+/// directory.
+File getUniqueFile(Directory dir, String baseName, String ext) {
+  return _getUniqueFile(dir, baseName, ext);
+}
+
 /// This class extends [local_fs.LocalFileSystem] in order to clean up
 /// directories and files that the tool creates under the system temporary
 /// directory when the tool exits either normally or when killed by a signal.
 class LocalFileSystem extends local_fs.LocalFileSystem {
-  LocalFileSystem._(Signals signals, List<ProcessSignal> fatalSignals) :
-    _signals = signals, _fatalSignals = fatalSignals;
+  LocalFileSystem(this._signals, this._fatalSignals, this.shutdownHooks);
 
   @visibleForTesting
   LocalFileSystem.test({
-    @required Signals signals,
+    required Signals signals,
     List<ProcessSignal> fatalSignals = Signals.defaultExitSignals,
-  }) : this._(signals, fatalSignals);
+  }) : this(signals, fatalSignals, ShutdownHooks());
 
-  // Unless we're in a test of this class's signal hanlding features, we must
-  // have only one instance created with the singleton LocalSignals instance
-  // and the catchable signals it considers to be fatal.
-  static LocalFileSystem _instance;
-  static LocalFileSystem get instance => _instance ??= LocalFileSystem._(
-    LocalSignals.instance,
-    Signals.defaultExitSignals,
-  );
+  Directory? _systemTemp;
+  final _signalTokens = <ProcessSignal, Object>{};
 
-  Directory _systemTemp;
-  final Map<ProcessSignal, Object> _signalTokens = <ProcessSignal, Object>{};
+  final ShutdownHooks shutdownHooks;
 
-  @visibleForTesting
-  static Future<void> dispose() => LocalFileSystem.instance?._dispose();
+  // Indicates that `dispose()` has been invoked or some shutdown hook has executed,
+  // resulting in the underlying temporary directory being cleaned up.
+  bool get disposed => _disposed;
+  var _disposed = false;
 
-  Future<void> _dispose() async {
+  Future<void> dispose() async {
     _tryToDeleteTemp();
     for (final MapEntry<ProcessSignal, Object> signalToken in _signalTokens.entries) {
       await _signals.removeHandler(signalToken.key, signalToken.value);
@@ -207,12 +229,13 @@ class LocalFileSystem extends local_fs.LocalFileSystem {
   final List<ProcessSignal> _fatalSignals;
 
   void _tryToDeleteTemp() {
+    _disposed = true;
     try {
       if (_systemTemp?.existsSync() ?? false) {
-        _systemTemp.deleteSync(recursive: true);
+        _systemTemp?.deleteSync(recursive: true);
       }
     } on FileSystemException {
-      // ignore.
+      // ignore
     }
     _systemTemp = null;
   }
@@ -225,27 +248,94 @@ class LocalFileSystem extends local_fs.LocalFileSystem {
   @override
   Directory get systemTempDirectory {
     if (_systemTemp == null) {
-      _systemTemp = super.systemTempDirectory.createTempSync(
-        'flutter_tools.',
-      )..createSync(recursive: true);
+      if (!superSystemTempDirectory.existsSync()) {
+        throwToolExit(
+          'Your system temp directory (${superSystemTempDirectory.path}) does not exist. '
+          'Did you set an invalid override in your environment? See issue https://github.com/flutter/flutter/issues/74042 for more context.',
+        );
+      }
+      _systemTemp = superSystemTempDirectory.createTempSync('flutter_tools.')
+        ..createSync(recursive: true);
       // Make sure that the temporary directory is cleaned up if the tool is
       // killed by a signal.
       for (final ProcessSignal signal in _fatalSignals) {
-        final Object token = _signals.addHandler(
-          signal,
-          (ProcessSignal _) {
-            _tryToDeleteTemp();
-          },
-        );
+        final Object token = _signals.addHandler(signal, (ProcessSignal _) {
+          _tryToDeleteTemp();
+        });
         _signalTokens[signal] = token;
       }
       // Make sure that the temporary directory is cleaned up when the tool
       // exits normally.
-      shutdownHooks?.addShutdownHook(
-        _tryToDeleteTemp,
-        ShutdownStage.CLEANUP,
-      );
+      shutdownHooks.addShutdownHook(_tryToDeleteTemp);
     }
-    return _systemTemp;
+    return _systemTemp!;
+  }
+
+  // This only exist because the memory file system does not support a systemTemp that does not exists #74042
+  @visibleForTesting
+  Directory get superSystemTempDirectory => super.systemTempDirectory;
+}
+
+extension FileSystemLocking on FileSystem {
+  /// Runs [scope] while holding an exclusive file lock on the file at [lockPath].
+  ///
+  /// The lock is released after [scope] completes, even if it throws.
+  ///
+  /// If the lock cannot be acquired immediately, it will retry every 50ms.
+  Future<T> runLocked<T>({
+    required String lockPath,
+    required FutureOr<T> Function() scope,
+    Logger? logger,
+    String? traceMessage,
+    String? warningMessage,
+  }) async {
+    final File lockFile = file(lockPath);
+    var printed = false;
+    RandomAccessFile? openedFile;
+    while (true) {
+      try {
+        lockFile.parent.createSync(recursive: true);
+        openedFile = lockFile.openSync(mode: FileMode.write);
+        openedFile.lockSync();
+        break;
+      } on UnimplementedError {
+        logger?.printTrace(traceMessage ?? 'Locking not supported (UnimplementedError).');
+        break;
+      } on UnsupportedError {
+        logger?.printTrace(traceMessage ?? 'Locking not supported (UnsupportedError).');
+        break;
+      } on FileSystemException catch (e) {
+        final lockFailed = openedFile != null;
+        if (openedFile != null) {
+          try {
+            openedFile.closeSync();
+          } on FileSystemException catch (_) {}
+          openedFile = null;
+        }
+        if (!printed) {
+          final details = lockFailed ? '' : ' (Error: $e)';
+          logger?.printTrace(
+            traceMessage ?? 'Waiting to obtain lock of directory: ${lockFile.path}$details',
+          );
+          logger?.printWarning(
+            warningMessage ?? 'Waiting for another flutter command to release the lock...',
+            color: TerminalColor.grey,
+            fatal: false,
+          );
+          printed = true;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+
+    try {
+      return await scope();
+    } finally {
+      if (openedFile != null) {
+        try {
+          openedFile.closeSync();
+        } on FileSystemException {} // ignore: empty_catches
+      }
+    }
   }
 }

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/painting.dart';
+///
+/// @docImport 'framework.dart';
+library;
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -19,69 +24,36 @@ import 'restoration.dart';
 ///
 /// ## Using a RestorableValue
 ///
-/// {@tool dartpad --template=stateful_widget_restoration}
+/// {@tool dartpad}
 /// A [StatefulWidget] that has a restorable [int] property.
 ///
-/// ```dart
-///   // The current value of the answer is stored in a [RestorableProperty].
-///   // During state restoration it is automatically restored to its old value.
-///   // If no restoration data is available to restore the answer from, it is
-///   // initialized to the specified default value, in this case 42.
-///   RestorableInt _answer = RestorableInt(42);
-///
-///   @override
-///   void restoreState(RestorationBucket oldBucket, bool initialRestore) {
-///     // All restorable properties must be registered with the mixin. After
-///     // registration, the answer either has its old value restored or is
-///     // initialized to its default value.
-///     registerForRestoration(_answer, 'answer');
-///   }
-///
-///   void _incrementAnswer() {
-///     setState(() {
-///       // The current value of the property can be accessed and modified via
-///       // the value getter and setter.
-///       _answer.value += 1;
-///     });
-///   }
-///
-///   @override
-///   void dispose() {
-///     // Properties must be disposed when no longer used.
-///     _answer.dispose();
-///     super.dispose();
-///   }
-///
-///   @override
-///   Widget build(BuildContext context) {
-///     return OutlinedButton(
-///       child: Text('${_answer.value}'),
-///       onPressed: _incrementAnswer,
-///     );
-///   }
-/// ```
+/// ** See code in examples/api/lib/widgets/restoration_properties/restorable_value.0.dart **
 /// {@end-tool}
 ///
 /// ## Creating a subclass
 ///
 /// {@tool snippet}
-/// This example shows how to create a new `RestorableValue` subclass,
+/// This example shows how to create a new [RestorableValue] subclass,
 /// in this case for the [Duration] class.
 ///
 /// ```dart
 /// class RestorableDuration extends RestorableValue<Duration> {
 ///   @override
-///   Duration createDefaultValue() => const Duration();
+///   Duration createDefaultValue() => Duration.zero;
 ///
 ///   @override
-///   void didUpdateValue(Duration oldValue) {
-///     if (oldValue.inMicroseconds != value.inMicroseconds)
+///   void didUpdateValue(Duration? oldValue) {
+///     if (oldValue == null || oldValue.inMicroseconds != value.inMicroseconds) {
 ///       notifyListeners();
+///     }
 ///   }
 ///
 ///   @override
-///   Duration fromPrimitives(Object data) {
-///     return Duration(microseconds: data as int);
+///   Duration fromPrimitives(Object? data) {
+///     if (data != null) {
+///       return Duration(microseconds: data as int);
+///     }
+///     return Duration.zero;
 ///   }
 ///
 ///   @override
@@ -113,6 +85,7 @@ abstract class RestorableValue<T> extends RestorableProperty<T> {
     assert(isRegistered);
     return _value as T;
   }
+
   T? _value;
   set value(T newValue) {
     assert(isRegistered);
@@ -140,19 +113,11 @@ abstract class RestorableValue<T> extends RestorableProperty<T> {
   void didUpdateValue(T? oldValue);
 }
 
-// _RestorablePrimitiveValue and its subclasses do not allow null values in
-// anticipation of NNBD (non-nullability by default).
-//
-// If necessary, we can in the future define a new subclass hierarchy that
-// does allow null values for primitive types. Borrowing from lisp where
-// functions that returned a bool ended in 'p', a suggested naming scheme for
-// these new subclasses could be to add 'N' (for nullable) to the end of a
-// class name (e.g. RestorableIntN, RestorableStringN, etc.) to distinguish them
-// from their non-nullable friends.
-class _RestorablePrimitiveValue<T extends Object> extends RestorableValue<T> {
-  _RestorablePrimitiveValue(this._defaultValue)
-    : assert(_defaultValue != null),
-      assert(debugIsSerializableForRestoration(_defaultValue)),
+// _RestorablePrimitiveValueN and its subclasses allows for null values.
+// See [_RestorablePrimitiveValue] for the non-nullable version of this class.
+class _RestorablePrimitiveValueN<T extends Object?> extends RestorableValue<T> {
+  _RestorablePrimitiveValueN(this._defaultValue)
+    : assert(debugIsSerializableForRestoration(_defaultValue)),
       super();
 
   final T _defaultValue;
@@ -161,33 +126,44 @@ class _RestorablePrimitiveValue<T extends Object> extends RestorableValue<T> {
   T createDefaultValue() => _defaultValue;
 
   @override
-  set value(T value) {
-    assert(value != null);
-    super.value = value;
-  }
-
-  @override
   void didUpdateValue(T? oldValue) {
     assert(debugIsSerializableForRestoration(value));
     notifyListeners();
   }
 
   @override
-  T fromPrimitives(Object serialized) {
+  T fromPrimitives(Object? serialized) => serialized as T;
+
+  @override
+  Object? toPrimitives() => value;
+}
+
+// _RestorablePrimitiveValue and its subclasses are non-nullable.
+// See [_RestorablePrimitiveValueN] for the nullable version of this class.
+class _RestorablePrimitiveValue<T extends Object> extends _RestorablePrimitiveValueN<T> {
+  _RestorablePrimitiveValue(super.defaultValue)
+    : assert(debugIsSerializableForRestoration(defaultValue));
+
+  @override
+  set value(T value) {
+    super.value = value;
+  }
+
+  @override
+  T fromPrimitives(Object? serialized) {
     assert(serialized != null);
-    return serialized as T;
+    return super.fromPrimitives(serialized);
   }
 
   @override
   Object toPrimitives() {
-    assert(value != null);
-    return value;
+    return super.toPrimitives()!;
   }
 }
 
 /// A [RestorableProperty] that knows how to store and restore a [num].
 ///
-/// {@template flutter.widgets.restoration.primitivevalue}
+/// {@template flutter.widgets.RestorableNum}
 /// The current [value] of this property is stored in the restoration data.
 /// During state restoration the property is restored to the value it had when
 /// the restoration data it is getting restored from was collected.
@@ -199,54 +175,209 @@ class _RestorablePrimitiveValue<T extends Object> extends RestorableValue<T> {
 /// Instead of using the more generic [RestorableNum] directly, consider using
 /// one of the more specific subclasses (e.g. [RestorableDouble] to store a
 /// [double] and [RestorableInt] to store an [int]).
+///
+/// See also:
+///
+///  * [RestorableNumN] for the nullable version of this class.
 class RestorableNum<T extends num> extends _RestorablePrimitiveValue<T> {
   /// Creates a [RestorableNum].
   ///
-  /// {@template flutter.widgets.restoration.primitivevalue.constructor}
+  /// {@template flutter.widgets.RestorableNum.constructor}
   /// If no restoration data is available to restore the value in this property
   /// from, the property will be initialized with the provided `defaultValue`.
   /// {@endtemplate}
-  RestorableNum(T defaultValue) : assert(defaultValue != null), super(defaultValue);
+  RestorableNum(super.defaultValue);
 }
 
 /// A [RestorableProperty] that knows how to store and restore a [double].
 ///
-/// {@macro flutter.widgets.restoration.primitivevalue}
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableDoubleN] for the nullable version of this class.
 class RestorableDouble extends RestorableNum<double> {
   /// Creates a [RestorableDouble].
   ///
-  /// {@macro flutter.widgets.restoration.primitivevalue.constructor}
-  RestorableDouble(double defaultValue) : assert(defaultValue != null), super(defaultValue);
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableDouble(super.defaultValue);
 }
 
 /// A [RestorableProperty] that knows how to store and restore an [int].
 ///
-/// {@macro flutter.widgets.restoration.primitivevalue}
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableIntN] for the nullable version of this class.
 class RestorableInt extends RestorableNum<int> {
   /// Creates a [RestorableInt].
   ///
-  /// {@macro flutter.widgets.restoration.primitivevalue.constructor}
-  RestorableInt(int defaultValue) : assert(defaultValue != null), super(defaultValue);
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableInt(super.defaultValue);
 }
 
 /// A [RestorableProperty] that knows how to store and restore a [String].
 ///
-/// {@macro flutter.widgets.restoration.primitivevalue}
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableStringN] for the nullable version of this class.
 class RestorableString extends _RestorablePrimitiveValue<String> {
   /// Creates a [RestorableString].
   ///
-  /// {@macro flutter.widgets.restoration.primitivevalue.constructor}
-  RestorableString(String defaultValue) : assert(defaultValue != null), super(defaultValue);
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableString(super.defaultValue);
 }
 
 /// A [RestorableProperty] that knows how to store and restore a [bool].
 ///
-/// {@macro flutter.widgets.restoration.primitivevalue}
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableBoolN] for the nullable version of this class.
 class RestorableBool extends _RestorablePrimitiveValue<bool> {
   /// Creates a [RestorableBool].
   ///
-  /// {@macro flutter.widgets.restoration.primitivevalue.constructor}
-  RestorableBool(bool defaultValue) : assert(defaultValue != null), super(defaultValue);
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableBool(super.defaultValue);
+}
+
+/// A [RestorableProperty] that knows how to store and restore a [bool] that is
+/// nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableBool] for the non-nullable version of this class.
+class RestorableBoolN extends _RestorablePrimitiveValueN<bool?> {
+  /// Creates a [RestorableBoolN].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableBoolN(super.defaultValue);
+}
+
+/// A [RestorableProperty] that knows how to store and restore a [num]
+/// that is nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// Instead of using the more generic [RestorableNumN] directly, consider using
+/// one of the more specific subclasses (e.g. [RestorableDoubleN] to store a
+/// [double] and [RestorableIntN] to store an [int]).
+///
+/// See also:
+///
+///  * [RestorableNum] for the non-nullable version of this class.
+class RestorableNumN<T extends num?> extends _RestorablePrimitiveValueN<T> {
+  /// Creates a [RestorableNumN].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableNumN(super.defaultValue);
+}
+
+/// A [RestorableProperty] that knows how to store and restore a [double]
+/// that is nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableDouble] for the non-nullable version of this class.
+class RestorableDoubleN extends RestorableNumN<double?> {
+  /// Creates a [RestorableDoubleN].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableDoubleN(super.defaultValue);
+}
+
+/// A [RestorableProperty] that knows how to store and restore an [int]
+/// that is nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableInt] for the non-nullable version of this class.
+class RestorableIntN extends RestorableNumN<int?> {
+  /// Creates a [RestorableIntN].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableIntN(super.defaultValue);
+}
+
+/// A [RestorableProperty] that knows how to store and restore a [String]
+/// that is nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// See also:
+///
+///  * [RestorableString] for the non-nullable version of this class.
+class RestorableStringN extends _RestorablePrimitiveValueN<String?> {
+  /// Creates a [RestorableString].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableStringN(super.defaultValue);
+}
+
+/// A [RestorableValue] that knows how to save and restore [DateTime].
+///
+/// {@macro flutter.widgets.RestorableNum}.
+class RestorableDateTime extends RestorableValue<DateTime> {
+  /// Creates a [RestorableDateTime].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableDateTime(DateTime defaultValue) : _defaultValue = defaultValue;
+
+  final DateTime _defaultValue;
+
+  @override
+  DateTime createDefaultValue() => _defaultValue;
+
+  @override
+  void didUpdateValue(DateTime? oldValue) {
+    assert(debugIsSerializableForRestoration(value.millisecondsSinceEpoch));
+    notifyListeners();
+  }
+
+  @override
+  DateTime fromPrimitives(Object? data) => DateTime.fromMillisecondsSinceEpoch(data! as int);
+
+  @override
+  Object? toPrimitives() => value.millisecondsSinceEpoch;
+}
+
+/// A [RestorableValue] that knows how to save and restore [DateTime] that is
+/// nullable.
+///
+/// {@macro flutter.widgets.RestorableNum}.
+class RestorableDateTimeN extends RestorableValue<DateTime?> {
+  /// Creates a [RestorableDateTime].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableDateTimeN(DateTime? defaultValue) : _defaultValue = defaultValue;
+
+  final DateTime? _defaultValue;
+
+  @override
+  DateTime? createDefaultValue() => _defaultValue;
+
+  @override
+  void didUpdateValue(DateTime? oldValue) {
+    assert(debugIsSerializableForRestoration(value?.millisecondsSinceEpoch));
+    notifyListeners();
+  }
+
+  @override
+  DateTime? fromPrimitives(Object? data) =>
+      data != null ? DateTime.fromMillisecondsSinceEpoch(data as int) : null;
+
+  @override
+  Object? toPrimitives() => value?.millisecondsSinceEpoch;
 }
 
 /// A base class for creating a [RestorableProperty] that stores and restores a
@@ -275,11 +406,11 @@ abstract class RestorableListenable<T extends Listenable> extends RestorableProp
     assert(isRegistered);
     return _value!;
   }
+
   T? _value;
 
   @override
   void initWithValue(T value) {
-    assert(value != null);
     _value?.removeListener(notifyListeners);
     _value = value;
     _value!.addListener(notifyListeners);
@@ -292,6 +423,43 @@ abstract class RestorableListenable<T extends Listenable> extends RestorableProp
   }
 }
 
+/// A base class for creating a [RestorableProperty] that stores and restores a
+/// [ChangeNotifier].
+///
+/// This class may be used to implement a [RestorableProperty] for a
+/// [ChangeNotifier], whose information it needs to store in the restoration
+/// data change whenever the [ChangeNotifier] notifies its listeners.
+///
+/// The [RestorationMixin] this property is registered with will call
+/// [toPrimitives] whenever the wrapped [ChangeNotifier] notifies its listeners
+/// to update the information that this property has stored in the restoration
+/// data.
+///
+/// Furthermore, the property will dispose the wrapped [ChangeNotifier] when
+/// either the property itself is disposed or its value is replaced with another
+/// [ChangeNotifier] instance.
+abstract class RestorableChangeNotifier<T extends ChangeNotifier> extends RestorableListenable<T> {
+  @override
+  void initWithValue(T value) {
+    _disposeOldValue();
+    super.initWithValue(value);
+  }
+
+  @override
+  void dispose() {
+    _disposeOldValue();
+    super.dispose();
+  }
+
+  void _disposeOldValue() {
+    if (_value != null) {
+      // Scheduling a microtask for dispose to give other entities a chance
+      // to remove their listeners first.
+      scheduleMicrotask(_value!.dispose);
+    }
+  }
+}
+
 /// A [RestorableProperty] that knows how to store and restore a
 /// [TextEditingController].
 ///
@@ -299,14 +467,15 @@ abstract class RestorableListenable<T extends Listenable> extends RestorableProp
 /// state restoration, the property will restore [TextEditingController.text] to
 /// the value it had when the restoration data it is getting restored from was
 /// collected.
-class RestorableTextEditingController extends RestorableListenable<TextEditingController> {
+class RestorableTextEditingController extends RestorableChangeNotifier<TextEditingController> {
   /// Creates a [RestorableTextEditingController].
   ///
   /// This constructor treats a null `text` argument as if it were the empty
   /// string.
-  factory RestorableTextEditingController({String? text}) => RestorableTextEditingController.fromValue(
-    text == null ? TextEditingValue.empty : TextEditingValue(text: text),
-  );
+  factory RestorableTextEditingController({String? text}) =>
+      RestorableTextEditingController.fromValue(
+        text == null ? TextEditingValue.empty : TextEditingValue(text: text),
+      );
 
   /// Creates a [RestorableTextEditingController] from an initial
   /// [TextEditingValue].
@@ -323,35 +492,197 @@ class RestorableTextEditingController extends RestorableListenable<TextEditingCo
   }
 
   @override
-  TextEditingController fromPrimitives(Object data) {
-    return TextEditingController(text: data as String);
+  TextEditingController fromPrimitives(Object? data) {
+    return TextEditingController(text: data! as String);
   }
 
   @override
   Object toPrimitives() {
     return value.text;
   }
+}
 
-  TextEditingController? _controller;
+/// A [RestorableProperty] that knows how to store and restore a nullable [Enum]
+/// type.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// The values are serialized using the name of the enum, obtained using the
+/// [EnumName.name] extension accessor.
+///
+/// The represented value is accessible via the [value] getter. The set of
+/// values in the enum are accessible via the [values] getter. Since
+/// [RestorableEnumN] allows null, this set will include null.
+///
+/// See also:
+///
+/// * [RestorableEnum], a class similar to this one that knows how to store and
+///   restore non-nullable [Enum] types.
+class RestorableEnumN<T extends Enum> extends RestorableValue<T?> {
+  /// Creates a [RestorableEnumN].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableEnumN(T? defaultValue, {required Iterable<T> values})
+    : assert(
+        defaultValue == null || values.contains(defaultValue),
+        'Default value $defaultValue not found in $T values: $values',
+      ),
+      _defaultValue = defaultValue,
+      values = values.toSet();
 
   @override
-  void initWithValue(TextEditingController value) {
-    _disposeControllerIfNecessary();
-    _controller = value;
-    super.initWithValue(value);
+  T? createDefaultValue() => _defaultValue;
+  final T? _defaultValue;
+
+  @override
+  set value(T? newValue) {
+    assert(
+      newValue == null || values.contains(newValue),
+      'Attempted to set an unknown enum value "$newValue" that is not null, or '
+      'in the valid set of enum values for the $T type: '
+      '${values.map<String>((T value) => value.name).toSet()}',
+    );
+    super.value = newValue;
+  }
+
+  /// The set of non-null values that this [RestorableEnumN] may represent.
+  ///
+  /// This is a required field that supplies the enum values that are serialized
+  /// and restored.
+  ///
+  /// If a value is encountered that is not null or a value in this set,
+  /// [fromPrimitives] will assert when restoring.
+  ///
+  /// It is typically set to the `values` list of the enum type.
+  ///
+  /// In addition to this set, because [RestorableEnumN] allows nullable values,
+  /// null is also a valid value, even though it doesn't appear in this set.
+  ///
+  /// {@tool snippet} For example, to create a [RestorableEnumN] with an
+  /// [AxisDirection] enum value, with a default value of null, you would build
+  /// it like the code below:
+  ///
+  /// ```dart
+  /// RestorableEnumN<AxisDirection> axis = RestorableEnumN<AxisDirection>(null, values: AxisDirection.values);
+  /// ```
+  /// {@end-tool}
+  Set<T> values;
+
+  @override
+  void didUpdateValue(T? oldValue) {
+    notifyListeners();
   }
 
   @override
-  void dispose() {
-    super.dispose();
-    _disposeControllerIfNecessary();
-  }
-
-  void _disposeControllerIfNecessary() {
-    if (_controller != null) {
-      // Scheduling a microtask for dispose to give other entities a chance
-      // to remove their listeners first.
-      scheduleMicrotask(_controller!.dispose);
+  T? fromPrimitives(Object? data) {
+    if (data == null) {
+      return null;
     }
+    if (data is String) {
+      for (final T allowed in values) {
+        if (allowed.name == data) {
+          return allowed;
+        }
+      }
+      assert(
+        false,
+        'Attempted to set an unknown enum value "$data" that is not null, or '
+        'in the valid set of enum values for the $T type: '
+        '${values.map<String>((T value) => value.name).toSet()}',
+      );
+    }
+    return _defaultValue;
   }
+
+  @override
+  Object? toPrimitives() => value?.name;
+}
+
+/// A [RestorableProperty] that knows how to store and restore an [Enum]
+/// type.
+///
+/// {@macro flutter.widgets.RestorableNum}
+///
+/// The values are serialized using the name of the enum, obtained using the
+/// [EnumName.name] extension accessor.
+///
+/// The represented value is accessible via the [value] getter.
+///
+/// See also:
+///
+/// * [RestorableEnumN], a class similar to this one that knows how to store and
+///   restore nullable [Enum] types.
+class RestorableEnum<T extends Enum> extends RestorableValue<T> {
+  /// Creates a [RestorableEnum].
+  ///
+  /// {@macro flutter.widgets.RestorableNum.constructor}
+  RestorableEnum(T defaultValue, {required Iterable<T> values})
+    : assert(
+        values.contains(defaultValue),
+        'Default value $defaultValue not found in $T values: $values',
+      ),
+      _defaultValue = defaultValue,
+      values = values.toSet();
+
+  @override
+  T createDefaultValue() => _defaultValue;
+  final T _defaultValue;
+
+  @override
+  set value(T newValue) {
+    assert(
+      values.contains(newValue),
+      'Attempted to set an unknown enum value "$newValue" that is not in the '
+      'valid set of enum values for the $T type: '
+      '${values.map<String>((T value) => value.name).toSet()}',
+    );
+
+    super.value = newValue;
+  }
+
+  /// The set of values that this [RestorableEnum] may represent.
+  ///
+  /// This is a required field that supplies the possible enum values that can
+  /// be serialized and restored.
+  ///
+  /// If a value is encountered that is not in this set, [fromPrimitives] will
+  /// assert when restoring.
+  ///
+  /// It is typically set to the `values` list of the enum type.
+  ///
+  /// {@tool snippet} For example, to create a [RestorableEnum] with an
+  /// [AxisDirection] enum value, with a default value of [AxisDirection.up],
+  /// you would build it like the code below:
+  ///
+  /// ```dart
+  /// RestorableEnum<AxisDirection> axis = RestorableEnum<AxisDirection>(AxisDirection.up, values: AxisDirection.values);
+  /// ```
+  /// {@end-tool}
+  Set<T> values;
+
+  @override
+  void didUpdateValue(T? oldValue) {
+    notifyListeners();
+  }
+
+  @override
+  T fromPrimitives(Object? data) {
+    if (data != null && data is String) {
+      for (final T allowed in values) {
+        if (allowed.name == data) {
+          return allowed;
+        }
+      }
+      assert(
+        false,
+        'Attempted to restore an unknown enum value "$data" that is not in the '
+        'valid set of enum values for the $T type: '
+        '${values.map<String>((T value) => value.name).toSet()}',
+      );
+    }
+    return _defaultValue;
+  }
+
+  @override
+  Object toPrimitives() => value.name;
 }

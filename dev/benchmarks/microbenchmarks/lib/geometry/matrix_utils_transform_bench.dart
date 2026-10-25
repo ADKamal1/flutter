@@ -4,20 +4,18 @@
 
 import 'dart:math' as math;
 
-import 'package:flutter/painting.dart';
 import 'package:flutter/rendering.dart';
-import 'package:vector_math/vector_math_64.dart';
 
 import '../common.dart';
 
 const int _kNumIterations = 10000000;
 const int _kNumWarmUp = 100000;
 
-void main() {
-  assert(false, "Don't run benchmarks in checked mode! Use 'flutter run --release'.");
+Future<void> execute() async {
+  assert(false, "Don't run benchmarks in debug mode! Use 'flutter run --release'.");
   print('MatrixUtils.transformRect and .transformPoint benchmark...');
 
-  Matrix4 _makePerspective(double radius, double angle, double perspective) {
+  Matrix4 makePerspective(double radius, double angle, double perspective) {
     return MatrixUtils.createCylindricalProjectionTransform(
       radius: radius,
       angle: angle,
@@ -25,56 +23,60 @@ void main() {
     );
   }
 
-  final List<Matrix4> _affineTransforms = <Matrix4>[
-    Matrix4.identity()..scale(1.2, 1.3, 1.0)..rotateZ(0.1),
+  final affineTransforms = <Matrix4>[
+    Matrix4.identity()
+      ..scale(1.2, 1.3, 1.0)
+      ..rotateZ(0.1),
     Matrix4.identity()..translate(12.0, 13.0, 10.0),
-    Matrix4.identity()..scale(1.2, 1.3, 1.0)..translate(12.0, 13.0, 10.0),
+    Matrix4.identity()
+      ..scale(1.2, 1.3, 1.0)
+      ..translate(12.0, 13.0, 10.0),
   ];
-  final List<Matrix4> _perspectiveTransforms = <Matrix4>[
-    _makePerspective(10.0, math.pi / 8.0, 0.3),
-    _makePerspective( 8.0, math.pi / 8.0, 0.2),
-    _makePerspective( 1.0, math.pi / 4.0, 0.1)..rotateX(0.1),
+  final perspectiveTransforms = <Matrix4>[
+    makePerspective(10.0, math.pi / 8.0, 0.3),
+    makePerspective(8.0, math.pi / 8.0, 0.2),
+    makePerspective(1.0, math.pi / 4.0, 0.1)..rotateX(0.1),
   ];
-  final List<Rect> _rectangles = <Rect>[
+  final rectangles = <Rect>[
     const Rect.fromLTRB(1.1, 1.2, 1.5, 1.8),
     const Rect.fromLTRB(1.1, 1.2, 0.0, 1.0),
     const Rect.fromLTRB(1.1, 1.2, 1.3, 1.0),
     const Rect.fromLTRB(-1.1, -1.2, 0.0, 1.0),
     const Rect.fromLTRB(-1.1, -1.2, -1.5, -1.8),
   ];
-  final List<Offset> _offsets = <Offset>[
+  final offsets = <Offset>[
     const Offset(1.1, 1.2),
     const Offset(1.5, 1.8),
-    const Offset(0.0, 0.0),
+    Offset.zero,
     const Offset(-1.1, -1.2),
     const Offset(-1.5, -1.8),
   ];
-  final int nAffine = _affineTransforms.length;
-  final int nPerspective = _perspectiveTransforms.length;
-  final int nRectangles = _rectangles.length;
-  final int nOffsets = _offsets.length;
+  final int nAffine = affineTransforms.length;
+  final int nPerspective = perspectiveTransforms.length;
+  final int nRectangles = rectangles.length;
+  final int nOffsets = offsets.length;
 
   // Warm up lap
-  for (int i = 0; i < _kNumWarmUp; i += 1) {
-    final Matrix4 transform = _perspectiveTransforms[i % nPerspective];
-    final Rect rect = _rectangles[(i ~/ nPerspective) % nRectangles];
-    final Offset offset = _offsets[(i ~/ nPerspective) % nOffsets];
+  for (var i = 0; i < _kNumWarmUp; i += 1) {
+    final Matrix4 transform = perspectiveTransforms[i % nPerspective];
+    final Rect rect = rectangles[(i ~/ nPerspective) % nRectangles];
+    final Offset offset = offsets[(i ~/ nPerspective) % nOffsets];
     MatrixUtils.transformRect(transform, rect);
     MatrixUtils.transformPoint(transform, offset);
   }
-  for (int i = 0; i < _kNumWarmUp; i += 1) {
-    final Matrix4 transform = _affineTransforms[i % nAffine];
-    final Rect rect = _rectangles[(i ~/ nAffine) % nRectangles];
-    final Offset offset = _offsets[(i ~/ nAffine) % nOffsets];
+  for (var i = 0; i < _kNumWarmUp; i += 1) {
+    final Matrix4 transform = affineTransforms[i % nAffine];
+    final Rect rect = rectangles[(i ~/ nAffine) % nRectangles];
+    final Offset offset = offsets[(i ~/ nAffine) % nOffsets];
     MatrixUtils.transformRect(transform, rect);
     MatrixUtils.transformPoint(transform, offset);
   }
 
-  final Stopwatch watch = Stopwatch();
+  final watch = Stopwatch();
   watch.start();
-  for (int i = 0; i < _kNumIterations; i += 1) {
-    final Matrix4 transform = _perspectiveTransforms[i % nPerspective];
-    final Rect rect = _rectangles[(i ~/ nPerspective) % nRectangles];
+  for (var i = 0; i < _kNumIterations; i += 1) {
+    final Matrix4 transform = perspectiveTransforms[i % nPerspective];
+    final Rect rect = rectangles[(i ~/ nPerspective) % nRectangles];
     MatrixUtils.transformRect(transform, rect);
   }
   watch.stop();
@@ -82,9 +84,9 @@ void main() {
 
   watch.reset();
   watch.start();
-  for (int i = 0; i < _kNumIterations; i += 1) {
-    final Matrix4 transform = _affineTransforms[i % nAffine];
-    final Rect rect = _rectangles[(i ~/ nAffine) % nRectangles];
+  for (var i = 0; i < _kNumIterations; i += 1) {
+    final Matrix4 transform = affineTransforms[i % nAffine];
+    final Rect rect = rectangles[(i ~/ nAffine) % nRectangles];
     MatrixUtils.transformRect(transform, rect);
   }
   watch.stop();
@@ -92,9 +94,9 @@ void main() {
 
   watch.reset();
   watch.start();
-  for (int i = 0; i < _kNumIterations; i += 1) {
-    final Matrix4 transform = _perspectiveTransforms[i % nPerspective];
-    final Offset offset = _offsets[(i ~/ nPerspective) % nOffsets];
+  for (var i = 0; i < _kNumIterations; i += 1) {
+    final Matrix4 transform = perspectiveTransforms[i % nPerspective];
+    final Offset offset = offsets[(i ~/ nPerspective) % nOffsets];
     MatrixUtils.transformPoint(transform, offset);
   }
   watch.stop();
@@ -102,15 +104,15 @@ void main() {
 
   watch.reset();
   watch.start();
-  for (int i = 0; i < _kNumIterations; i += 1) {
-    final Matrix4 transform = _affineTransforms[i % nAffine];
-    final Offset offset = _offsets[(i ~/ nAffine) % nOffsets];
+  for (var i = 0; i < _kNumIterations; i += 1) {
+    final Matrix4 transform = affineTransforms[i % nAffine];
+    final Offset offset = offsets[(i ~/ nAffine) % nOffsets];
     MatrixUtils.transformPoint(transform, offset);
   }
   watch.stop();
   final int pointMicrosecondsAffine = watch.elapsedMicroseconds;
 
-  final BenchmarkResultPrinter printer = BenchmarkResultPrinter();
+  final printer = BenchmarkResultPrinter();
   const double scale = 1000.0 / _kNumIterations;
   printer.addResult(
     description: 'MatrixUtils.transformRectPerspective',
@@ -137,4 +139,11 @@ void main() {
     name: 'MatrixUtils_affine_transformPoint_iteration',
   );
   printer.printToStdout();
+}
+
+//
+//  Note that the benchmark is normally run by benchmark_collection.dart.
+//
+Future<void> main() async {
+  return execute();
 }

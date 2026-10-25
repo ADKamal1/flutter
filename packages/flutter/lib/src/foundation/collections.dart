@@ -2,88 +2,102 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:collection/collection.dart';
+library;
+
 // TODO(ianh): These should be on the Set and List classes themselves.
 
-/// Compares two sets for deep equality.
+/// Compares two sets for element-by-element equality.
 ///
 /// Returns true if the sets are both null, or if they are both non-null, have
 /// the same length, and contain the same members. Returns false otherwise.
 /// Order is not compared.
 ///
-/// The term "deep" above refers to the first level of equality: if the elements
-/// are maps, lists, sets, or other collections/composite objects, then the
-/// values of those elements are not compared element by element unless their
-/// equality operators ([Object.==]) do so.
+/// If the elements are maps, lists, sets, or other collections/composite
+/// objects, then the contents of those elements are not compared element by
+/// element unless their equality operators ([Object.==]) do so. For checking
+/// deep equality, consider using the [DeepCollectionEquality] class.
 ///
 /// See also:
 ///
 ///  * [listEquals], which does something similar for lists.
 ///  * [mapEquals], which does something similar for maps.
 bool setEquals<T>(Set<T>? a, Set<T>? b) {
-  if (a == null)
+  if (a == null) {
     return b == null;
-  if (b == null || a.length != b.length)
+  }
+  if (b == null || a.length != b.length) {
     return false;
-  if (identical(a, b))
+  }
+  if (identical(a, b)) {
     return true;
+  }
   for (final T value in a) {
-    if (!b.contains(value))
+    if (!b.contains(value)) {
       return false;
+    }
   }
   return true;
 }
 
-/// Compares two lists for deep equality.
+/// Compares two lists for element-by-element equality.
 ///
 /// Returns true if the lists are both null, or if they are both non-null, have
 /// the same length, and contain the same members in the same order. Returns
 /// false otherwise.
 ///
-/// The term "deep" above refers to the first level of equality: if the elements
-/// are maps, lists, sets, or other collections/composite objects, then the
-/// values of those elements are not compared element by element unless their
-/// equality operators ([Object.==]) do so.
+/// If the elements are maps, lists, sets, or other collections/composite
+/// objects, then the contents of those elements are not compared element by
+/// element unless their equality operators ([Object.==]) do so. For checking
+/// deep equality, consider using the [DeepCollectionEquality] class.
 ///
 /// See also:
 ///
 ///  * [setEquals], which does something similar for sets.
 ///  * [mapEquals], which does something similar for maps.
 bool listEquals<T>(List<T>? a, List<T>? b) {
-  if (a == null)
+  if (a == null) {
     return b == null;
-  if (b == null || a.length != b.length)
+  }
+  if (b == null || a.length != b.length) {
     return false;
-  if (identical(a, b))
+  }
+  if (identical(a, b)) {
     return true;
-  for (int index = 0; index < a.length; index += 1) {
-    if (a[index] != b[index])
+  }
+  for (var index = 0; index < a.length; index += 1) {
+    if (a[index] != b[index]) {
       return false;
+    }
   }
   return true;
 }
 
-/// Compares two maps for deep equality.
+/// Compares two maps for element-by-element equality.
 ///
 /// Returns true if the maps are both null, or if they are both non-null, have
 /// the same length, and contain the same keys associated with the same values.
 /// Returns false otherwise.
 ///
-/// The term "deep" above refers to the first level of equality: if the elements
-/// are maps, lists, sets, or other collections/composite objects, then the
-/// values of those elements are not compared element by element unless their
-/// equality operators ([Object.==]) do so.
+/// If the elements are maps, lists, sets, or other collections/composite
+/// objects, then the contents of those elements are not compared element by
+/// element unless their equality operators ([Object.==]) do so. For checking
+/// deep equality, consider using the [DeepCollectionEquality] class.
 ///
 /// See also:
 ///
 ///  * [setEquals], which does something similar for sets.
 ///  * [listEquals], which does something similar for lists.
 bool mapEquals<T, U>(Map<T, U>? a, Map<T, U>? b) {
-  if (a == null)
+  if (a == null) {
     return b == null;
-  if (b == null || a.length != b.length)
+  }
+  if (b == null || a.length != b.length) {
     return false;
-  if (identical(a, b))
+  }
+  if (identical(a, b)) {
     return true;
+  }
   for (final T key in a.keys) {
     if (!b.containsKey(key) || b[key] != a[key]) {
       return false;
@@ -92,13 +106,12 @@ bool mapEquals<T, U>(Map<T, U>? a, Map<T, U>? b) {
   return true;
 }
 
-
 /// Returns the position of `value` in the `sortedList`, if it exists.
 ///
 /// Returns `-1` if the `value` is not in the list. Requires the list items
 /// to implement [Comparable] and the `sortedList` to already be ordered.
 int binarySearch<T extends Comparable<Object>>(List<T> sortedList, T value) {
-  int min = 0;
+  var min = 0;
   int max = sortedList.length;
   while (min < max) {
     final int mid = min + ((max - min) >> 1);
@@ -137,15 +150,10 @@ const int _kMergeSortLimit = 32;
 /// This merge sort is stable: Equal elements end up in the same order as they
 /// started in.
 ///
-/// For small lists (less than 32 elements), `mergeSort` automatically uses an
+/// For small lists (less than 32 elements), [mergeSort] automatically uses an
 /// insertion sort instead, as that is more efficient for small lists. The
 /// insertion sort is also stable.
-void mergeSort<T>(
-  List<T> list, {
-  int start = 0,
-  int? end,
-  int Function(T, T)? compare,
-}) {
+void mergeSort<T>(List<T> list, {int start = 0, int? end, int Function(T, T)? compare}) {
   end ??= list.length;
   compare ??= _defaultCompare<T>();
 
@@ -166,7 +174,7 @@ void mergeSort<T>(
   final int firstLength = middle - start;
   final int secondLength = end - middle;
   // secondLength is always the same as firstLength, or one greater.
-  final List<T?> scratchSpace = List<T?>.filled(secondLength, null, growable: false);
+  final scratchSpace = List<T>.filled(secondLength, list[start]);
   _mergeSort<T>(list, compare, middle, end, scratchSpace, 0);
   final int firstTarget = end - firstLength;
   _mergeSort<T>(list, compare, start, middle, list, firstTarget);
@@ -198,20 +206,15 @@ Comparator<T> _defaultCompare<T>() {
 ///
 /// This insertion sort is stable: Equal elements end up in the same order as
 /// they started in.
-void _insertionSort<T>(
-  List<T> list, {
-  int Function(T, T)? compare,
-  int start = 0,
-  int? end,
-}) {
+void _insertionSort<T>(List<T> list, {int Function(T, T)? compare, int start = 0, int? end}) {
   // If the same method could have both positional and named optional
   // parameters, this should be (list, [start, end], {compare}).
   compare ??= _defaultCompare<T>();
   end ??= list.length;
 
   for (int pos = start + 1; pos < end; pos++) {
-    int min = start;
-    int max = pos;
+    var min = start;
+    var max = pos;
     final T element = list[pos];
     while (min < max) {
       final int mid = min + ((max - min) >> 1);
@@ -236,7 +239,7 @@ void _movingInsertionSort<T>(
   int Function(T, T) compare,
   int start,
   int end,
-  List<T?> target,
+  List<T> target,
   int targetOffset,
 ) {
   final int length = end - start;
@@ -244,13 +247,13 @@ void _movingInsertionSort<T>(
     return;
   }
   target[targetOffset] = list[start];
-  for (int i = 1; i < length; i++) {
+  for (var i = 1; i < length; i++) {
     final T element = list[start + i];
-    int min = targetOffset;
+    var min = targetOffset;
     int max = targetOffset + i;
     while (min < max) {
       final int mid = min + ((max - min) >> 1);
-      if (compare(element, target[mid] as T) < 0) {
+      if (compare(element, target[mid]) < 0) {
         max = mid;
       } else {
         min = mid + 1;
@@ -269,13 +272,13 @@ void _movingInsertionSort<T>(
 /// Allows target to be the same list as `list`, as long as it's not overlapping
 /// the `start..end` range.
 void _mergeSort<T>(
-    List<T> list,
-    int Function(T, T) compare,
-    int start,
-    int end,
-    List<T?> target,
-    int targetOffset,
-    ) {
+  List<T> list,
+  int Function(T, T) compare,
+  int start,
+  int end,
+  List<T> target,
+  int targetOffset,
+) {
   final int length = end - start;
   if (length < _kMergeSortLimit) {
     _movingInsertionSort<T>(list, compare, start, end, target, targetOffset);
@@ -316,19 +319,19 @@ void _merge<T>(
   List<T> firstList,
   int firstStart,
   int firstEnd,
-  List<T?> secondList,
+  List<T> secondList,
   int secondStart,
   int secondEnd,
-  List<T?> target,
+  List<T> target,
   int targetOffset,
 ) {
   // No empty lists reaches here.
   assert(firstStart < firstEnd);
   assert(secondStart < secondEnd);
-  int cursor1 = firstStart;
-  int cursor2 = secondStart;
+  var cursor1 = firstStart;
+  var cursor2 = secondStart;
   T firstElement = firstList[cursor1++];
-  T secondElement = secondList[cursor2++] as T;
+  T secondElement = secondList[cursor2++];
   while (true) {
     if (compare(firstElement, secondElement) <= 0) {
       target[targetOffset++] = firstElement;
@@ -340,7 +343,7 @@ void _merge<T>(
     } else {
       target[targetOffset++] = secondElement;
       if (cursor2 != secondEnd) {
-        secondElement = secondList[cursor2++] as T;
+        secondElement = secondList[cursor2++];
         continue;
       }
       // Second list empties first. Flushing first list here.

@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter_driver/flutter_driver.dart';
+library;
+
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,12 +21,12 @@ MethodChannel channel = const MethodChannel('android_views_integration');
 const String kEventsFileName = 'touchEvents';
 
 class MotionEventsPage extends PageWidget {
-  const MotionEventsPage()
-      : super('Motion Event Tests', const ValueKey<String>('MotionEventsListTile'));
+  const MotionEventsPage({super.key})
+    : super('Motion Event Tests', const ValueKey<String>('MotionEventsListTile'));
 
   @override
   Widget build(BuildContext context) {
-    return MotionEventsBody();
+    return const MotionEventsBody();
   }
 }
 
@@ -36,7 +38,7 @@ class MotionEventsPage extends PageWidget {
 class FutureDataHandler {
   final Completer<DataHandler> handlerCompleter = Completer<DataHandler>();
 
-  Future<String> handleMessage(String message) async {
+  Future<String> handleMessage(String? message) async {
     final DataHandler handler = await handlerCompleter.future;
     return handler(message);
   }
@@ -45,6 +47,8 @@ class FutureDataHandler {
 FutureDataHandler driverDataHandler = FutureDataHandler();
 
 class MotionEventsBody extends StatefulWidget {
+  const MotionEventsBody({super.key});
+
   @override
   State createState() => MotionEventsBodyState();
 }
@@ -52,7 +56,7 @@ class MotionEventsBody extends StatefulWidget {
 class MotionEventsBodyState extends State<MotionEventsBody> {
   static const int kEventsBufferSize = 1000;
 
-  MethodChannel viewChannel;
+  MethodChannel? viewChannel;
 
   /// The list of motion events that were passed to the FlutterView.
   List<Map<String, dynamic>> flutterViewEvents = <Map<String, dynamic>>[];
@@ -67,22 +71,20 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
         SizedBox(
           height: 300.0,
           child: AndroidView(
-              key: const ValueKey<String>('PlatformView'),
-              viewType: 'simple_view',
-              onPlatformViewCreated: onPlatformViewCreated),
+            key: const ValueKey<String>('PlatformView'),
+            viewType: 'simple_view',
+            onPlatformViewCreated: onPlatformViewCreated,
+          ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemBuilder: buildEventTile,
-            itemCount: flutterViewEvents.length,
-          ),
+          child: ListView.builder(itemBuilder: buildEventTile, itemCount: flutterViewEvents.length),
         ),
         Row(
           children: <Widget>[
             Expanded(
               child: ElevatedButton(
-                child: const Text('RECORD'),
                 onPressed: listenToFlutterViewEvents,
+                child: const Text('RECORD'),
               ),
             ),
             Expanded(
@@ -100,9 +102,8 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
               child: ElevatedButton(
                 child: const Text('SAVE'),
                 onPressed: () {
-                  const StandardMessageCodec codec = StandardMessageCodec();
-                  saveRecordedEvents(
-                    codec.encodeMessage(flutterViewEvents), context);
+                  const codec = StandardMessageCodec();
+                  saveRecordedEvents(codec.encodeMessage(flutterViewEvents)!, context);
                 },
               ),
             ),
@@ -110,14 +111,18 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
               child: ElevatedButton(
                 key: const ValueKey<String>('play'),
                 child: const Text('PLAY FILE'),
-                onPressed: () { playEventsFile(); },
+                onPressed: () {
+                  playEventsFile();
+                },
               ),
             ),
             Expanded(
               child: ElevatedButton(
                 key: const ValueKey<String>('back'),
                 child: const Text('BACK'),
-                onPressed: () { Navigator.pop(context); },
+                onPressed: () {
+                  Navigator.pop(context);
+                },
               ),
             ),
           ],
@@ -127,38 +132,43 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
   }
 
   Future<String> playEventsFile() async {
-    const StandardMessageCodec codec = StandardMessageCodec();
+    const codec = StandardMessageCodec();
     try {
-      final ByteData data = await rootBundle.load('packages/assets_for_android_views/assets/touchEvents');
-      final List<dynamic> unTypedRecordedEvents = codec.decodeMessage(data) as List<dynamic>;
+      final ByteData data = await rootBundle.load(
+        'packages/assets_for_android_views/assets/touchEvents',
+      );
+      final unTypedRecordedEvents = codec.decodeMessage(data) as List<dynamic>;
       final List<Map<String, dynamic>> recordedEvents = unTypedRecordedEvents
           .cast<Map<dynamic, dynamic>>()
-          .map<Map<String, dynamic>>((Map<dynamic, dynamic> e) =>e.cast<String, dynamic>())
+          .map<Map<String, dynamic>>((Map<dynamic, dynamic> e) => e.cast<String, dynamic>())
           .toList();
       await channel.invokeMethod<void>('pipeFlutterViewEvents');
-      await viewChannel.invokeMethod<void>('pipeTouchEvents');
+      await viewChannel?.invokeMethod<void>('pipeTouchEvents');
       print('replaying ${recordedEvents.length} motion events');
       for (final Map<String, dynamic> event in recordedEvents.reversed) {
         await channel.invokeMethod<void>('synthesizeEvent', event);
       }
 
       await channel.invokeMethod<void>('stopFlutterViewEvents');
-      await viewChannel.invokeMethod<void>('stopTouchEvents');
+      await viewChannel?.invokeMethod<void>('stopTouchEvents');
 
-      if (flutterViewEvents.length != embeddedViewEvents.length)
+      if (flutterViewEvents.length != embeddedViewEvents.length) {
         return 'Synthesized ${flutterViewEvents.length} events but the embedded view received ${embeddedViewEvents.length} events';
+      }
 
-      final StringBuffer diff = StringBuffer();
-      for (int i = 0; i < flutterViewEvents.length; ++i) {
+      final diff = StringBuffer();
+      for (var i = 0; i < flutterViewEvents.length; ++i) {
         final String currentDiff = diffMotionEvents(flutterViewEvents[i], embeddedViewEvents[i]);
-        if (currentDiff.isEmpty)
+        if (currentDiff.isEmpty) {
           continue;
-        if (diff.isNotEmpty)
+        }
+        if (diff.isNotEmpty) {
           diff.write(', ');
+        }
         diff.write(currentDiff);
       }
       return diff.toString();
-    } catch(e) {
+    } catch (e) {
       return e.toString();
     }
   }
@@ -170,45 +180,50 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
   }
 
   Future<void> saveRecordedEvents(ByteData data, BuildContext context) async {
-    if (!await channel.invokeMethod<bool>('getStoragePermission')) {
-      showMessage(
-          context, 'External storage permissions are required to save events');
+    if (await channel.invokeMethod<bool>('getStoragePermission') ?? false) {
+      if (context.mounted) {
+        showMessage(context, 'External storage permissions are required to save events');
+      }
       return;
     }
     try {
-      final Directory outDir = await getExternalStorageDirectory();
+      final Directory? outDir = await getExternalStorageDirectory();
       // This test only runs on Android so we can assume path separator is '/'.
-      final File file = File('${outDir.path}/$kEventsFileName');
+      final file = File('${outDir?.path}/$kEventsFileName');
       await file.writeAsBytes(data.buffer.asUint8List(0, data.lengthInBytes), flush: true);
+      if (!context.mounted) {
+        return;
+      }
       showMessage(context, 'Saved original events to ${file.path}');
     } catch (e) {
-      showMessage(context, 'Failed saving ${e.toString()}');
+      if (!context.mounted) {
+        return;
+      }
+      showMessage(context, 'Failed saving $e');
     }
   }
 
   void showMessage(BuildContext context, String message) {
-    Scaffold.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      duration: const Duration(seconds: 3),
-    ));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 3)));
   }
 
   void onPlatformViewCreated(int id) {
     viewChannel = MethodChannel('simple_view/$id');
-    viewChannel.setMethodCallHandler(onViewMethodChannelCall);
+    viewChannel?.setMethodCallHandler(onViewMethodChannelCall);
     driverDataHandler.handlerCompleter.complete(handleDriverMessage);
   }
 
   void listenToFlutterViewEvents() {
-    channel.invokeMethod<void>('pipeFlutterViewEvents');
-    viewChannel.invokeMethod<void>('pipeTouchEvents');
+    channel.invokeMethod<void>('pipeFlutterViewEvents'); // ignore: unawaited_futures
+    viewChannel?.invokeMethod<void>('pipeTouchEvents'); // ignore: unawaited_futures
     Timer(const Duration(seconds: 3), () {
-      channel.invokeMethod<void>('stopFlutterViewEvents');
-      viewChannel.invokeMethod<void>('stopTouchEvents');
+      channel.invokeMethod<void>('stopFlutterViewEvents'); // ignore: unawaited_futures
+      viewChannel?.invokeMethod<void>('stopTouchEvents'); // ignore: unawaited_futures
     });
   }
 
-  Future<String> handleDriverMessage(String message) async {
+  Future<String> handleDriverMessage(String? message) async {
     switch (message) {
       case 'run test':
         return playEventsFile();
@@ -219,51 +234,49 @@ class MotionEventsBodyState extends State<MotionEventsBody> {
   Future<dynamic> onMethodChannelCall(MethodCall call) {
     switch (call.method) {
       case 'onTouch':
-        final Map<dynamic, dynamic> map = call.arguments as Map<dynamic, dynamic>;
+        final map = call.arguments as Map<dynamic, dynamic>;
         flutterViewEvents.insert(0, map.cast<String, dynamic>());
-        if (flutterViewEvents.length > kEventsBufferSize)
+        if (flutterViewEvents.length > kEventsBufferSize) {
           flutterViewEvents.removeLast();
+        }
         setState(() {});
-        break;
     }
-    return Future<dynamic>.sync(null);
+    return Future<dynamic>.value();
   }
 
   Future<dynamic> onViewMethodChannelCall(MethodCall call) {
     switch (call.method) {
       case 'onTouch':
-        final Map<dynamic, dynamic> map = call.arguments as Map<dynamic, dynamic>;
+        final map = call.arguments as Map<dynamic, dynamic>;
         embeddedViewEvents.insert(0, map.cast<String, dynamic>());
-        if (embeddedViewEvents.length > kEventsBufferSize)
+        if (embeddedViewEvents.length > kEventsBufferSize) {
           embeddedViewEvents.removeLast();
+        }
         setState(() {});
-        break;
     }
-    return Future<dynamic>.sync(null);
+    return Future<dynamic>.value();
   }
 
   Widget buildEventTile(BuildContext context, int index) {
-    if (embeddedViewEvents.length > index)
-      return TouchEventDiff(
-          flutterViewEvents[index], embeddedViewEvents[index]);
-    return Text(
-        'Unmatched event, action: ${flutterViewEvents[index]['action']}');
+    if (embeddedViewEvents.length > index) {
+      return TouchEventDiff(flutterViewEvents[index], embeddedViewEvents[index]);
+    }
+    return Text('Unmatched event, action: ${flutterViewEvents[index]['action']}');
   }
 }
 
 class TouchEventDiff extends StatelessWidget {
-  const TouchEventDiff(this.originalEvent, this.synthesizedEvent);
+  const TouchEventDiff(this.originalEvent, this.synthesizedEvent, {super.key});
 
   final Map<String, dynamic> originalEvent;
   final Map<String, dynamic> synthesizedEvent;
 
   @override
   Widget build(BuildContext context) {
-
     Color color;
     final String diff = diffMotionEvents(originalEvent, synthesizedEvent);
     String msg;
-    final int action = synthesizedEvent['action'] as int;
+    final action = synthesizedEvent['action'] as int;
     final String actionName = getActionName(getActionMasked(action), action);
     if (diff.isEmpty) {
       color = Colors.green;
@@ -279,29 +292,28 @@ class TouchEventDiff extends StatelessWidget {
         print('\nactual:');
         prettyPrintEvent(synthesizedEvent);
       },
-      child: Container(
-        color: color,
-        margin: const EdgeInsets.only(bottom: 2.0),
-        child: Text(msg),
-      ),
+      child: Container(color: color, margin: const EdgeInsets.only(bottom: 2.0), child: Text(msg)),
     );
   }
 
   void prettyPrintEvent(Map<String, dynamic> event) {
-    final StringBuffer buffer = StringBuffer();
-    final int action = event['action'] as int;
+    final buffer = StringBuffer();
+    final action = event['action'] as int;
     final int maskedAction = getActionMasked(action);
     final String actionName = getActionName(maskedAction, action);
 
     buffer.write('$actionName ');
     if (maskedAction == 5 || maskedAction == 6) {
-     buffer.write('pointer: ${getPointerIdx(action)} ');
+      buffer.write('pointer: ${getPointerIdx(action)} ');
     }
 
-    final List<Map<dynamic, dynamic>> coords = (event['pointerCoords'] as List<dynamic>).cast<Map<dynamic, dynamic>>();
-    for (int i = 0; i < coords.length; i++) {
-      buffer.write('p$i x: ${coords[i]['x']} y: ${coords[i]['y']}, pressure: ${coords[i]['pressure']} ');
+    final List<Map<dynamic, dynamic>> coords = (event['pointerCoords'] as List<dynamic>)
+        .cast<Map<dynamic, dynamic>>();
+    for (var i = 0; i < coords.length; i++) {
+      buffer.write(
+        'p$i x: ${coords[i]['x']} y: ${coords[i]['y']}, pressure: ${coords[i]['pressure']} ',
+      );
     }
-    print(buffer.toString());
+    print(buffer);
   }
 }

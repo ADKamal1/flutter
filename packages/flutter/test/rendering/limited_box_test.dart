@@ -2,29 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tester.dart';
 
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   test('LimitedBox: parent max size is unconstrained', () {
     final RenderBox child = RenderConstrainedBox(
-      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0)
+      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0),
     );
     final RenderBox parent = RenderConstrainedOverflowBox(
       minWidth: 0.0,
       maxWidth: double.infinity,
       minHeight: 0.0,
       maxHeight: double.infinity,
-      child: RenderLimitedBox(
-        maxWidth: 100.0,
-        maxHeight: 200.0,
-        child: child,
-      ),
+      child: RenderLimitedBox(maxWidth: 100.0, maxHeight: 200.0, child: child),
     );
     layout(parent);
     expect(child.size.width, 100.0);
@@ -38,11 +33,12 @@ void main() {
         ' │ parentData: <none>\n'
         ' │ constraints: BoxConstraints(w=800.0, h=600.0)\n'
         ' │ size: Size(800.0, 600.0)\n'
-        ' │ alignment: center\n'
+        ' │ alignment: Alignment.center\n'
         ' │ minWidth: 0.0\n'
         ' │ maxWidth: Infinity\n'
         ' │ minHeight: 0.0\n'
         ' │ maxHeight: Infinity\n'
+        ' │ fit: max\n'
         ' │\n'
         ' └─child: RenderLimitedBox#00000 relayoutBoundary=up1 NEEDS-PAINT NEEDS-COMPOSITING-BITS-UPDATE\n'
         '   │ parentData: offset=Offset(350.0, 200.0) (can use size)\n'
@@ -62,18 +58,14 @@ void main() {
 
   test('LimitedBox: parent maxWidth is unconstrained', () {
     final RenderBox child = RenderConstrainedBox(
-      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0)
+      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0),
     );
     final RenderBox parent = RenderConstrainedOverflowBox(
       minWidth: 0.0,
       maxWidth: double.infinity,
       minHeight: 500.0,
       maxHeight: 500.0,
-      child: RenderLimitedBox(
-        maxWidth: 100.0,
-        maxHeight: 200.0,
-        child: child,
-      ),
+      child: RenderLimitedBox(maxWidth: 100.0, maxHeight: 200.0, child: child),
     );
     layout(parent);
     expect(child.size.width, 100.0);
@@ -82,18 +74,14 @@ void main() {
 
   test('LimitedBox: parent maxHeight is unconstrained', () {
     final RenderBox child = RenderConstrainedBox(
-      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0)
+      additionalConstraints: const BoxConstraints.tightFor(width: 300.0, height: 400.0),
     );
     final RenderBox parent = RenderConstrainedOverflowBox(
       minWidth: 500.0,
       maxWidth: 500.0,
       minHeight: 0.0,
       maxHeight: double.infinity,
-      child: RenderLimitedBox(
-        maxWidth: 100.0,
-        maxHeight: 200.0,
-        child: child,
-      ),
+      child: RenderLimitedBox(maxWidth: 100.0, maxHeight: 200.0, child: child),
     );
     layout(parent);
 
@@ -108,10 +96,7 @@ void main() {
       maxWidth: 500.0,
       minHeight: 0.0,
       maxHeight: double.infinity,
-      child: box = RenderLimitedBox(
-        maxWidth: 100.0,
-        maxHeight: 200.0,
-      ),
+      child: box = RenderLimitedBox(maxWidth: 100.0, maxHeight: 200.0),
     );
     layout(parent);
     expect(box.size, const Size(10.0, 0.0));
@@ -124,11 +109,12 @@ void main() {
         ' │ parentData: <none>\n'
         ' │ constraints: BoxConstraints(w=800.0, h=600.0)\n'
         ' │ size: Size(800.0, 600.0)\n'
-        ' │ alignment: center\n'
+        ' │ alignment: Alignment.center\n'
         ' │ minWidth: 10.0\n'
         ' │ maxWidth: 500.0\n'
         ' │ minHeight: 0.0\n'
         ' │ maxHeight: Infinity\n'
+        ' │ fit: max\n'
         ' │\n'
         ' └─child: RenderLimitedBox#00000 relayoutBoundary=up1 NEEDS-PAINT\n'
         '     parentData: offset=Offset(395.0, 300.0) (can use size)\n'
@@ -143,11 +129,8 @@ void main() {
   test('LimitedBox: no child use parent', () {
     RenderBox box;
     final RenderBox parent = RenderConstrainedOverflowBox(
-        minWidth: 10.0,
-        child: box = RenderLimitedBox(
-          maxWidth: 100.0,
-          maxHeight: 200.0,
-        ),
+      minWidth: 10.0,
+      child: box = RenderLimitedBox(maxWidth: 100.0, maxHeight: 200.0),
     );
     layout(parent);
     expect(box.size, const Size(10.0, 600.0));
@@ -160,11 +143,12 @@ void main() {
         ' │ parentData: <none>\n'
         ' │ constraints: BoxConstraints(w=800.0, h=600.0)\n'
         ' │ size: Size(800.0, 600.0)\n'
-        ' │ alignment: center\n'
+        ' │ alignment: Alignment.center\n'
         ' │ minWidth: 10.0\n'
         ' │ maxWidth: use parent maxWidth constraint\n'
         ' │ minHeight: use parent minHeight constraint\n'
         ' │ maxHeight: use parent maxHeight constraint\n'
+        ' │ fit: max\n'
         ' │\n'
         ' └─child: RenderLimitedBox#00000 relayoutBoundary=up1 NEEDS-PAINT\n'
         '     parentData: offset=Offset(395.0, 0.0) (can use size)\n'
@@ -175,5 +159,4 @@ void main() {
       ),
     );
   });
-
 }

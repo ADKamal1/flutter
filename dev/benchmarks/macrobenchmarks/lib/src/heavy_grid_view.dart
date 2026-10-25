@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 
 class HeavyGridViewPage extends StatelessWidget {
+  const HeavyGridViewPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
@@ -19,14 +21,10 @@ class HeavyWidget extends StatelessWidget {
   HeavyWidget(this.index) : super(key: ValueKey<int>(index));
 
   final int index;
-  final List<int> _weight = List<int>(1000000);
+  final List<int> _weight = List<int>.filled(1000000, 0);
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 200,
-      height: 200,
-      child: Text('$index: ${_weight.length}'),
-    );
+    return SizedBox(width: 200, height: 200, child: Text('$index: ${_weight.length}'));
   }
 }

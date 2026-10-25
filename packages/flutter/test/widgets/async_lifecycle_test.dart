@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 
 class InvalidOnInitLifecycleWidget extends StatefulWidget {
-  const InvalidOnInitLifecycleWidget({Key key}) : super(key: key);
+  const InvalidOnInitLifecycleWidget({super.key});
 
   @override
   InvalidOnInitLifecycleWidgetState createState() => InvalidOnInitLifecycleWidgetState();
@@ -27,15 +26,17 @@ class InvalidOnInitLifecycleWidgetState extends State<InvalidOnInitLifecycleWidg
 }
 
 class InvalidDidUpdateWidgetLifecycleWidget extends StatefulWidget {
-  const InvalidDidUpdateWidgetLifecycleWidget({Key key, this.id}) : super(key: key);
+  const InvalidDidUpdateWidgetLifecycleWidget({super.key, required this.color});
 
-  final int id;
+  final Color color;
 
   @override
-  InvalidDidUpdateWidgetLifecycleWidgetState createState() => InvalidDidUpdateWidgetLifecycleWidgetState();
+  InvalidDidUpdateWidgetLifecycleWidgetState createState() =>
+      InvalidDidUpdateWidgetLifecycleWidgetState();
 }
 
-class InvalidDidUpdateWidgetLifecycleWidgetState extends State<InvalidDidUpdateWidgetLifecycleWidget> {
+class InvalidDidUpdateWidgetLifecycleWidgetState
+    extends State<InvalidDidUpdateWidgetLifecycleWidget> {
   @override
   Future<void> didUpdateWidget(InvalidDidUpdateWidgetLifecycleWidget oldWidget) async {
     super.didUpdateWidget(oldWidget);
@@ -43,21 +44,34 @@ class InvalidDidUpdateWidgetLifecycleWidgetState extends State<InvalidDidUpdateW
 
   @override
   Widget build(BuildContext context) {
-    return Container();
+    return ColoredBox(color: widget.color);
   }
 }
 
 void main() {
-  testWidgets('async onInit throws FlutterError', (WidgetTester tester) async {
-    await tester.pumpWidget(const InvalidOnInitLifecycleWidget());
+  const red = Color(0xffff0000);
+  const green = Color(0xff00ff00);
 
-    expect(tester.takeException(), isFlutterError);
-  });
+  testWidgets(
+    'async onInit throws FlutterError',
+    experimentalLeakTesting: LeakTesting.settings
+        .withIgnoredAll(), // leaking by design because of exception
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const InvalidOnInitLifecycleWidget());
 
-  testWidgets('async didUpdateWidget throws FlutterError', (WidgetTester tester) async {
-    await tester.pumpWidget(const InvalidDidUpdateWidgetLifecycleWidget(id: 1));
-    await tester.pumpWidget(const InvalidDidUpdateWidgetLifecycleWidget(id: 2));
+      expect(tester.takeException(), isFlutterError);
+    },
+  );
 
-    expect(tester.takeException(), isFlutterError);
-  });
+  testWidgets(
+    'async didUpdateWidget throws FlutterError',
+    experimentalLeakTesting: LeakTesting.settings
+        .withIgnoredAll(), // leaking by design because of exception
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const InvalidDidUpdateWidgetLifecycleWidget(color: green));
+      await tester.pumpWidget(const InvalidDidUpdateWidgetLifecycleWidget(color: red));
+
+      expect(tester.takeException(), isFlutterError);
+    },
+  );
 }

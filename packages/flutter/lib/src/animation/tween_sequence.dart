@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
-import 'animation.dart';
 import 'tween.dart';
 
+export 'tween.dart' show Animatable;
+
 // Examples can assume:
-// AnimationController myAnimationController;
+// late AnimationController myAnimationController;
 
 /// Enables creating an [Animation] whose value is defined by a sequence of
 /// [Tween]s.
@@ -22,7 +22,7 @@ import 'tween.dart';
 /// for the next 20%, and then returns to 5.0 for the final 40%.
 ///
 /// ```dart
-/// final Animation<double> animation = TweenSequence(
+/// final Animation<double> animation = TweenSequence<double>(
 ///   <TweenSequenceItem<double>>[
 ///     TweenSequenceItem<double>(
 ///       tween: Tween<double>(begin: 5.0, end: 10.0)
@@ -47,21 +47,20 @@ class TweenSequence<T> extends Animatable<T> {
   ///
   /// The [items] parameter must be a list of one or more [TweenSequenceItem]s.
   ///
-  /// There's a small cost associated with building a `TweenSequence` so it's
+  /// There's a small cost associated with building a [TweenSequence] so it's
   /// best to reuse one, rather than rebuilding it on every frame, when that's
   /// possible.
-  TweenSequence(List<TweenSequenceItem<T>> items)
-      : assert(items != null),
-        assert(items.isNotEmpty) {
+  TweenSequence(List<TweenSequenceItem<T>> items) : assert(items.isNotEmpty) {
     _items.addAll(items);
 
-    double totalWeight = 0.0;
-    for (final TweenSequenceItem<T> item in _items)
+    var totalWeight = 0.0;
+    for (final TweenSequenceItem<T> item in _items) {
       totalWeight += item.weight;
+    }
     assert(totalWeight > 0.0);
 
-    double start = 0.0;
-    for (int i = 0; i < _items.length; i += 1) {
+    var start = 0.0;
+    for (var i = 0; i < _items.length; i += 1) {
       final double end = i == _items.length - 1 ? 1.0 : start + _items[i].weight / totalWeight;
       _intervals.add(_Interval(start, end));
       start = end;
@@ -80,11 +79,13 @@ class TweenSequence<T> extends Animatable<T> {
   @override
   T transform(double t) {
     assert(t >= 0.0 && t <= 1.0);
-    if (t == 1.0)
+    if (t == 1.0) {
       return _evaluateAt(t, _items.length - 1);
-    for (int index = 0; index < _items.length; index++) {
-      if (_intervals[index].contains(t))
+    }
+    for (var index = 0; index < _items.length; index++) {
+      if (_intervals[index].contains(t)) {
         return _evaluateAt(t, index);
+      }
     }
     // Should be unreachable.
     throw StateError('TweenSequence.evaluate() could not find an interval for $t');
@@ -110,9 +111,7 @@ class FlippedTweenSequence extends TweenSequence<double> {
   /// There's a small cost associated with building a `TweenSequence` so it's
   /// best to reuse one, rather than rebuilding it on every frame, when that's
   /// possible.
-  FlippedTweenSequence(List<TweenSequenceItem<double>> items)
-    : assert(items != null),
-      super(items);
+  FlippedTweenSequence(super.items);
 
   @override
   double transform(double t) => 1 - super.transform(1 - t);
@@ -122,13 +121,8 @@ class FlippedTweenSequence extends TweenSequence<double> {
 class TweenSequenceItem<T> {
   /// Construct a TweenSequenceItem.
   ///
-  /// The [tween] must not be null and [weight] must be greater than 0.0.
-  const TweenSequenceItem({
-    required this.tween,
-    required this.weight,
-  }) : assert(tween != null),
-       assert(weight != null),
-       assert(weight > 0.0);
+  /// The [weight] must be greater than 0.0.
+  const TweenSequenceItem({required this.tween, required this.weight}) : assert(weight > 0.0);
 
   /// Defines the value of the [TweenSequence] for the interval within the
   /// animation's duration indicated by [weight] and this item's position

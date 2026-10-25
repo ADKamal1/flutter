@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:meta/meta.dart';
-
 import '../../base/file_system.dart';
 import '../depfile.dart';
 
@@ -16,22 +14,22 @@ import '../depfile.dart';
 /// Throws an [Exception] if [artifacts] includes missing files, directories,
 /// or links.
 Depfile unpackDesktopArtifacts({
-  @required FileSystem fileSystem,
-  @required List<String> artifacts,
-  @required Directory outputDirectory,
-  @required String engineSourcePath,
-  List<String> clientSourcePaths,
-  String icuDataPath,
+  required FileSystem fileSystem,
+  required List<String> artifacts,
+  required Directory outputDirectory,
+  required String engineSourcePath,
+  List<String>? clientSourcePaths,
+  String? icuDataPath,
 }) {
-  final List<File> inputs = <File>[];
-  final List<File> outputs = <File>[];
-  for (final String artifact in artifacts) {
+  final inputs = <File>[];
+  final outputs = <File>[];
+  for (final artifact in artifacts) {
     final String entityPath = fileSystem.path.join(engineSourcePath, artifact);
     final FileSystemEntityType entityType = fileSystem.typeSync(entityPath);
 
-    if (entityType == FileSystemEntityType.notFound
-     || entityType == FileSystemEntityType.directory
-     || entityType == FileSystemEntityType.link) {
+    if (entityType == FileSystemEntityType.notFound ||
+        entityType == FileSystemEntityType.directory ||
+        entityType == FileSystemEntityType.link) {
       throw Exception('Unsupported file type "$entityType" for $entityPath');
     }
     assert(entityType == FileSystemEntityType.file);
@@ -50,7 +48,9 @@ Depfile unpackDesktopArtifacts({
   }
   if (icuDataPath != null) {
     final File inputFile = fileSystem.file(icuDataPath);
-    final File outputFile = fileSystem.file(fileSystem.path.join(outputDirectory.path, inputFile.basename));
+    final File outputFile = fileSystem.file(
+      fileSystem.path.join(outputDirectory.path, inputFile.basename),
+    );
     inputFile.copySync(outputFile.path);
     inputs.add(inputFile);
     outputs.add(outputFile);
@@ -63,9 +63,7 @@ Depfile unpackDesktopArtifacts({
     if (!clientSourceDirectory.existsSync()) {
       throw Exception('Missing clientSourceDirectory: $clientSourcePath');
     }
-    for (final File input in clientSourceDirectory
-      .listSync(recursive: true)
-      .whereType<File>()) {
+    for (final File input in clientSourceDirectory.listSync(recursive: true).whereType<File>()) {
       final String outputPath = fileSystem.path.join(
         outputDirectory.path,
         fileSystem.path.relative(input.path, from: clientSourceDirectory.parent.path),

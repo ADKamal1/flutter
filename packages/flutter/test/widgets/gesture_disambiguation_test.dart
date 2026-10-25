@@ -2,28 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('onTap detection with canceled pointer and a drag listener', (WidgetTester tester) async {
-    int detector1TapCount = 0;
-    int detector2TapCount = 0;
+  testWidgets('onTap detection with canceled pointer and a drag listener', (
+    WidgetTester tester,
+  ) async {
+    var detector1TapCount = 0;
+    var detector2TapCount = 0;
 
     final Widget widget = GestureDetector(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
         children: <Widget>[
           GestureDetector(
-            onTap: () { detector1TapCount += 1; },
+            onTap: () {
+              detector1TapCount += 1;
+            },
             behavior: HitTestBehavior.opaque,
             child: const SizedBox(width: 200.0, height: 200.0),
           ),
           GestureDetector(
-            onTap: () { detector2TapCount += 1; },
+            onTap: () {
+              detector2TapCount += 1;
+            },
             behavior: HitTestBehavior.opaque,
             child: const SizedBox(width: 200.0, height: 200.0),
           ),

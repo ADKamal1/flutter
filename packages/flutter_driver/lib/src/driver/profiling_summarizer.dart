@@ -9,14 +9,10 @@ import 'timeline.dart';
 ///
 /// We do not use a profiling category for these as all the dart timeline events
 /// have the same profiling category "embedder".
-const Set<String> kProfilingEvents = <String>{
-  _kCpuProfile,
-  _kGpuProfile,
-  _kMemoryProfile,
-};
+const Set<String> kProfilingEvents = <String>{_kCpuProfile, _kGpuProfile, _kMemoryProfile};
 
 // These field names need to be in-sync with:
-// https://github.com/flutter/engine/blob/master/shell/profiling/sampling_profiler.cc
+// https://github.com/flutter/flutter/blob/main/engine/src/flutter/shell/profiling/sampling_profiler.cc
 const String _kCpuProfile = 'CpuUsage';
 const String _kGpuProfile = 'GpuUsage';
 const String _kMemoryProfile = 'MemoryUsage';
@@ -33,10 +29,10 @@ enum ProfileType {
   Memory,
 }
 
-/// Summarizes [TimelineEvents]s corresponding to [kProfilingEvents] category.
+/// Summarizes [TimelineEvent]s corresponding to [kProfilingEvents] category.
 ///
-/// A sample event (some fields have been omitted for brewity):
-/// ```
+/// A sample event (some fields have been omitted for brevity):
+/// ```json
 ///     {
 ///      "category": "embedder",
 ///      "name": "CpuUsage",
@@ -55,13 +51,12 @@ class ProfilingSummarizer {
 
   /// Creates a ProfilingSummarizer given the timeline events.
   static ProfilingSummarizer fromEvents(List<TimelineEvent> profilingEvents) {
-    final Map<ProfileType, List<TimelineEvent>> eventsByType =
-        <ProfileType, List<TimelineEvent>>{};
-    for (final TimelineEvent event in profilingEvents) {
+    final eventsByType = <ProfileType, List<TimelineEvent>>{};
+    for (final event in profilingEvents) {
       assert(kProfilingEvents.contains(event.name));
       final ProfileType type = _getProfileType(event.name);
       eventsByType[type] ??= <TimelineEvent>[];
-      eventsByType[type].add(event);
+      eventsByType[type]!.add(event);
     }
     return ProfilingSummarizer._(eventsByType);
   }
@@ -70,10 +65,10 @@ class ProfilingSummarizer {
   final Map<ProfileType, List<TimelineEvent>> eventByType;
 
   /// Returns the average, 90th and 99th percentile summary of CPU, GPU and Memory
-  /// usage from the recorded events. Note: If a given profile type isn't available
+  /// usage from the recorded events. If a given profile type isn't available
   /// for any reason, the map will not contain the said profile type.
   Map<String, dynamic> summarize() {
-    final Map<String, dynamic> summary = <String, dynamic>{};
+    final summary = <String, dynamic>{};
     summary.addAll(_summarize(ProfileType.CPU, 'cpu_usage'));
     summary.addAll(_summarize(ProfileType.GPU, 'gpu_usage'));
     summary.addAll(_summarize(ProfileType.Memory, 'memory_usage'));
@@ -81,7 +76,7 @@ class ProfilingSummarizer {
   }
 
   Map<String, double> _summarize(ProfileType profileType, String name) {
-    final Map<String, double> summary = <String, double>{};
+    final summary = <String, double>{};
     if (!hasProfilingInfo(profileType)) {
       return summary;
     }
@@ -94,7 +89,7 @@ class ProfilingSummarizer {
   /// Returns true if there are events in the timeline corresponding to [profileType].
   bool hasProfilingInfo(ProfileType profileType) {
     if (eventByType.containsKey(profileType)) {
-      return eventByType[profileType].isNotEmpty;
+      return eventByType[profileType]!.isNotEmpty;
     } else {
       return false;
     }
@@ -102,7 +97,7 @@ class ProfilingSummarizer {
 
   /// Computes the average of the `profileType` over the recorded events.
   double computeAverage(ProfileType profileType) {
-    final List<TimelineEvent> events = eventByType[profileType];
+    final List<TimelineEvent> events = eventByType[profileType]!;
     assert(events.isNotEmpty);
     final double total = events
         .map((TimelineEvent e) => _getProfileValue(profileType, e))
@@ -112,7 +107,7 @@ class ProfilingSummarizer {
 
   /// The [percentile]-th percentile `profileType` over the recorded events.
   double computePercentile(ProfileType profileType, double percentile) {
-    final List<TimelineEvent> events = eventByType[profileType];
+    final List<TimelineEvent> events = eventByType[profileType]!;
     assert(events.isNotEmpty);
     final List<double> doubles = events
         .map((TimelineEvent e) => _getProfileValue(profileType, e))
@@ -120,17 +115,13 @@ class ProfilingSummarizer {
     return findPercentile(doubles, percentile);
   }
 
-  static ProfileType _getProfileType(String eventName) {
-    switch (eventName) {
-      case _kCpuProfile:
-        return ProfileType.CPU;
-      case _kGpuProfile:
-        return ProfileType.GPU;
-      case _kMemoryProfile:
-        return ProfileType.Memory;
-      default:
-        throw Exception('Invalid profiling event: $eventName.');
-    }
+  static ProfileType _getProfileType(String? eventName) {
+    return switch (eventName) {
+      _kCpuProfile => ProfileType.CPU,
+      _kGpuProfile => ProfileType.GPU,
+      _kMemoryProfile => ProfileType.Memory,
+      _ => throw Exception('Invalid profiling event: $eventName.'),
+    };
   }
 
   double _getProfileValue(ProfileType profileType, TimelineEvent e) {
@@ -141,17 +132,14 @@ class ProfilingSummarizer {
         return _getArgValue('gpu_usage', e);
       case ProfileType.Memory:
         final double dirtyMem = _getArgValue('dirty_memory_usage', e);
-        final double ownedSharedMem =
-            _getArgValue('owned_shared_memory_usage', e);
+        final double ownedSharedMem = _getArgValue('owned_shared_memory_usage', e);
         return dirtyMem + ownedSharedMem;
     }
-
-    throw Exception('Invalid $profileType.');
   }
 
   double _getArgValue(String argKey, TimelineEvent e) {
-    assert(e.arguments.containsKey(argKey));
-    final dynamic argVal = e.arguments[argKey];
+    assert(e.arguments!.containsKey(argKey));
+    final dynamic argVal = e.arguments![argKey];
     assert(argVal is String);
     return double.parse(argVal as String);
   }

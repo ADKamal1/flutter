@@ -3,11 +3,10 @@
 // found in the LICENSE file.
 
 import 'package:flutter/rendering.dart';
-import 'package:flutter/gestures.dart';
 
 class RenderSolidColorBox extends RenderDecoratedBox {
-  RenderSolidColorBox(this.backgroundColor, { this.desiredSize = Size.infinite })
-      : super(decoration: BoxDecoration(color: backgroundColor));
+  RenderSolidColorBox(this.backgroundColor, {this.desiredSize = Size.infinite})
+    : super(decoration: BoxDecoration(color: backgroundColor));
 
   final Size desiredSize;
   final Color backgroundColor;

@@ -8,26 +8,24 @@ import 'package:flutter/material.dart';
 class GalleryTextScaleValue {
   const GalleryTextScaleValue(this.scale, this.label);
 
-  final double scale;
+  final double? scale;
   final String label;
 
   @override
   bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType)
+    if (other.runtimeType != runtimeType) {
       return false;
-    return other is GalleryTextScaleValue
-        && other.scale == scale
-        && other.label == label;
+    }
+    return other is GalleryTextScaleValue && other.scale == scale && other.label == label;
   }
 
   @override
-  int get hashCode => hashValues(scale, label);
+  int get hashCode => Object.hash(scale, label);
 
   @override
   String toString() {
     return '$runtimeType($label)';
   }
-
 }
 
 const List<GalleryTextScaleValue> kAllGalleryTextScaleValues = <GalleryTextScaleValue>[
@@ -47,25 +45,25 @@ class GalleryVisualDensityValue {
 
   @override
   bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType)
+    if (other.runtimeType != runtimeType) {
       return false;
-    return other is GalleryVisualDensityValue
-        && other.visualDensity == visualDensity
-        && other.label == label;
+    }
+    return other is GalleryVisualDensityValue &&
+        other.visualDensity == visualDensity &&
+        other.label == label;
   }
 
   @override
-  int get hashCode => hashValues(visualDensity, label);
+  int get hashCode => Object.hash(visualDensity, label);
 
   @override
   String toString() {
     return '$runtimeType($label)';
   }
-
 }
 
 const List<GalleryVisualDensityValue> kAllGalleryVisualDensityValues = <GalleryVisualDensityValue>[
-  GalleryVisualDensityValue(VisualDensity(), 'System Default'),
+  GalleryVisualDensityValue(VisualDensity.standard, 'System Default'),
   GalleryVisualDensityValue(VisualDensity.comfortable, 'Comfortable'),
   GalleryVisualDensityValue(VisualDensity.compact, 'Compact'),
   GalleryVisualDensityValue(VisualDensity(horizontal: -3, vertical: -3), 'Very Compact'),

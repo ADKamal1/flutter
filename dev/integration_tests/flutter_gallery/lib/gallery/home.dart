@@ -5,9 +5,9 @@
 import 'dart:developer';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart' show DragStartBehavior;
 
 import 'backdrop.dart';
 import 'demos.dart';
@@ -18,7 +18,7 @@ const double _kDemoItemHeight = 64.0;
 const Duration _kFrontLayerSwitchDuration = Duration(milliseconds: 300);
 
 class _FlutterLogo extends StatelessWidget {
-  const _FlutterLogo({ Key key }) : super(key: key);
+  const _FlutterLogo();
 
   @override
   Widget build(BuildContext context) {
@@ -28,10 +28,7 @@ class _FlutterLogo extends StatelessWidget {
         height: 34.0,
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage(
-              'logos/flutter_white/logo.png',
-              package: _kGalleryAssetsPackage,
-            ),
+            image: AssetImage('logos/flutter_white/logo.png', package: _kGalleryAssetsPackage),
           ),
         ),
       ),
@@ -40,49 +37,39 @@ class _FlutterLogo extends StatelessWidget {
 }
 
 class _CategoryItem extends StatelessWidget {
-  const _CategoryItem({
-    Key key,
-    this.category,
-    this.onTap,
-  }) : super (key: key);
+  const _CategoryItem({this.category, this.onTap});
 
-  final GalleryDemoCategory category;
-  final VoidCallback onTap;
+  final GalleryDemoCategory? category;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final bool isDark = theme.brightness == Brightness.dark;
+    final isDark = theme.brightness == Brightness.dark;
 
     // This repaint boundary prevents the entire _CategoriesPage from being
     // repainted when the button's ink splash animates.
     return RepaintBoundary(
       child: RawMaterialButton(
-        padding: EdgeInsets.zero,
         hoverColor: theme.primaryColor.withOpacity(0.05),
         splashColor: theme.primaryColor.withOpacity(0.12),
         highlightColor: Colors.transparent,
         onPressed: onTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.all(6.0),
-              child: Icon(
-                category.icon,
-                size: 60.0,
-                color: isDark ? Colors.white : _kFlutterBlue,
-              ),
+              child: Icon(category!.icon, size: 60.0, color: isDark ? Colors.white : _kFlutterBlue),
             ),
             const SizedBox(height: 10.0),
             Container(
               height: 48.0,
               alignment: Alignment.center,
               child: Text(
-                category.name,
+                category!.name,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.subtitle1.copyWith(
+                style: theme.textTheme.titleMedium!.copyWith(
                   fontFamily: 'GoogleSans',
                   color: isDark ? Colors.white : _kFlutterBlue,
                 ),
@@ -96,20 +83,16 @@ class _CategoryItem extends StatelessWidget {
 }
 
 class _CategoriesPage extends StatelessWidget {
-  const _CategoriesPage({
-    Key key,
-    this.categories,
-    this.onCategoryTap,
-  }) : super(key: key);
+  const _CategoriesPage({this.categories, this.onCategoryTap});
 
-  final Iterable<GalleryDemoCategory> categories;
-  final ValueChanged<GalleryDemoCategory> onCategoryTap;
+  final Iterable<GalleryDemoCategory>? categories;
+  final ValueChanged<GalleryDemoCategory>? onCategoryTap;
 
   @override
   Widget build(BuildContext context) {
     const double aspectRatio = 160.0 / 180.0;
-    final List<GalleryDemoCategory> categoriesList = categories.toList();
-    final int columnCount = (MediaQuery.of(context).orientation == Orientation.portrait) ? 2 : 3;
+    final List<GalleryDemoCategory> categoriesList = categories!.toList();
+    final columnCount = (MediaQuery.of(context).orientation == Orientation.portrait) ? 2 : 3;
 
     return Semantics(
       scopesRoute: true,
@@ -122,7 +105,7 @@ class _CategoriesPage extends StatelessWidget {
           builder: (BuildContext context, BoxConstraints constraints) {
             final double columnWidth = constraints.biggest.width / columnCount.toDouble();
             final double rowHeight = math.min(225.0, columnWidth * aspectRatio);
-            final int rowCount = (categories.length + columnCount - 1) ~/ columnCount;
+            final int rowCount = (categories!.length + columnCount - 1) ~/ columnCount;
 
             // This repaint boundary prevents the inner contents of the front layer
             // from repainting when the backdrop toggle triggers a repaint on the
@@ -133,8 +116,8 @@ class _CategoriesPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: List<Widget>.generate(rowCount, (int rowIndex) {
                   final int columnCountForRow = rowIndex == rowCount - 1
-                    ? categories.length - columnCount * math.max<int>(0, rowCount - 1)
-                    : columnCount;
+                      ? categories!.length - columnCount * math.max<int>(0, rowCount - 1)
+                      : columnCount;
 
                   return Row(
                     children: List<Widget>.generate(columnCountForRow, (int columnIndex) {
@@ -147,7 +130,7 @@ class _CategoriesPage extends StatelessWidget {
                         child: _CategoryItem(
                           category: category,
                           onTap: () {
-                            onCategoryTap(category);
+                            onCategoryTap!(category);
                           },
                         ),
                       );
@@ -164,45 +147,43 @@ class _CategoriesPage extends StatelessWidget {
 }
 
 class _DemoItem extends StatelessWidget {
-  const _DemoItem({ Key key, this.demo }) : super(key: key);
+  const _DemoItem({this.demo});
 
-  final GalleryDemo demo;
+  final GalleryDemo? demo;
 
   void _launchDemo(BuildContext context) {
-    if (demo.routeName != null) {
-      Timeline.instantSync('Start Transition', arguments: <String, String>{
-        'from': '/',
-        'to': demo.routeName,
-      });
-      Navigator.pushNamed(context, demo.routeName);
+    if (demo != null) {
+      Timeline.instantSync(
+        'Start Transition',
+        arguments: <String, String>{'from': '/', 'to': demo!.routeName},
+      );
+      Navigator.pushNamed(context, demo!.routeName);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final bool isDark = theme.brightness == Brightness.dark;
-    final double textScaleFactor = MediaQuery.textScaleFactorOf(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // The fontSize to use for computing the heuristic UI scaling factor.
+    const defaultFontSize = 14.0;
+    final double containerScalingFactor =
+        MediaQuery.textScalerOf(context).scale(defaultFontSize) / defaultFontSize;
     return RawMaterialButton(
-      padding: EdgeInsets.zero,
       splashColor: theme.primaryColor.withOpacity(0.12),
       highlightColor: Colors.transparent,
       onPressed: () {
         _launchDemo(context);
       },
       child: Container(
-        constraints: BoxConstraints(minHeight: _kDemoItemHeight * textScaleFactor),
+        constraints: BoxConstraints(minHeight: _kDemoItemHeight * containerScalingFactor),
         child: Row(
           children: <Widget>[
             Container(
               width: 56.0,
               height: 56.0,
               alignment: Alignment.center,
-              child: Icon(
-                demo.icon,
-                size: 24.0,
-                color: isDark ? Colors.white : _kFlutterBlue,
-              ),
+              child: Icon(demo!.icon, size: 24.0, color: isDark ? Colors.white : _kFlutterBlue),
             ),
             Expanded(
               child: Column(
@@ -210,16 +191,16 @@ class _DemoItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Text(
-                    demo.title,
-                    style: theme.textTheme.subtitle1.copyWith(
+                    demo!.title,
+                    style: theme.textTheme.titleMedium!.copyWith(
                       color: isDark ? Colors.white : const Color(0xFF202124),
                     ),
                   ),
-                  if (demo.subtitle != null)
+                  if (demo!.subtitle != null)
                     Text(
-                      demo.subtitle,
-                      style: theme.textTheme.bodyText2.copyWith(
-                        color: isDark ? Colors.white : const Color(0xFF60646B)
+                      demo!.subtitle!,
+                      style: theme.textTheme.bodyMedium!.copyWith(
+                        color: isDark ? Colors.white : const Color(0xFF60646B),
                       ),
                     ),
                 ],
@@ -236,7 +217,7 @@ class _DemoItem extends StatelessWidget {
 class _DemosPage extends StatelessWidget {
   const _DemosPage(this.category);
 
-  final GalleryDemoCategory category;
+  final GalleryDemoCategory? category;
 
   @override
   Widget build(BuildContext context) {
@@ -248,13 +229,13 @@ class _DemosPage extends StatelessWidget {
       child: Semantics(
         scopesRoute: true,
         namesRoute: true,
-        label: category.name,
+        label: category!.name,
         explicitChildNodes: true,
         child: ListView(
           dragStartBehavior: DragStartBehavior.down,
-          key: PageStorageKey<String>(category.name),
+          key: PageStorageKey<String>(category!.name),
           padding: EdgeInsets.only(top: 8.0, bottom: windowBottomPadding),
-          children: kGalleryCategoryToDemos[category].map<Widget>((GalleryDemo demo) {
+          children: kGalleryCategoryToDemos[category!]!.map<Widget>((GalleryDemo demo) {
             return _DemoItem(demo: demo);
           }).toList(),
         ),
@@ -264,13 +245,9 @@ class _DemosPage extends StatelessWidget {
 }
 
 class GalleryHome extends StatefulWidget {
-  const GalleryHome({
-    Key key,
-    this.testMode = false,
-    this.optionsPage,
-  }) : super(key: key);
+  const GalleryHome({super.key, this.testMode = false, this.optionsPage});
 
-  final Widget optionsPage;
+  final Widget? optionsPage;
   final bool testMode;
 
   // In checked mode our MaterialApp will show the default "debug" banner.
@@ -278,25 +255,23 @@ class GalleryHome extends StatefulWidget {
   static bool showPreviewBanner = true;
 
   @override
-  _GalleryHomeState createState() => _GalleryHomeState();
+  State<GalleryHome> createState() => _GalleryHomeState();
 }
 
 class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStateMixin {
   static final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  AnimationController _controller;
-  GalleryDemoCategory _category;
+  late AnimationController _controller;
+  GalleryDemoCategory? _category;
 
-  static Widget _topHomeLayout(Widget currentChild, List<Widget> previousChildren) {
+  static Widget _topHomeLayout(Widget? currentChild, List<Widget> previousChildren) {
     return Stack(
-      children: <Widget>[
-        ...previousChildren,
-        if (currentChild != null) currentChild,
-      ],
       alignment: Alignment.topCenter,
+      children: <Widget>[...previousChildren, ?currentChild],
     );
   }
 
-  static const AnimatedSwitcherLayoutBuilder _centerHomeLayout = AnimatedSwitcher.defaultLayoutBuilder;
+  static const AnimatedSwitcherLayoutBuilder _centerHomeLayout =
+      AnimatedSwitcher.defaultLayoutBuilder;
 
   @override
   void initState() {
@@ -317,7 +292,7 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final bool isDark = theme.brightness == Brightness.dark;
+    final isDark = theme.brightness == Brightness.dark;
     final MediaQueryData media = MediaQuery.of(context);
     final bool centerHome = media.orientation == Orientation.portrait && media.size.height < 800.0;
 
@@ -329,14 +304,14 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
       backgroundColor: isDark ? _kFlutterBlue : theme.primaryColor,
       body: SafeArea(
         bottom: false,
-        child: WillPopScope(
-          onWillPop: () {
-            // Pop the category page if Android back button is pressed.
-            if (_category != null) {
-              setState(() => _category = null);
-              return Future<bool>.value(false);
+        child: PopScope<Object?>(
+          canPop: _category == null,
+          onPopInvokedWithResult: (bool didPop, Object? result) {
+            if (didPop) {
+              return;
             }
-            return Future<bool>.value(true);
+            // Pop the category page if Android back button is pressed.
+            setState(() => _category = null);
           },
           child: Backdrop(
             backTitle: const Text('Options'),
@@ -346,18 +321,16 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
               switchOutCurve: switchOutCurve,
               switchInCurve: switchInCurve,
               child: _category == null
-                ? const _FlutterLogo()
-                : IconButton(
-                  icon: const BackButtonIcon(),
-                  tooltip: 'Back',
-                  onPressed: () => setState(() => _category = null),
-                ),
+                  ? const _FlutterLogo()
+                  : IconButton(
+                      icon: const BackButtonIcon(),
+                      tooltip: 'Back',
+                      onPressed: () => setState(() => _category = null),
+                    ),
             ),
             frontTitle: AnimatedSwitcher(
               duration: _kFrontLayerSwitchDuration,
-              child: _category == null
-                ? const Text('Flutter gallery')
-                : Text(_category.name),
+              child: _category == null ? const Text('Flutter gallery') : Text(_category!.name),
             ),
             frontHeading: widget.testMode ? null : Container(height: 24.0),
             frontLayer: AnimatedSwitcher(
@@ -366,13 +339,13 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
               switchInCurve: switchInCurve,
               layoutBuilder: centerHome ? _centerHomeLayout : _topHomeLayout,
               child: _category != null
-                ? _DemosPage(_category)
-                : _CategoriesPage(
-                  categories: kAllGalleryDemoCategories,
-                  onCategoryTap: (GalleryDemoCategory category) {
-                    setState(() => _category = category);
-                  },
-                ),
+                  ? _DemosPage(_category)
+                  : _CategoriesPage(
+                      categories: kAllGalleryDemoCategories,
+                      onCategoryTap: (GalleryDemoCategory category) {
+                        setState(() => _category = category);
+                      },
+                    ),
             ),
           ),
         ),
@@ -391,18 +364,12 @@ class _GalleryHomeState extends State<GalleryHome> with SingleTickerProviderStat
           home,
           FadeTransition(
             opacity: CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-            child: const Banner(
-              message: 'PREVIEW',
-              location: BannerLocation.topEnd,
-            ),
+            child: const Banner(message: 'PREVIEW', location: BannerLocation.topEnd),
           ),
         ],
       );
     }
-    home = AnnotatedRegion<SystemUiOverlayStyle>(
-      child: home,
-      value: SystemUiOverlayStyle.light,
-    );
+    home = AnnotatedRegion<SystemUiOverlayStyle>(value: SystemUiOverlayStyle.light, child: home);
 
     return home;
   }

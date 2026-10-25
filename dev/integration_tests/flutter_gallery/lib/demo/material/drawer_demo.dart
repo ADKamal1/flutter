@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
+import 'package:flutter/material.dart';
 
 import '../../gallery/demo.dart';
 
@@ -13,38 +13,33 @@ const String _kAsset2 = 'people/square/sandra.png';
 const String _kGalleryAssetsPackage = 'flutter_gallery_assets';
 
 class DrawerDemo extends StatefulWidget {
+  const DrawerDemo({super.key});
+
   static const String routeName = '/material/drawer';
 
   @override
-  _DrawerDemoState createState() => _DrawerDemoState();
+  State<DrawerDemo> createState() => _DrawerDemoState();
 }
 
 class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  static const List<String> _drawerContents = <String>[
-    'A', 'B', 'C', 'D', 'E',
-  ];
+  static const List<String> _drawerContents = <String>['A', 'B', 'C', 'D', 'E'];
 
   static final Animatable<Offset> _drawerDetailsTween = Tween<Offset>(
     begin: const Offset(0.0, -1.0),
     end: Offset.zero,
-  ).chain(CurveTween(
-    curve: Curves.fastOutSlowIn,
-  ));
+  ).chain(CurveTween(curve: Curves.fastOutSlowIn));
 
-  AnimationController _controller;
-  Animation<double> _drawerContentsOpacity;
-  Animation<Offset> _drawerDetailsPosition;
+  late AnimationController _controller;
+  late Animation<double> _drawerContentsOpacity;
+  late Animation<Offset> _drawerDetailsPosition;
   bool _showDrawerContents = true;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
     _drawerContentsOpacity = CurvedAnimation(
       parent: ReverseAnimation(_controller),
       curve: Curves.fastOutSlowIn,
@@ -58,7 +53,7 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  IconData _backIcon() {
+  IconData? _backIcon() {
     switch (Theme.of(context).platform) {
       case TargetPlatform.android:
       case TargetPlatform.fuchsia:
@@ -69,15 +64,12 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
       case TargetPlatform.macOS:
         return Icons.arrow_back_ios;
     }
-    assert(false);
-    return null;
   }
 
   void _showNotImplementedMessage() {
     Navigator.pop(context); // Dismiss the drawer.
-    _scaffoldKey.currentState.showSnackBar(const SnackBar(
-      content: Text("The drawer's items don't do anything"),
-    ));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("The drawer's items don't do anything")));
   }
 
   @override
@@ -104,10 +96,7 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
               accountName: const Text('Trevor Widget'),
               accountEmail: const Text('trevor.widget@example.com'),
               currentAccountPicture: const CircleAvatar(
-                backgroundImage: AssetImage(
-                  _kAsset0,
-                  package: _kGalleryAssetsPackage,
-                ),
+                backgroundImage: AssetImage(_kAsset0, package: _kGalleryAssetsPackage),
               ),
               otherAccountsPictures: <Widget>[
                 GestureDetector(
@@ -118,10 +107,7 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
                   child: Semantics(
                     label: 'Switch to Account B',
                     child: const CircleAvatar(
-                      backgroundImage: AssetImage(
-                        _kAsset1,
-                        package: _kGalleryAssetsPackage,
-                      ),
+                      backgroundImage: AssetImage(_kAsset1, package: _kGalleryAssetsPackage),
                     ),
                   ),
                 ),
@@ -133,10 +119,7 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
                   child: Semantics(
                     label: 'Switch to Account C',
                     child: const CircleAvatar(
-                      backgroundImage: AssetImage(
-                        _kAsset2,
-                        package: _kGalleryAssetsPackage,
-                      ),
+                      backgroundImage: AssetImage(_kAsset2, package: _kGalleryAssetsPackage),
                     ),
                   ),
                 ),
@@ -144,10 +127,11 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
               margin: EdgeInsets.zero,
               onDetailsPressed: () {
                 _showDrawerContents = !_showDrawerContents;
-                if (_showDrawerContents)
+                if (_showDrawerContents) {
                   _controller.reverse();
-                else
+                } else {
                   _controller.forward();
+                }
               },
             ),
             MediaQuery.removePadding(
@@ -211,7 +195,7 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
       body: Center(
         child: InkWell(
           onTap: () {
-            _scaffoldKey.currentState.openDrawer();
+            _scaffoldKey.currentState!.openDrawer();
           },
           child: Semantics(
             button: true,
@@ -226,17 +210,15 @@ class _DrawerDemoState extends State<DrawerDemo> with TickerProviderStateMixin {
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     image: DecorationImage(
-                      image: AssetImage(
-                        _kAsset0,
-                        package: _kGalleryAssetsPackage,
-                      ),
+                      image: AssetImage(_kAsset0, package: _kGalleryAssetsPackage),
                     ),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Text('Tap here to open the drawer',
-                    style: Theme.of(context).textTheme.subtitle1,
+                  child: Text(
+                    'Tap here to open the drawer',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
               ],

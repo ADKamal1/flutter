@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:ui' show Offset;
-
 import 'package:flutter/foundation.dart';
 
-import 'arena.dart';
 import 'events.dart';
+import 'gesture_details.dart';
 import 'recognizer.dart';
+
+export 'dart:ui' show Offset, PointerDeviceKind;
+
+export 'events.dart' show PointerDownEvent, PointerEvent;
 
 enum _ForceState {
   // No pointer has touched down and the detector is ready for a pointer down to occur.
@@ -42,27 +44,30 @@ enum _ForceState {
 ///  * [ForcePressGestureRecognizer.onStart], [ForcePressGestureRecognizer.onPeak],
 ///    [ForcePressGestureRecognizer.onEnd], and [ForcePressGestureRecognizer.onUpdate]
 ///    which use [ForcePressDetails].
-class ForcePressDetails {
+class ForcePressDetails with Diagnosticable implements PositionedGestureDetails {
   /// Creates details for a [GestureForcePressStartCallback],
   /// [GestureForcePressPeakCallback] or [GestureForcePressEndCallback].
-  ///
-  /// The [globalPosition] argument must not be null.
-  ForcePressDetails({
-    required this.globalPosition,
-    Offset? localPosition,
-    required this.pressure,
-  }) : assert(globalPosition != null),
-       assert(pressure != null),
-       localPosition = localPosition ?? globalPosition;
+  ForcePressDetails({required this.globalPosition, Offset? localPosition, required this.pressure})
+    : localPosition = localPosition ?? globalPosition;
 
-  /// The global position at which the function was called.
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.globalPosition}
+  @override
   final Offset globalPosition;
 
-  /// The local position at which the function was called.
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.localPosition}
+  @override
   final Offset localPosition;
 
   /// The pressure of the pointer on the screen.
   final double pressure;
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<Offset>('globalPosition', globalPosition));
+    properties.add(DiagnosticsProperty<Offset>('localPosition', localPosition));
+    properties.add(DoubleProperty('pressure', pressure));
+  }
 }
 
 /// Signature used by a [ForcePressGestureRecognizer] for when a pointer has
@@ -83,9 +88,13 @@ typedef GestureForcePressUpdateCallback = void Function(ForcePressDetails detail
 typedef GestureForcePressEndCallback = void Function(ForcePressDetails details);
 
 /// Signature used by [ForcePressGestureRecognizer] for interpolating the raw
-/// device pressure to a value in the range [0, 1] given the device's pressure
+/// device pressure to a value in the range `[0, 1]` given the device's pressure
 /// min and pressure max.
-typedef GestureForceInterpolation = double Function(double pressureMin, double pressureMax, double pressure);
+typedef GestureForceInterpolation = double Function(
+  double pressureMin,
+  double pressureMax,
+  double pressure,
+);
 
 /// Recognizes a force press on devices that have force sensors.
 ///
@@ -120,18 +129,15 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
   /// to 1.0 for values of `pressure` that are between `pressureMin` and
   /// `pressureMax`.
   ///
-  /// {@macro flutter.gestures.gestureRecognizer.kind}
+  /// {@macro flutter.gestures.GestureRecognizer.supportedDevices}
   ForcePressGestureRecognizer({
     this.startPressure = 0.4,
     this.peakPressure = 0.85,
     this.interpolation = _inverseLerp,
-    Object? debugOwner,
-    PointerDeviceKind? kind,
-  }) : assert(startPressure != null),
-       assert(peakPressure != null),
-       assert(interpolation != null),
-       assert(peakPressure > startPressure),
-       super(debugOwner: debugOwner, kind: kind);
+    super.debugOwner,
+    super.supportedDevices,
+    super.allowedButtonsFilter,
+  }) : assert(peakPressure > startPressure);
 
   /// A pointer is in contact with the screen and has just pressed with a force
   /// exceeding the [startPressure]. Consequently, if there were other gesture
@@ -199,7 +205,7 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
   /// value:
   ///
   /// ```dart
-  /// static double interpolateWithEasing(double min, double max, double t) {
+  /// double interpolateWithEasing(double min, double max, double t) {
   ///    final double lerp = (t - min) / (max - min);
   ///    return Curves.easeIn.transform(lerp);
   /// }
@@ -211,14 +217,14 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
   _ForceState _state = _ForceState.ready;
 
   @override
-  void addAllowedPointer(PointerEvent event) {
+  void addAllowedPointer(PointerDownEvent event) {
     // If the device has a maximum pressure of less than or equal to 1, it
     // doesn't have touch pressure sensing capabilities. Do not participate
     // in the gesture arena.
-    if (event is! PointerUpEvent && event.pressureMax <= 1.0) {
+    if (event.pressureMax <= 1.0) {
       resolve(GestureDisposition.rejected);
     } else {
-      startTrackingPointer(event.pointer, event.transform);
+      super.addAllowedPointer(event);
       if (_state == _ForceState.ready) {
         _state = _ForceState.possible;
         _lastPosition = OffsetPair.fromEventPosition(event);
@@ -231,18 +237,12 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
     assert(_state != _ForceState.ready);
     // A static pointer with changes in pressure creates PointerMoveEvent events.
     if (event is PointerMoveEvent || event is PointerDownEvent) {
-      if (event.pressure > event.pressureMax || event.pressure < event.pressureMin) {
-        debugPrint(
-          'The reported device pressure ' + event.pressure.toString() +
-          ' is outside of the device pressure range where: ' +
-          event.pressureMin.toString() + ' <= pressure <= ' + event.pressureMax.toString(),
-        );
-      }
-
       final double pressure = interpolation(event.pressureMin, event.pressureMax, event.pressure);
       assert(
-        (pressure >= 0.0 && pressure <= 1.0) || // Interpolated pressure must be between 1.0 and 0.0...
-        pressure.isNaN // and interpolation may return NaN for values it doesn't want to support...
+        (pressure >= 0.0 &&
+                pressure <= 1.0) || // Interpolated pressure must be between 1.0 and 0.0...
+            pressure
+                .isNaN, // and interpolation may return NaN for values it doesn't want to support...
       );
 
       _lastPosition = OffsetPair.fromEventPosition(event);
@@ -252,7 +252,7 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
         if (pressure > startPressure) {
           _state = _ForceState.started;
           resolve(GestureDisposition.accepted);
-        } else if (event.delta.distanceSquared > computeHitSlop(event.kind)) {
+        } else if (event.delta.distanceSquared > computeHitSlop(event.kind, gestureSettings)) {
           resolve(GestureDisposition.rejected);
         }
       }
@@ -261,32 +261,47 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
       if (pressure > startPressure && _state == _ForceState.accepted) {
         _state = _ForceState.started;
         if (onStart != null) {
-          invokeCallback<void>('onStart', () => onStart!(ForcePressDetails(
-            pressure: pressure,
-            globalPosition: _lastPosition.global,
-            localPosition: _lastPosition.local,
-          )));
+          invokeCallback<void>(
+            'onStart',
+            () => onStart!(
+              ForcePressDetails(
+                pressure: pressure,
+                globalPosition: _lastPosition.global,
+                localPosition: _lastPosition.local,
+              ),
+            ),
+          );
         }
       }
-      if (onPeak != null && pressure > peakPressure &&
-         (_state == _ForceState.started)) {
+      if (onPeak != null && pressure > peakPressure && (_state == _ForceState.started)) {
         _state = _ForceState.peaked;
         if (onPeak != null) {
-          invokeCallback<void>('onPeak', () => onPeak!(ForcePressDetails(
-            pressure: pressure,
-            globalPosition: event.position,
-            localPosition: event.localPosition,
-          )));
+          invokeCallback<void>(
+            'onPeak',
+            () => onPeak!(
+              ForcePressDetails(
+                pressure: pressure,
+                globalPosition: event.position,
+                localPosition: event.localPosition,
+              ),
+            ),
+          );
         }
       }
-      if (onUpdate != null &&  !pressure.isNaN &&
-         (_state == _ForceState.started || _state == _ForceState.peaked)) {
+      if (onUpdate != null &&
+          !pressure.isNaN &&
+          (_state == _ForceState.started || _state == _ForceState.peaked)) {
         if (onUpdate != null) {
-          invokeCallback<void>('onUpdate', () => onUpdate!(ForcePressDetails(
-            pressure: pressure,
-            globalPosition: event.position,
-            localPosition: event.localPosition,
-          )));
+          invokeCallback<void>(
+            'onUpdate',
+            () => onUpdate!(
+              ForcePressDetails(
+                pressure: pressure,
+                globalPosition: event.position,
+                localPosition: event.localPosition,
+              ),
+            ),
+          );
         }
       }
     }
@@ -295,15 +310,21 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void acceptGesture(int pointer) {
-    if (_state == _ForceState.possible)
+    if (_state == _ForceState.possible) {
       _state = _ForceState.accepted;
+    }
 
     if (onStart != null && _state == _ForceState.started) {
-      invokeCallback<void>('onStart', () => onStart!(ForcePressDetails(
-        pressure: _lastPressure,
-        globalPosition: _lastPosition.global,
-        localPosition: _lastPosition.local,
-      )));
+      invokeCallback<void>(
+        'onStart',
+        () => onStart!(
+          ForcePressDetails(
+            pressure: _lastPressure,
+            globalPosition: _lastPosition.global,
+            localPosition: _lastPosition.local,
+          ),
+        ),
+      );
     }
   }
 
@@ -316,11 +337,16 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
     }
     if (wasAccepted && onEnd != null) {
       if (onEnd != null) {
-        invokeCallback<void>('onEnd', () => onEnd!(ForcePressDetails(
-          pressure: 0.0,
-          globalPosition: _lastPosition.global,
-          localPosition: _lastPosition.local,
-        )));
+        invokeCallback<void>(
+          'onEnd',
+          () => onEnd!(
+            ForcePressDetails(
+              pressure: 0.0,
+              globalPosition: _lastPosition.global,
+              localPosition: _lastPosition.local,
+            ),
+          ),
+        );
       }
     }
     _state = _ForceState.ready;
@@ -338,8 +364,9 @@ class ForcePressGestureRecognizer extends OneSequenceGestureRecognizer {
 
     // If the device incorrectly reports a pressure outside of pressureMin
     // and pressureMax, we still want this recognizer to respond normally.
-    if (!value.isNaN)
-      value = value.clamp(0.0, 1.0);
+    if (!value.isNaN) {
+      value = clampDouble(value, 0.0, 1.0);
+    }
     return value;
   }
 

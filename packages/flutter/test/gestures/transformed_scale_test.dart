@@ -2,17 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/gestures.dart';
 
 void main() {
   testWidgets('gets local coordinates', (WidgetTester tester) async {
-    final List<ScaleStartDetails> startDetails = <ScaleStartDetails>[];
-    final List<ScaleUpdateDetails> updateDetails = <ScaleUpdateDetails>[];
+    final startDetails = <ScaleStartDetails>[];
+    final updateDetails = <ScaleUpdateDetails>[];
 
     final Key redContainer = UniqueKey();
     await tester.pumpWidget(
@@ -28,14 +24,18 @@ void main() {
             key: redContainer,
             width: 100,
             height: 100,
-            color: Colors.red,
+            color: const Color(0xFFFF0000),
           ),
         ),
       ),
     );
 
-    await tester.startGesture(tester.getCenter(find.byKey(redContainer)) - const Offset(20, 20));
-    final TestGesture pointer2 = await tester.startGesture(tester.getCenter(find.byKey(redContainer)) + const Offset(30, 30));
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(redContainer)) - const Offset(20, 20),
+    );
+    final TestGesture pointer2 = await tester.startGesture(
+      tester.getCenter(find.byKey(redContainer)) + const Offset(30, 30),
+    );
     await pointer2.moveTo(tester.getCenter(find.byKey(redContainer)) + const Offset(20, 20));
 
     expect(updateDetails.single.localFocalPoint, const Offset(50, 50));
@@ -46,5 +46,10 @@ void main() {
     expect(startDetails.first.focalPoint, const Offset(380, 280));
     expect(startDetails.last.localFocalPoint, const Offset(50, 50));
     expect(startDetails.last.focalPoint, const Offset(400, 300));
+
+    await tester.pumpAndSettle();
+    await gesture.up();
+    await pointer2.up();
+    await tester.pumpAndSettle();
   });
 }

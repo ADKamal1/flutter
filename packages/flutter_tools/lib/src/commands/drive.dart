@@ -3,30 +3,30 @@
 // found in the LICENSE file.
 
 import 'dart:async';
-import 'dart:math' as math;
 
-import 'package:dds/dds.dart' as dds;
-import 'package:vm_service/vm_service_io.dart' as vm_service;
-import 'package:vm_service/vm_service.dart' as vm_service;
 import 'package:meta/meta.dart';
-import 'package:webdriver/async_io.dart' as async_io;
+import 'package:package_config/package_config_types.dart';
 
 import '../android/android_device.dart';
 import '../application_package.dart';
-import '../artifacts.dart';
 import '../base/common.dart';
 import '../base/file_system.dart';
-import '../base/process.dart';
+import '../base/io.dart';
+import '../base/logger.dart';
+import '../base/signals.dart';
 import '../build_info.dart';
-import '../convert.dart';
+import '../context/tool_context.dart';
 import '../dart/package_map.dart';
 import '../device.dart';
-import '../globals.dart' as globals;
-import '../project.dart';
+import '../drive/drive_service.dart';
+import '../drive/import_validator.dart';
+import '../drive/web_driver_service.dart' show Browser;
+import '../ios/devices.dart';
 import '../resident_runner.dart';
-import '../runner/flutter_command.dart' show FlutterCommandResult, FlutterOptions;
-import '../vmservice.dart';
-import '../web/web_runner.dart';
+import '../runner/flutter_command.dart';
+import '../web/devfs_config.dart';
+import '../web/web_device.dart';
+import '../web/web_options.dart';
 import 'run.dart';
 
 /// Runs integration (a.k.a. end-to-end) tests.
@@ -51,352 +51,509 @@ import 'run.dart';
 /// exit code.
 class DriveCommand extends RunCommandBase {
   DriveCommand({
-    bool verboseHelp = false,
+    required super.buildSystem,
+    required super.buildTargets,
+    required super.toolContext,
+    @visibleForTesting this._flutterDriverFactory,
+    @visibleForTesting
+    this.signalsToHandle = const <ProcessSignal>{ProcessSignal.sigint, ProcessSignal.sigterm},
+    super.verboseHelp = false,
   }) {
     requiresPubspecYaml();
-    addEnableExperimentation(hide: !verboseHelp);
-    argParser
-      ..addFlag('keep-app-running',
-        defaultsTo: null,
-        help: 'Will keep the Flutter application running when done testing.\n'
-              'By default, "flutter drive" stops the application after tests are finished, '
-              'and --keep-app-running overrides this. On the other hand, if --use-existing-app '
-              'is specified, then "flutter drive" instead defaults to leaving the application '
-              'running, and --no-keep-app-running overrides it.',
-      )
-      ..addOption('use-existing-app',
-        help: 'Connect to an already running instance via the given observatory URL. '
-              'If this option is given, the application will not be automatically started, '
-              'and it will only be stopped if --no-keep-app-running is explicitly set.',
-        valueHelp: 'url',
-      )
-      ..addOption('driver',
-        help: 'The test file to run on the host (as opposed to the target file to run on '
-              'the device).\n'
-              'By default, this file has the same base name as the target file, but in the '
-              '"test_driver/" directory instead, and with "_test" inserted just before the '
-              'extension, so e.g. if the target is "lib/main.dart", the driver will be '
-              '"test_driver/main_test.dart".',
-        valueHelp: 'path',
-      )
-      ..addFlag('build',
-        defaultsTo: true,
-        help: 'Build the app before running.',
-      )
-      ..addOption('driver-port',
-        defaultsTo: '4444',
-        help: 'The port where Webdriver server is launched at. Defaults to 4444.',
-        valueHelp: '4444'
-      )
-      ..addFlag('headless',
-        defaultsTo: true,
-        help: 'Whether the driver browser is going to be launched in headless mode. Defaults to true.',
-      )
-      ..addOption('browser-name',
-        defaultsTo: 'chrome',
-        help: 'Name of browser where tests will be executed. \n'
-              'Following browsers are supported: \n'
-              'Chrome, Firefox, Safari (macOS and iOS) and Edge. Defaults to Chrome.',
-        allowed: <String>[
-          'android-chrome',
-          'chrome',
-          'edge',
-          'firefox',
-          'ios-safari',
-          'safari',
-        ]
-      )
-      ..addOption('browser-dimension',
-        defaultsTo: '1600,1024',
-        help: 'The dimension of browser when running Flutter Web test. \n'
-              'This will affect screenshot and all offset-related actions. \n'
-              'By default. it is set to 1600,1024 (1600 by 1024).',
-      )
-      ..addFlag('android-emulator',
-        defaultsTo: true,
-        help: 'Whether to perform Flutter Driver testing on Android Emulator.'
-          'Works only if \'browser-name\' is set to \'android-chrome\'')
-      ..addOption('chrome-binary',
-        help: 'Location of Chrome binary. '
-          'Works only if \'browser-name\' is set to \'chrome\'')
-      ..addOption('write-sksl-on-exit',
-        help:
-          'Attempts to write an SkSL file when the drive process is finished '
-          'to the provided file, overwriting it if necessary.',
+
+    argParser.addDescriptors(<OptionDescriptor<Object?>>[
+      CommonOptions.enableExperiment,
+      // By default, the drive app should not publish the VM service port over mDNS
+      // to prevent a local network permission dialog on iOS 14+,
+      // which cannot be accepted or dismissed in a CI environment.
+      _publishPort,
+      _keepAppRunning,
+      _useExistingApp,
+      _driver,
+      DebuggingOptionDescriptors.build,
+      _screenshot,
+      _driverPort,
+      _headless,
+      _browserName,
+      _browserDimension,
+      _androidEmulator,
+      _chromeBinary,
+      _testArguments,
+      _profileMemory,
+      _timeout,
+    ], verboseHelp: verboseHelp);
+  }
+
+  static final FlagOptionDescriptor _publishPort = DebuggingOptionDescriptors.publishPortOption(
+    enabledByDefault: false,
+  );
+
+  static const _kKeepAppRunning = 'keep-app-running';
+  static const _kUseExistingApp = 'use-existing-app';
+
+  static const _keepAppRunning = FlagOptionDescriptor(
+    name: _kKeepAppRunning,
+    help:
+        'Will keep the Flutter application running when done testing.\n'
+        'By default, "flutter drive" stops the application after tests are finished, '
+        'and "--$_kKeepAppRunning" overrides this. On the other hand, if "--use-existing-app" '
+        'is specified, then "flutter drive" instead defaults to leaving the application '
+        'running, and "--no-$_kKeepAppRunning" overrides it.',
+  );
+
+  static const _useExistingApp = StringOptionDescriptor(
+    name: _kUseExistingApp,
+    help:
+        'Connect to an already running instance via the given Dart VM Service URL. '
+        'If this option is given, the application will not be automatically started, '
+        'and it will only be stopped if "--no-$_kKeepAppRunning" is explicitly set.',
+    valueHelp: 'url',
+  );
+
+  static const _driver = StringOptionDescriptor(
+    name: 'driver',
+    help:
+        'The test file to run on the host (as opposed to the target file to run on '
+        'the device).\n'
+        'By default, this file has the same base name as the target file, but in the '
+        '"test_driver/" directory instead, and with "_test" inserted just before the '
+        'extension, so e.g. if the target is "lib/main.dart", the driver will be '
+        '"test_driver/main_test.dart".',
+    valueHelp: 'path',
+  );
+
+  static const _screenshot = StringOptionDescriptor(
+    name: 'screenshot',
+    valueHelp: 'path/to/directory',
+    help: 'Directory location to write screenshots on test failure.',
+  );
+
+  static const _driverPort = IntOptionDescriptor(
+    name: 'driver-port',
+    defaultsTo: 4444,
+    help: 'The port where Webdriver server is launched at.',
+    valueHelp: '4444',
+  );
+
+  static const _headless = FlagOptionDescriptor(
+    name: 'headless',
+    defaultsTo: true,
+    help: 'Whether the driver browser is going to be launched in headless mode.',
+  );
+
+  static const _browserName = DefaultedEnumOptionDescriptor<Browser>(
+    name: 'browser-name',
+    defaultsTo: Browser.chrome,
+    values: Browser.values,
+    help: 'Name of the browser where tests will be executed.',
+  );
+
+  static const _browserDimension = DefaultedStringOptionDescriptor(
+    name: 'browser-dimension',
+    defaultsTo: '1600x1024',
+    help:
+        'The dimension of the browser when running a Flutter Web test. '
+        'Format is "width x height[@dpr]" where dpr is optional device pixel ratio. '
+        'This will affect screenshot dimensions and all offset-related actions.',
+    valueHelp: '1600x1024[@1]',
+  );
+
+  static const _androidEmulator = FlagOptionDescriptor(
+    name: 'android-emulator',
+    defaultsTo: true,
+    help:
+        'Whether to perform Flutter Driver testing using an Android Emulator. '
+        'Works only if "browser-name" is set to "android-chrome".',
+  );
+
+  static const _chromeBinary = StringOptionDescriptor(
+    name: 'chrome-binary',
+    help:
+        'Location of the Chrome binary. '
+        'Works only if "browser-name" is set to "chrome".',
+  );
+
+  static const _testArguments = MultiOptionDescriptor(
+    name: 'test-arguments',
+    help:
+        'Additional arguments to pass to the Dart VM running The test script.\n\n'
+        'This can be used to opt-in to use "dart test" as a runner for the test script, '
+        'which allows, among other things, changing the reporter. For example, to opt-in '
+        'to the "expanded" reporter, pass both "test" and "--reporter=expanded".\n\n'
+        'Please leave feedback at <https://github.com/flutter/flutter/issues/152409>.',
+  );
+
+  static const _profileMemory = StringOptionDescriptor(
+    name: 'profile-memory',
+    help:
+        'Launch devtools and profile application memory, writing '
+        'The output data to the file path provided to this argument as JSON.',
+    valueHelp: 'profile_memory.json',
+  );
+
+  static const _timeout = StringOptionDescriptor(
+    name: 'timeout',
+    help:
+        'Timeout the test after the given number of seconds. If the '
+        '"--screenshot" option is provided, a screenshot will be taken '
+        'before exiting. Defaults to no timeout.',
+    valueHelp: '360',
+  );
+
+  /// The [ProcessSignal]s that will lead to a screenshot being taken (if the option is provided).
+  final Set<ProcessSignal> signalsToHandle;
+
+  // `pub` must always be run due to the test script running from source,
+  // even if an application binary is used. Default to true unless the user explicitly
+  // specified not to.
+  @override
+  bool get shouldRunPub {
+    if (wasParsed(CommonOptions.pub) && !getValue(CommonOptions.pub)) {
+      return false;
+    }
+    return true;
+  }
+
+  FlutterDriverFactory? _flutterDriverFactory;
+
+  Timer? timeoutTimer;
+  Map<ProcessSignal, Object>? screenshotTokens;
+
+  @override
+  final name = 'drive';
+
+  @override
+  final description =
+      'Builds and installs the app, and runs a Dart program that connects to '
+      'the app, often to run externally facing integration tests, such as with '
+      'package:test and package:flutter_driver.\n'
+      '\n'
+      'Usage: flutter drive --target <lib/main.dart> --driver <test_driver/main_test.dart>.';
+
+  @override
+  String get category => FlutterCommandCategory.project;
+
+  @override
+  final aliases = <String>['driver'];
+
+  String? get userIdentifier => getValue(CommonOptions.deviceUser);
+
+  String? get screenshot => getValue(_screenshot);
+
+  @override
+  bool get startPausedDefault => true;
+
+  @override
+  bool get cachePubGet => false;
+
+  String? get applicationBinaryPath => getValue(CommonOptions.useApplicationBinary);
+
+  Future<Device?> get targetedDevice async {
+    return findTargetDevice(includeDevicesUnsupportedByProject: applicationBinaryPath == null);
+  }
+
+  // Wireless iOS devices need `publish-port` to be enabled because it requires mDNS.
+  // If the flag wasn't provided as an actual argument and it's a wireless device,
+  // change it to be enabled.
+  @override
+  Future<bool> get disablePortPublication async {
+    final Device? device = await targetedDevice;
+    final bool isWirelessIOSDevice = device is IOSDevice && device.isWirelesslyConnected;
+    if (isWirelessIOSDevice && argResults != null && !wasParsed(_publishPort)) {
+      toolContext.logger.printTrace(
+        'A wireless iOS device is being used. Changing `publish-port` to be enabled.',
       );
+      return false;
+    }
+    return !getValue(_publishPort);
   }
 
   @override
-  final String name = 'drive';
-
-  @override
-  final String description = 'Run integration tests for the project on an attached device or emulator.';
-
-  @override
-  final List<String> aliases = <String>['driver'];
-
-  Device _device;
-  Device get device => _device;
-  bool get shouldBuild => boolArg('build');
-
-  bool get verboseSystemLogs => boolArg('verbose-system-logs');
-  String get userIdentifier => stringArg(FlutterOptions.kDeviceUser);
-
-  /// Subscription to log messages printed on the device or simulator.
-  // ignore: cancel_subscriptions
-  StreamSubscription<String> _deviceLogSubscription;
-
-  @override
   Future<void> validateCommand() async {
+    // For Android prebuilt applications run in release mode, validate that engine configuration flags
+    // are not passed.
+    validatePrebuiltAndroidApplicationFlags();
+
+    final ToolContext(:FileSystem fs, :Logger logger) = toolContext;
     if (userIdentifier != null) {
-      final Device device = await findTargetDevice(timeout: deviceDiscoveryTimeout);
+      final Device? device = await findTargetDevice();
       if (device is! AndroidDevice) {
         throwToolExit('--${FlutterOptions.kDeviceUser} is only supported for Android');
       }
     }
+
+    // Ensure host-side flutter_driver test scripts do not import device-side
+    // libraries (e.g. dart:ui, package:flutter, package:flutter_test).
+    final String? testFile = _getTestFile();
+    if (testFile != null && fs.isFileSync(testFile)) {
+      final File packageConfigFile = findPackageConfigFileOrDefault(fs.currentDirectory);
+      if (packageConfigFile.existsSync()) {
+        final PackageConfig packageConfig = await loadPackageConfigWithLogging(
+          packageConfigFile,
+          logger: logger,
+          throwOnError: false,
+        );
+        final validator = DriverTestImportValidator(
+          fileSystem: fs,
+          logger: logger,
+          packageConfig: packageConfig,
+          projectRootPath: fs.currentDirectory.path,
+        );
+        final List<String> errors = validator.validate(fs.file(testFile));
+        if (errors.isNotEmpty) {
+          final buffer = StringBuffer();
+          buffer.writeln('flutter_driver test "$testFile" has invalid imports:');
+          for (final error in errors) {
+            buffer.writeln('  $error');
+          }
+          buffer.writeln(
+            'flutter_driver tests run on the host VM and cannot import libraries that '
+            'depend on dart:ui (like package:flutter or package:flutter_test).',
+          );
+          throwToolExit(buffer.toString());
+        }
+      }
+    }
+
     return super.validateCommand();
   }
 
   @override
   Future<FlutterCommandResult> runCommand() async {
-    final String testFile = _getTestFile();
+    final ToolContext(:FileSystem fs, :Logger logger) = toolContext;
+    final String? testFile = _getTestFile();
     if (testFile == null) {
       throwToolExit(null);
     }
-
-    _device = await findTargetDevice(timeout: deviceDiscoveryTimeout);
+    if (await fs.type(testFile) != FileSystemEntityType.file) {
+      // A very common source of error is holding "flutter drive" wrong,
+      // and providing the "test_driver/foo_test.dart" as the target, when
+      // the intention was to provide "lib/foo.dart".
+      if (fs.path.isWithin('test_driver', targetFile)) {
+        logger.printError(
+          'The file path passed to --target should be an app entrypoint that '
+          'contains a "main()". Did you mean "flutter drive --driver $targetFile"?',
+        );
+      }
+      throwToolExit('Test file not found: $testFile');
+    }
+    final Device? device = await targetedDevice;
     if (device == null) {
       throwToolExit(null);
     }
-
-    if (await globals.fs.type(testFile) != FileSystemEntityType.file) {
-      throwToolExit('Test file not found: $testFile');
+    if (screenshot != null && !device.supportsScreenshot) {
+      logger.printError('Screenshot not supported for ${device.displayName}.');
     }
 
-    String observatoryUri;
-    ResidentRunner residentRunner;
-    final BuildInfo buildInfo = getBuildInfo();
-    final bool isWebPlatform = await device.targetPlatform == TargetPlatform.web_javascript;
-    if (argResults['use-existing-app'] == null) {
-      globals.printStatus('Starting application: $targetFile');
+    final WebDevServerConfig? webDevServerConfig =
+        // TODO(kevmoo): Not sure why we're not just checking `WebDevice` here
+        (device is WebServerDevice || device is ChromiumDevice)
+        ? await webDevServerConfigCore()
+        : null;
 
-      if (buildInfo.isRelease && !isWebPlatform) {
-        // This is because we need VM service to be able to drive the app.
-        // For Flutter Web, testing in release mode is allowed.
-        throwToolExit(
-          'Flutter Driver (non-web) does not support running in release mode.\n'
-          '\n'
-          'Use --profile mode for testing application performance.\n'
-          'Use --debug (default) mode for testing correctness (with assertions).'
-        );
-      }
+    final web = webDevServerConfig != null;
 
-      Uri webUri;
+    _flutterDriverFactory ??= FlutterDriverFactory(
+      analytics: analytics,
+      applicationPackageFactory: ApplicationPackageFactory.instance!,
+      buildSystem: buildSystem,
+      buildTargets: buildTargets,
+      dartSdkPath: toolContext.artifacts.getArtifactPath(.engineDartBinary),
+      devtoolsLauncher: DevtoolsLauncher.instance!,
+      toolContext: toolContext,
+    );
+    final File packageConfigFile = findPackageConfigFileOrDefault(fs.currentDirectory);
 
-      if (isWebPlatform) {
-        // Start Flutter web application for current test
-        final FlutterProject flutterProject = FlutterProject.current();
-        final FlutterDevice flutterDevice = await FlutterDevice.create(
-          device,
-          flutterProject: flutterProject,
-          target: targetFile,
-          buildInfo: buildInfo,
-          platform: globals.platform,
-        );
-        residentRunner = webRunnerFactory.createWebRunner(
-          flutterDevice,
-          target: targetFile,
-          flutterProject: flutterProject,
-          ipv6: ipv6,
-          debuggingOptions: getBuildInfo().isRelease ?
-            DebuggingOptions.disabled(
-              getBuildInfo(),
-              port: stringArg('web-port')
-            )
-            : DebuggingOptions.enabled(
-              getBuildInfo(),
-              port: stringArg('web-port')
-            ),
-          stayResident: false,
-          urlTunneller: null,
-        );
-        final Completer<void> appStartedCompleter = Completer<void>.sync();
-        final int result = await residentRunner.run(
-          appStartedCompleter: appStartedCompleter,
-          route: route,
-        );
-        if (result != 0) {
-          throwToolExit(null, exitCode: result);
-        }
-        // Wait until the app is started.
-        await appStartedCompleter.future;
-        webUri = residentRunner.uri;
-      }
+    final PackageConfig packageConfig = await loadPackageConfigWithLogging(
+      packageConfigFile,
+      logger: logger,
+      throwOnError: false,
+    );
+    final DriverService driverService = _flutterDriverFactory!.createDriverService(web);
+    final BuildInfo buildInfo = await getBuildInfo();
+    final DebuggingOptions debuggingOptions = await createDebuggingOptions(
+      webDevServerConfig: webDevServerConfig,
+    );
+    final File? applicationBinary = applicationBinaryPath == null
+        ? null
+        : fs.file(applicationBinaryPath);
 
-      final LaunchResult result = await appStarter(this, webUri);
-      if (result == null) {
-        throwToolExit('Application failed to start. Will not run test. Quitting.', exitCode: 1);
-      }
-      observatoryUri = result.observatoryUri.toString();
-      // TODO(bkonyi): add web support (https://github.com/flutter/flutter/issues/61259)
-      if (!isWebPlatform && !disableDds) {
-        try {
-          // If there's another flutter_tools instance still connected to the target
-          // application, DDS will already be running remotely and this call will fail.
-          // We can ignore this and continue to use the remote DDS instance.
-          await device.dds.startDartDevelopmentService(
-            Uri.parse(observatoryUri),
-            ddsPort,
-            ipv6,
-            disableServiceAuthCodes,
-          );
-          observatoryUri = device.dds.uri.toString();
-        } on dds.DartDevelopmentServiceException catch(_) {
-          globals.printTrace('Note: DDS is already connected to $observatoryUri.');
-        }
-      }
-    } else {
-      globals.printStatus('Will connect to already running application instance.');
-      observatoryUri = stringArg('use-existing-app');
-    }
-
-    final Map<String, String> environment = <String, String>{
-      'VM_SERVICE_URL': observatoryUri,
-    };
-
-    async_io.WebDriver driver;
-    // For web device, WebDriver session will be launched beforehand
-    // so that FlutterDriver can reuse it.
-    if (isWebPlatform) {
-      final Browser browser = _browserNameToEnum(
-          argResults['browser-name'].toString());
-      final String driverPort = argResults['driver-port'].toString();
-      // start WebDriver
-      try {
-        driver = await _createDriver(
-          driverPort,
-          browser,
-          argResults['headless'].toString() == 'true',
-          stringArg('chrome-binary'),
-        );
-      } on Exception catch (ex) {
-        throwToolExit(
-          'Unable to start WebDriver Session for Flutter for Web testing. \n'
-          'Make sure you have the correct WebDriver Server running at $driverPort. \n'
-          'Make sure the WebDriver Server matches option --browser-name. \n'
-          '$ex'
-        );
-      }
-
-      final bool isAndroidChrome = browser == Browser.androidChrome;
-      final bool useEmulator = argResults['android-emulator'] as bool;
-      // set window size
-      // for android chrome, skip such action
-      if (!isAndroidChrome) {
-        final List<String> dimensions = argResults['browser-dimension'].split(
-            ',') as List<String>;
-        assert(dimensions.length == 2);
-        int x, y;
-        try {
-          x = int.parse(dimensions[0]);
-          y = int.parse(dimensions[1]);
-        } on FormatException catch (ex) {
-          throwToolExit('''
-Dimension provided to --browser-dimension is invalid:
-$ex
-        ''');
-        }
-        final async_io.Window window = await driver.window;
-        await window.setLocation(const math.Point<int>(0, 0));
-        await window.setSize(math.Rectangle<int>(0, 0, x, y));
-      }
-
-      // add driver info to environment variables
-      environment.addAll(<String, String> {
-        'DRIVER_SESSION_ID': driver.id,
-        'DRIVER_SESSION_URI': driver.uri.toString(),
-        'DRIVER_SESSION_SPEC': driver.spec.toString(),
-        'DRIVER_SESSION_CAPABILITIES': json.encode(driver.capabilities),
-        'SUPPORT_TIMELINE_ACTION': (browser == Browser.chrome).toString(),
-        'FLUTTER_WEB_TEST': 'true',
-        'ANDROID_CHROME_ON_EMULATOR': (isAndroidChrome && useEmulator).toString(),
-      });
-    }
-
+    var screenshotTaken = false;
     try {
-      await testRunner(
-        <String>[
-          if (buildInfo.dartExperiments.isNotEmpty)
-            '--enable-experiment=${buildInfo.dartExperiments.join(',')}',
-          if (buildInfo.nullSafetyMode == NullSafetyMode.sound)
-            '--sound-null-safety',
-          if (buildInfo.nullSafetyMode == NullSafetyMode.unsound)
-            '--no-sound-null-safety',
-          testFile,
-        ],
-        environment,
-      );
-    } on Exception catch (error, stackTrace) {
-      if (error is ToolExit) {
-        rethrow;
-      }
-      throw Exception('Unable to run test: $error\n$stackTrace');
-    } finally {
-      await residentRunner?.exit();
-      await driver?.quit();
-      if (stringArg('write-sksl-on-exit') != null) {
-        final File outputFile = globals.fs.file(stringArg('write-sksl-on-exit'));
-        final vm_service.VmService vmService = await connectToVmService(
-          Uri.parse(observatoryUri),
+      final String? useExistingApp = getValue(_useExistingApp);
+      if (useExistingApp == null) {
+        await driverService.start(
+          buildInfo,
+          device,
+          debuggingOptions,
+          applicationBinary: applicationBinary,
+          route: route,
+          userIdentifier: userIdentifier,
+          mainPath: targetFile,
+          platformArgs: <String, Object>{
+            if (traceStartup) 'trace-startup': traceStartup,
+            if (web) 'no-launch-chrome': true,
+          },
+          webDefines: extractWebDefines(),
         );
-        final FlutterView flutterView = (await vmService.getFlutterViews()).first;
-        final Map<String, Object> result = await vmService.getSkSLs(
-          viewId: flutterView.id
-        );
-        await sharedSkSlWriter(_device, result, outputFile: outputFile);
-      }
-      if (boolArg('keep-app-running') ?? (argResults['use-existing-app'] != null)) {
-        globals.printStatus('Leaving the application running.');
       } else {
-        globals.printStatus('Stopping application instance.');
-        await appStopper(this);
+        final Uri? uri = Uri.tryParse(useExistingApp);
+        if (uri == null) {
+          throwToolExit('Invalid VM Service URI: $useExistingApp');
+        }
+        await driverService.reuseApplication(uri, device, debuggingOptions);
       }
+
+      final driveSpec = DriveTestSpecification(
+        arguments: getValue(_testArguments),
+        packageConfig: packageConfig,
+        chromeBinary: getValue(_chromeBinary),
+        headless: getValue(_headless),
+        webBrowserFlags: getValue(WebOptions.webBrowserFlags),
+        browserDimension: DriveTestSpecification.parseBrowserDimension(getValue(_browserDimension)),
+        browserName: getValue(_browserName).cliName,
+        driverPort: getValue(_driverPort),
+        androidEmulator: getValue(_androidEmulator),
+        profileMemory: getValue(_profileMemory),
+      );
+
+      final Future<int> testResultFuture = driverService.startTest(testFile, driveSpec);
+
+      if (screenshot != null) {
+        // If the test is sent a signal or times out, take a screenshot
+        _registerScreenshotCallbacks(device, fs.directory(screenshot));
+      }
+
+      final int testResult = await testResultFuture;
+
+      if (timeoutTimer != null) {
+        timeoutTimer!.cancel();
+      }
+      _unregisterScreenshotCallbacks();
+
+      if (testResult != 0 && screenshot != null) {
+        // Take a screenshot while the app is still running.
+        await _takeScreenshot(device, fs.directory(screenshot));
+        screenshotTaken = true;
+      }
+
+      if (_keepAppRunningWhenComplete) {
+        logger.printStatus('Leaving the application running.');
+      } else {
+        await driverService.stop(userIdentifier: userIdentifier);
+      }
+      if (testResult != 0) {
+        throwToolExit(null);
+      }
+    } on Exception {
+      // On exceptions, including ToolExit, take a screenshot on the device
+      // unless a screenshot was already taken on test failure.
+      if (!screenshotTaken && screenshot != null) {
+        await _takeScreenshot(device, fs.directory(screenshot));
+      }
+      rethrow;
     }
 
     return FlutterCommandResult.success();
   }
 
-  String _getTestFile() {
-    if (argResults['driver'] != null) {
-      return stringArg('driver');
+  /// Whether, based on the arguments passed, the app should be stopped upon
+  /// completion.
+  ///
+  /// Interprets the results of `--keep-app-running` and `--use-existing-app`.
+  bool get _keepAppRunningWhenComplete {
+    if (getValue(_keepAppRunning)) {
+      // --keep-app-running
+      return true;
+    } else if (wasParsed(_keepAppRunning)) {
+      // --no-keep-app-running
+      return false;
+    } else {
+      // Default --keep-app-running to whether --use-existing-app was used.
+      return wasParsed(_useExistingApp);
+    }
+  }
+
+  int? get _timeoutSeconds {
+    final String? timeoutString = getValue(_timeout);
+    if (timeoutString == null) {
+      return null;
+    }
+    final int? timeoutSeconds = int.tryParse(timeoutString);
+    if (timeoutSeconds == null || timeoutSeconds <= 0) {
+      throwToolExit(
+        'Invalid value "$timeoutString" provided to the option --timeout: '
+        'expected a positive integer representing seconds.',
+      );
+    }
+    return timeoutSeconds;
+  }
+
+  void _registerScreenshotCallbacks(Device device, Directory screenshotDir) {
+    final ToolContext(:Logger logger, :Signals signals) = toolContext;
+    logger.printTrace('Registering signal handlers...');
+    final tokens = <ProcessSignal, Object>{};
+    for (final ProcessSignal signal in signalsToHandle) {
+      tokens[signal] = signals.addHandler(signal, (ProcessSignal signal) {
+        _unregisterScreenshotCallbacks();
+        logger.printError('Caught $signal');
+        return _takeScreenshot(device, screenshotDir);
+      });
+    }
+    screenshotTokens = tokens;
+
+    final int? timeoutSeconds = _timeoutSeconds;
+    if (timeoutSeconds != null) {
+      timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
+        _unregisterScreenshotCallbacks();
+        _takeScreenshot(device, screenshotDir);
+        throwToolExit('Timed out after $timeoutSeconds seconds');
+      });
+    }
+  }
+
+  void _unregisterScreenshotCallbacks() {
+    if (screenshotTokens != null) {
+      final ToolContext(:Logger logger, :Signals signals) = toolContext;
+      logger.printTrace('Unregistering signal handlers...');
+      for (final MapEntry<ProcessSignal, Object> entry in screenshotTokens!.entries) {
+        signals.removeHandler(entry.key, entry.value);
+      }
+    }
+    timeoutTimer?.cancel();
+  }
+
+  String? _getTestFile() {
+    final ToolContext(:FileSystem fs, :Logger logger) = toolContext;
+    final String? driver = getValue(_driver);
+    if (driver != null) {
+      return driver;
     }
 
     // If the --driver argument wasn't provided, then derive the value from
     // the target file.
-    String appFile = globals.fs.path.normalize(targetFile);
+    String appFile = fs.path.normalize(targetFile);
 
     // This command extends `flutter run` and therefore CWD == package dir
-    final String packageDir = globals.fs.currentDirectory.path;
+    final String packageDir = fs.currentDirectory.path;
 
     // Make appFile path relative to package directory because we are looking
     // for the corresponding test file relative to it.
-    if (!globals.fs.path.isRelative(appFile)) {
-      if (!globals.fs.path.isWithin(packageDir, appFile)) {
-        globals.printError(
-          'Application file $appFile is outside the package directory $packageDir'
-        );
+    if (!fs.path.isRelative(appFile)) {
+      if (!fs.path.isWithin(packageDir, appFile)) {
+        logger.printError('Application file $appFile is outside the package directory $packageDir');
         return null;
       }
 
-      appFile = globals.fs.path.relative(appFile, from: packageDir);
+      appFile = fs.path.relative(appFile, from: packageDir);
     }
 
-    final List<String> parts = globals.fs.path.split(appFile);
+    final List<String> parts = fs.path.split(appFile);
 
     if (parts.length < 2) {
-      globals.printError(
+      logger.printError(
         'Application file $appFile must reside in one of the sub-directories '
-        'of the package structure, not in the root directory.'
+        'of the package structure, not in the root directory.',
       );
       return null;
     }
@@ -404,288 +561,24 @@ $ex
     // Look for the test file inside `test_driver/` matching the sub-path, e.g.
     // if the application is `lib/foo/bar.dart`, the test file is expected to
     // be `test_driver/foo/bar_test.dart`.
-    final String pathWithNoExtension = globals.fs.path.withoutExtension(globals.fs.path.joinAll(
-      <String>[packageDir, 'test_driver', ...parts.skip(1)]));
-    return '${pathWithNoExtension}_test${globals.fs.path.extension(appFile)}';
+    final String pathWithNoExtension = fs.path.withoutExtension(
+      fs.path.joinAll(<String>[packageDir, 'test_driver', ...parts.skip(1)]),
+    );
+    return '${pathWithNoExtension}_test${fs.path.extension(appFile)}';
   }
-}
 
-Future<Device> findTargetDevice({ @required Duration timeout }) async {
-  final DeviceManager deviceManager = globals.deviceManager;
-  final List<Device> devices = await deviceManager.findTargetDevices(FlutterProject.current(), timeout: timeout);
-
-  if (deviceManager.hasSpecifiedDeviceId) {
-    if (devices.isEmpty) {
-      globals.printStatus("No devices found with name or id matching '${deviceManager.specifiedDeviceId}'");
-      return null;
+  Future<void> _takeScreenshot(Device device, Directory outputDirectory) async {
+    if (!device.supportsScreenshot) {
+      return;
     }
-    if (devices.length > 1) {
-      globals.printStatus("Found ${devices.length} devices with name or id matching '${deviceManager.specifiedDeviceId}':");
-      await Device.printDevices(devices);
-      return null;
+    final ToolContext(:FileSystemUtils fileSystemUtils, :Logger logger) = toolContext;
+    try {
+      outputDirectory.createSync(recursive: true);
+      final File outputFile = fileSystemUtils.getUniqueFile(outputDirectory, 'drive', 'png');
+      await device.takeScreenshot(outputFile);
+      logger.printStatus('Screenshot written to ${outputFile.path}');
+    } on Exception catch (error) {
+      logger.printError('Error taking screenshot: $error');
     }
-    return devices.first;
-  }
-
-  if (devices.isEmpty) {
-    globals.printError('No devices found.');
-    return null;
-  } else if (devices.length > 1) {
-    globals.printStatus('Found multiple connected devices:');
-    await Device.printDevices(devices);
-  }
-  globals.printStatus('Using device ${devices.first.name}.');
-  return devices.first;
-}
-
-/// Starts the application on the device given command configuration.
-typedef AppStarter = Future<LaunchResult> Function(DriveCommand command, Uri webUri);
-
-AppStarter appStarter = _startApp; // (mutable for testing)
-void restoreAppStarter() {
-  appStarter = _startApp;
-}
-
-Future<LaunchResult> _startApp(
-  DriveCommand command,
-  Uri webUri, {
-  String userIdentifier,
-}) async {
-  final String mainPath = findMainDartFile(command.targetFile);
-  if (await globals.fs.type(mainPath) != FileSystemEntityType.file) {
-    globals.printError('Tried to run $mainPath, but that file does not exist.');
-    return null;
-  }
-
-  globals.printTrace('Stopping previously running application, if any.');
-  await appStopper(command);
-
-  final ApplicationPackage package = await command.applicationPackages
-      .getPackageForPlatform(await command.device.targetPlatform, command.getBuildInfo());
-
-  if (command.shouldBuild) {
-    globals.printTrace('Installing application package.');
-    if (await command.device.isAppInstalled(package, userIdentifier: userIdentifier)) {
-      await command.device.uninstallApp(package, userIdentifier: userIdentifier);
-    }
-    await command.device.installApp(package, userIdentifier: userIdentifier);
-  }
-
-  final Map<String, dynamic> platformArgs = <String, dynamic>{};
-  if (command.traceStartup) {
-    platformArgs['trace-startup'] = command.traceStartup;
-  }
-
-  if (webUri != null) {
-    platformArgs['uri'] = webUri.toString();
-    if (!command.getBuildInfo().isDebug) {
-      // For web device, startApp will be triggered twice
-      // and it will error out for chrome the second time.
-      platformArgs['no-launch-chrome'] = true;
-    }
-  }
-
-  globals.printTrace('Starting application.');
-
-  // Forward device log messages to the terminal window running the "drive" command.
-  final DeviceLogReader logReader = await command.device.getLogReader(app: package);
-  command._deviceLogSubscription = logReader
-    .logLines
-    .listen(globals.printStatus);
-
-  final LaunchResult result = await command.device.startApp(
-    package,
-    mainPath: mainPath,
-    route: command.route,
-    debuggingOptions: DebuggingOptions.enabled(
-      command.getBuildInfo(),
-      startPaused: true,
-      hostVmServicePort: webUri != null ? command.hostVmservicePort : 0,
-      ddsPort: command.ddsPort,
-      verboseSystemLogs: command.verboseSystemLogs,
-      cacheSkSL: command.cacheSkSL,
-      dumpSkpOnShaderCompilation: command.dumpSkpOnShaderCompilation,
-      purgePersistentCache: command.purgePersistentCache,
-    ),
-    platformArgs: platformArgs,
-    prebuiltApplication: !command.shouldBuild,
-    userIdentifier: userIdentifier,
-  );
-
-  if (!result.started) {
-    await command._deviceLogSubscription.cancel();
-    return null;
-  }
-
-  return result;
-}
-
-/// Runs driver tests.
-typedef TestRunner = Future<void> Function(List<String> testArgs, Map<String, String> environment);
-TestRunner testRunner = _runTests;
-void restoreTestRunner() {
-  testRunner = _runTests;
-}
-
-Future<void> _runTests(List<String> testArgs, Map<String, String> environment) async {
-  globals.printTrace('Running driver tests.');
-
-  globalPackagesPath = globals.fs.path.normalize(globals.fs.path.absolute(globalPackagesPath));
-  final int result = await processUtils.stream(
-    <String>[
-      globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
-      ...testArgs,
-      '--packages=$globalPackagesPath',
-      '-rexpanded',
-    ],
-    environment: environment,
-  );
-  if (result != 0) {
-    throwToolExit('Driver tests failed: $result', exitCode: result);
-  }
-}
-
-
-/// Stops the application.
-typedef AppStopper = Future<bool> Function(DriveCommand command);
-AppStopper appStopper = _stopApp;
-void restoreAppStopper() {
-  appStopper = _stopApp;
-}
-
-Future<bool> _stopApp(DriveCommand command) async {
-  globals.printTrace('Stopping application.');
-  final ApplicationPackage package = await command.applicationPackages.getPackageForPlatform(
-    await command.device.targetPlatform,
-    command.getBuildInfo(),
-  );
-  final bool stopped = await command.device.stopApp(package, userIdentifier: command.userIdentifier);
-  await command._deviceLogSubscription?.cancel();
-  return stopped;
-}
-
-/// A list of supported browsers.
-@visibleForTesting
-enum Browser {
-  /// Chrome on Android: https://developer.chrome.com/multidevice/android/overview
-  androidChrome,
-  /// Chrome: https://www.google.com/chrome/
-  chrome,
-  /// Edge: https://www.microsoft.com/en-us/windows/microsoft-edge
-  edge,
-  /// Firefox: https://www.mozilla.org/en-US/firefox/
-  firefox,
-  /// Safari in iOS: https://www.apple.com/safari/
-  iosSafari,
-  /// Safari in macOS: https://www.apple.com/safari/
-  safari,
-}
-
-/// Converts [browserName] string to [Browser]
-Browser _browserNameToEnum(String browserName){
-  switch (browserName) {
-    case 'android-chrome': return Browser.androidChrome;
-    case 'chrome': return Browser.chrome;
-    case 'edge': return Browser.edge;
-    case 'firefox': return Browser.firefox;
-    case 'ios-safari': return Browser.iosSafari;
-    case 'safari': return Browser.safari;
-  }
-  throw UnsupportedError('Browser $browserName not supported');
-}
-
-Future<async_io.WebDriver> _createDriver(String driverPort, Browser browser, bool headless, String chromeBinary) async {
-  return async_io.createDriver(
-      uri: Uri.parse('http://localhost:$driverPort/'),
-      desired: getDesiredCapabilities(browser, headless, chromeBinary),
-      spec: async_io.WebDriverSpec.Auto
-  );
-}
-
-/// Returns desired capabilities for given [browser], [headless] and
-/// [chromeBinary].
-@visibleForTesting
-Map<String, dynamic> getDesiredCapabilities(Browser browser, bool headless, [String chromeBinary]) {
-  switch (browser) {
-    case Browser.chrome:
-      return <String, dynamic>{
-        'acceptInsecureCerts': true,
-        'browserName': 'chrome',
-        'goog:loggingPrefs': <String, String>{ async_io.LogType.performance: 'ALL'},
-        'chromeOptions': <String, dynamic>{
-          if (chromeBinary != null)
-            'binary': chromeBinary,
-          'w3c': false,
-          'args': <String>[
-            '--bwsi',
-            '--disable-background-timer-throttling',
-            '--disable-default-apps',
-            '--disable-extensions',
-            '--disable-popup-blocking',
-            '--disable-translate',
-            '--no-default-browser-check',
-            '--no-sandbox',
-            '--no-first-run',
-            if (headless) '--headless'
-          ],
-          'perfLoggingPrefs': <String, String>{
-            'traceCategories':
-            'devtools.timeline,'
-                'v8,blink.console,benchmark,blink,'
-                'blink.user_timing'
-          }
-        },
-      };
-      break;
-    case Browser.firefox:
-      return <String, dynamic>{
-        'acceptInsecureCerts': true,
-        'browserName': 'firefox',
-        'moz:firefoxOptions' : <String, dynamic>{
-          'args': <String>[
-            if (headless) '-headless'
-          ],
-          'prefs': <String, dynamic>{
-            'dom.file.createInChild': true,
-            'dom.timeout.background_throttling_max_budget': -1,
-            'media.autoplay.default': 0,
-            'media.gmp-manager.url': '',
-            'media.gmp-provider.enabled': false,
-            'network.captive-portal-service.enabled': false,
-            'security.insecure_field_warning.contextual.enabled': false,
-            'test.currentTimeOffsetSeconds': 11491200
-          },
-          'log': <String, String>{'level': 'trace'}
-        }
-      };
-      break;
-    case Browser.edge:
-      return <String, dynamic>{
-        'acceptInsecureCerts': true,
-        'browserName': 'edge',
-      };
-      break;
-    case Browser.safari:
-      return <String, dynamic>{
-        'browserName': 'safari',
-      };
-      break;
-    case Browser.iosSafari:
-      return <String, dynamic>{
-        'platformName': 'ios',
-        'browserName': 'safari',
-        'safari:useSimulator': true
-      };
-    case Browser.androidChrome:
-      return <String, dynamic>{
-        'browserName': 'chrome',
-        'platformName': 'android',
-        'goog:chromeOptions': <String, dynamic>{
-          'androidPackage': 'com.android.chrome',
-          'args': <String>['--disable-fullscreen']
-        },
-      };
-    default:
-      throw UnsupportedError('Browser $browser not supported.');
   }
 }

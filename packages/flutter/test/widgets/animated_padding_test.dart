@@ -2,15 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('AnimatedPadding.debugFillProperties', (WidgetTester tester) async {
-    final AnimatedPadding padding = AnimatedPadding(
+    final padding = AnimatedPadding(
       padding: const EdgeInsets.all(7.0),
       curve: Curves.ease,
       duration: const Duration(milliseconds: 200),
@@ -19,7 +16,9 @@ void main() {
     expect(padding, hasOneLineDescription);
   });
 
-  testWidgets('AnimatedPadding padding visual-to-directional animation', (WidgetTester tester) async {
+  testWidgets('AnimatedPadding padding visual-to-directional animation', (
+    WidgetTester tester,
+  ) async {
     final Key target = UniqueKey();
 
     await tester.pumpWidget(
@@ -61,7 +60,9 @@ void main() {
     expect(tester.getTopRight(find.byKey(target)), const Offset(700.0, 0.0));
   });
 
-  testWidgets('AnimatedPadding animated padding clamped to positive values', (WidgetTester tester) async {
+  testWidgets('AnimatedPadding animated padding clamped to positive values', (
+    WidgetTester tester,
+  ) async {
     final Key target = UniqueKey();
 
     await tester.pumpWidget(
@@ -85,7 +86,7 @@ void main() {
         child: AnimatedPadding(
           curve: Curves.easeInOutBack,
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.only(right: 0.0),
+          padding: EdgeInsets.zero,
           child: SizedBox.expand(key: target),
         ),
       ),
@@ -100,4 +101,23 @@ void main() {
     expect(tester.getTopRight(find.byKey(target)), const Offset(800.0, 0.0));
   });
 
+  testWidgets('AnimatedPadding does not crash at zero area', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: SizedBox.shrink(
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(1),
+              child: const Text('X'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(AnimatedPadding)), Size.zero);
+  });
 }

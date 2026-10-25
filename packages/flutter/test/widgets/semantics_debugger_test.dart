@@ -2,28 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'dart:ui' show window;
-
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'button_tester.dart';
+import 'checkbox_tester.dart';
+import 'editable_text_tester.dart';
+import 'slider_tester.dart';
+
+const Color _green = Color(0xFF4CAF50);
+const Color _amber = Color(0xFFFFC107);
 
 void main() {
   testWidgets('SemanticsDebugger will schedule a frame', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      SemanticsDebugger(
-        child: Container(),
-      ),
-    );
+    await tester.pumpWidget(SemanticsDebugger(child: Container()));
 
     expect(tester.binding.hasScheduledFrame, isTrue);
   });
 
   testWidgets('SemanticsDebugger smoke test', (WidgetTester tester) async {
-
     // This is a smoketest to verify that adding a debugger doesn't crash.
     await tester.pumpWidget(
       Directionality(
@@ -31,13 +29,8 @@ void main() {
         child: Stack(
           children: <Widget>[
             Semantics(),
-            Semantics(
-              container: true,
-            ),
-            Semantics(
-              label: 'label',
-              textDirection: TextDirection.ltr,
-            ),
+            Semantics(container: true),
+            Semantics(label: 'label', textDirection: TextDirection.ltr),
           ],
         ),
       ),
@@ -50,13 +43,8 @@ void main() {
           child: Stack(
             children: <Widget>[
               Semantics(),
-              Semantics(
-                container: true,
-              ),
-              Semantics(
-                label: 'label',
-                textDirection: TextDirection.ltr,
-              ),
+              Semantics(container: true),
+              Semantics(label: 'label', textDirection: TextDirection.ltr),
             ],
           ),
         ),
@@ -64,6 +52,28 @@ void main() {
     );
 
     expect(true, isTrue); // expect that we reach here without crashing
+  });
+
+  testWidgets('SemanticsDebugger draw persistent color based on structure', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SemanticsDebugger(
+          child: Stack(
+            children: <Widget>[Semantics(container: true, child: Semantics(container: true))],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byType(SemanticsDebugger),
+      paints
+        ..rect()
+        ..rect(color: const Color(0xFFF866FF)),
+    );
   });
 
   testWidgets('SemanticsDebugger reparents subtree', (WidgetTester tester) async {
@@ -131,12 +141,13 @@ void main() {
                 child: Stack(
                   children: <Widget>[
                     Positioned(
-                        key: key,
-                        left: 0.0,
-                        top: 0.0,
-                        width: 100.0,
-                        height: 100.0,
-                        child: Semantics(label: 'label2', textDirection: TextDirection.ltr)),
+                      key: key,
+                      left: 0.0,
+                      top: 0.0,
+                      width: 100.0,
+                      height: 100.0,
+                      child: Semantics(label: 'label2', textDirection: TextDirection.ltr),
+                    ),
                     Semantics(label: 'label3', textDirection: TextDirection.ltr),
                     Semantics(label: 'label4', textDirection: TextDirection.ltr),
                   ],
@@ -152,79 +163,75 @@ void main() {
   });
 
   testWidgets('SemanticsDebugger interaction test', (WidgetTester tester) async {
-    final List<String> log = <String>[];
+    final log = <String>[];
 
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
-          child: Material(
-            child: ListView(
-              children: <Widget>[
-                ElevatedButton(
-                  onPressed: () {
-                    log.add('top');
-                  },
-                  child: const Text('TOP'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    log.add('bottom');
-                  },
-                  child: const Text('BOTTOM'),
-                ),
-              ],
-            ),
+          child: ListView(
+            children: <Widget>[
+              TestButton(
+                onPressed: () {
+                  log.add('top');
+                },
+                child: const Text('TOP'),
+              ),
+              TestButton(
+                onPressed: () {
+                  log.add('bottom');
+                },
+                child: const Text('BOTTOM'),
+              ),
+            ],
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('TOP'));
+    await tester.tap(find.text('TOP'), warnIfMissed: false); // hitting the debugger
     expect(log, equals(<String>['top']));
     log.clear();
 
-    await tester.tap(find.text('BOTTOM'));
+    await tester.tap(find.text('BOTTOM'), warnIfMissed: false); // hitting the debugger
     expect(log, equals(<String>['bottom']));
     log.clear();
   });
 
   testWidgets('SemanticsDebugger interaction test - negative', (WidgetTester tester) async {
-    final List<String> log = <String>[];
+    final log = <String>[];
 
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
-          child: Material(
-            child: ListView(
-              children: <Widget>[
-                ElevatedButton(
+          child: ListView(
+            children: <Widget>[
+              TestButton(
+                onPressed: () {
+                  log.add('top');
+                },
+                child: const Text('TOP', textDirection: TextDirection.ltr),
+              ),
+              ExcludeSemantics(
+                child: TestButton(
                   onPressed: () {
-                    log.add('top');
+                    log.add('bottom');
                   },
-                  child: const Text('TOP', textDirection: TextDirection.ltr),
+                  child: const Text('BOTTOM', textDirection: TextDirection.ltr),
                 ),
-                ExcludeSemantics(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      log.add('bottom');
-                    },
-                    child: const Text('BOTTOM', textDirection: TextDirection.ltr),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('TOP'));
+    await tester.tap(find.text('TOP'), warnIfMissed: false); // hitting the debugger
     expect(log, equals(<String>['top']));
     log.clear();
 
-    await tester.tap(find.text('BOTTOM'));
+    await tester.tap(find.text('BOTTOM'), warnIfMissed: false); // hitting the debugger
     expect(log, equals(<String>[]));
     log.clear();
   });
@@ -237,13 +244,7 @@ void main() {
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
           child: ListView(
-            children: <Widget>[
-              Container(
-                key: childKey,
-                height: 5000.0,
-                color: Colors.green[500],
-              ),
-            ],
+            children: <Widget>[Container(key: childKey, height: 5000.0, color: _green)],
           ),
         ),
       ),
@@ -251,29 +252,49 @@ void main() {
 
     expect(tester.getTopLeft(find.byKey(childKey)).dy, equals(0.0));
 
-    await tester.fling(find.byType(ListView), const Offset(0.0, -200.0), 200.0);
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(0.0, -200.0),
+      200.0,
+      warnIfMissed: false,
+    ); // hitting the debugger);
     await tester.pump();
 
     expect(tester.getTopLeft(find.byKey(childKey)).dy, equals(-480.0));
 
-    await tester.fling(find.byType(ListView), const Offset(200.0, 0.0), 200.0);
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(200.0, 0.0),
+      200.0,
+      warnIfMissed: false,
+    ); // hitting the debugger);
     await tester.pump();
 
     expect(tester.getTopLeft(find.byKey(childKey)).dy, equals(-480.0));
 
-    await tester.fling(find.byType(ListView), const Offset(-200.0, 0.0), 200.0);
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(-200.0, 0.0),
+      200.0,
+      warnIfMissed: false,
+    ); // hitting the debugger);
     await tester.pump();
 
     expect(tester.getTopLeft(find.byKey(childKey)).dy, equals(-480.0));
 
-    await tester.fling(find.byType(ListView), const Offset(0.0, 200.0), 200.0);
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(0.0, 200.0),
+      200.0,
+      warnIfMissed: false,
+    ); // hitting the debugger);
     await tester.pump();
 
     expect(tester.getTopLeft(find.byKey(childKey)).dy, equals(0.0));
   });
 
   testWidgets('SemanticsDebugger long press', (WidgetTester tester) async {
-    bool didLongPress = false;
+    var didLongPress = false;
 
     await tester.pumpWidget(
       Directionality(
@@ -290,12 +311,12 @@ void main() {
       ),
     );
 
-    await tester.longPress(find.text('target'));
+    await tester.longPress(find.text('target'), warnIfMissed: false); // hitting the debugger
     expect(didLongPress, isTrue);
   });
 
   testWidgets('SemanticsDebugger slider', (WidgetTester tester) async {
-    double value = 0.75;
+    var value = 0.5;
 
     await tester.pumpWidget(
       Directionality(
@@ -304,15 +325,13 @@ void main() {
           child: Directionality(
             textDirection: TextDirection.ltr,
             child: MediaQuery(
-              data: MediaQueryData.fromWindow(window),
-              child: Material(
-                child: Center(
-                  child: Slider(
-                    value: value,
-                    onChanged: (double newValue) {
-                      value = newValue;
-                    },
-                  ),
+              data: MediaQueryData.fromView(tester.view),
+              child: Center(
+                child: TestSlider(
+                  value: value,
+                  onChanged: (double newValue) {
+                    value = newValue;
+                  },
                 ),
               ),
             ),
@@ -326,52 +345,47 @@ void main() {
     // it won't trigger. The actual distance moved doesn't matter since this is
     // interpreted as a gesture by the semantics debugger and sent to the widget
     // as a semantic action that always moves by 10% of the complete track.
-    await tester.fling(find.byType(Slider), const Offset(-100.0, 0.0), 2000.0);
-    expect(value, equals(0.70));
+    await tester.fling(
+      find.byType(TestSlider),
+      const Offset(-100.0, 0.0),
+      2000.0,
+      warnIfMissed: false,
+    ); // hitting the debugger
+    expect(value, equals(0.4));
   });
 
   testWidgets('SemanticsDebugger checkbox', (WidgetTester tester) async {
     final Key keyTop = UniqueKey();
     final Key keyBottom = UniqueKey();
 
-    bool valueTop = false;
-    const bool valueBottom = true;
+    bool? valueTop = false;
 
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
-          child: Material(
-            child: ListView(
-              children: <Widget>[
-                Checkbox(
-                  key: keyTop,
-                  value: valueTop,
-                  onChanged: (bool newValue) {
-                    valueTop = newValue;
-                  },
-                ),
-                Checkbox(
-                  key: keyBottom,
-                  value: valueBottom,
-                  onChanged: null,
-                ),
-              ],
-            ),
+          child: ListView(
+            children: <Widget>[
+              TestCheckbox(
+                key: keyTop,
+                value: valueTop,
+                onChanged: (bool? newValue) {
+                  valueTop = newValue;
+                },
+              ),
+              TestCheckbox(key: keyBottom, value: false, onChanged: null),
+            ],
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byKey(keyTop));
-
+    await tester.tap(find.byKey(keyTop), warnIfMissed: false); // hitting the debugger
     expect(valueTop, isTrue);
     valueTop = false;
     expect(valueTop, isFalse);
 
-    await tester.tap(find.byKey(keyBottom));
-
-    expect(valueTop, isFalse);
+    await tester.tap(find.byKey(keyBottom), warnIfMissed: false); // hitting the debugger
     expect(valueTop, isFalse);
   });
 
@@ -387,130 +401,203 @@ void main() {
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
           key: debugger,
-          child: Material(
-            child: ListView(
-              children: <Widget>[
-                Semantics(
-                  container: true,
-                  key: checkbox,
-                  child: Checkbox(
-                    value: true,
-                    onChanged: (bool _) { },
-                  ),
-                ),
-                Semantics(
-                  container: true,
-                  key: checkboxUnchecked,
-                  child: Checkbox(
-                    value: false,
-                    onChanged: (bool _) { },
-                  ),
-                ),
-                Semantics(
-                  container: true,
-                  key: checkboxDisabled,
-                  child: const Checkbox(
-                    value: true,
-                    onChanged: null,
-                  ),
-                ),
-                Semantics(
-                  container: true,
-                  key: checkboxDisabledUnchecked,
-                  child: const Checkbox(
-                    value: false,
-                    onChanged: null,
-                  ),
-                ),
-              ],
-            ),
+          child: ListView(
+            children: <Widget>[
+              Semantics(
+                container: true,
+                key: checkbox,
+                child: TestCheckbox(value: true, onChanged: (bool? _) {}),
+              ),
+              Semantics(
+                container: true,
+                key: checkboxUnchecked,
+                child: TestCheckbox(value: false, onChanged: (bool? _) {}),
+              ),
+              Semantics(
+                container: true,
+                key: checkboxDisabled,
+                child: const TestCheckbox(value: true, onChanged: null),
+              ),
+              Semantics(
+                container: true,
+                key: checkboxDisabledUnchecked,
+                child: const TestCheckbox(value: false, onChanged: null),
+              ),
+            ],
           ),
         ),
       ),
     );
 
     expect(
-      _getMessageShownInSemanticsDebugger(widgetKey: checkbox, debuggerKey: debugger, tester: tester),
+      _getMessageShownInSemanticsDebugger(
+        widgetKey: checkbox,
+        debuggerKey: debugger,
+        tester: tester,
+      ),
       'checked',
     );
     expect(
-      _getMessageShownInSemanticsDebugger(widgetKey: checkboxUnchecked, debuggerKey: debugger, tester: tester),
+      _getMessageShownInSemanticsDebugger(
+        widgetKey: checkboxUnchecked,
+        debuggerKey: debugger,
+        tester: tester,
+      ),
       'unchecked',
     );
     expect(
-      _getMessageShownInSemanticsDebugger(widgetKey: checkboxDisabled, debuggerKey: debugger, tester: tester),
+      _getMessageShownInSemanticsDebugger(
+        widgetKey: checkboxDisabled,
+        debuggerKey: debugger,
+        tester: tester,
+      ),
       'checked; disabled',
     );
     expect(
-      _getMessageShownInSemanticsDebugger(widgetKey: checkboxDisabledUnchecked, debuggerKey: debugger, tester: tester),
+      _getMessageShownInSemanticsDebugger(
+        widgetKey: checkboxDisabledUnchecked,
+        debuggerKey: debugger,
+        tester: tester,
+      ),
       'unchecked; disabled',
     );
   });
 
-  testWidgets('SemanticsDebugger textfield', (WidgetTester tester) async {
-    final UniqueKey textField = UniqueKey();
-    final UniqueKey debugger = UniqueKey();
-
+  testWidgets('SemanticsDebugger ignores duplicated label and tooltip for Android', (
+    WidgetTester tester,
+  ) async {
+    final Key child = UniqueKey();
+    final Key debugger = UniqueKey();
+    final isPlatformAndroid = defaultTargetPlatform == TargetPlatform.android;
     await tester.pumpWidget(
-      MaterialApp(
-        home: SemanticsDebugger(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SemanticsDebugger(
           key: debugger,
-          child: Material(
-            child: TextField(
-              key: textField,
-            ),
-          ),
+          child: Semantics(container: true, key: child, label: 'text', tooltip: 'text'),
         ),
       ),
     );
 
-    final dynamic semanticsDebuggerPainter = _getSemanticsDebuggerPainter(debuggerKey: debugger, tester: tester);
-    final RenderObject renderTextfield = tester.renderObject(find.descendant(of: find.byKey(textField), matching: find.byType(Semantics)).first);
-
     expect(
-      semanticsDebuggerPainter.getMessage(renderTextfield.debugSemantics),
-      'textfield',
+      _getMessageShownInSemanticsDebugger(widgetKey: child, debuggerKey: debugger, tester: tester),
+      isPlatformAndroid ? 'text' : 'text\ntext',
     );
+  }, variant: TargetPlatformVariant.all());
+
+  testWidgets('SemanticsDebugger textfield', (WidgetTester tester) async {
+    final textField = UniqueKey();
+    final debugger = UniqueKey();
+
+    await tester.pumpWidget(
+      TestWidgetsApp(
+        home: SemanticsDebugger(
+          key: debugger,
+          child: TestTextField(key: textField),
+        ),
+      ),
+    );
+
+    final dynamic semanticsDebuggerPainter = _getSemanticsDebuggerPainter(
+      debuggerKey: debugger,
+      tester: tester,
+    );
+    final RenderObject renderTextfield = tester.renderObject(find.byKey(textField));
+
+    final message =
+        // ignore: avoid_dynamic_calls
+        semanticsDebuggerPainter.getMessage(renderTextfield.debugSemantics) as String;
+    expect(message, contains('textfield'));
   });
 
   testWidgets('SemanticsDebugger label style is used in the painter.', (WidgetTester tester) async {
-    final UniqueKey debugger = UniqueKey();
-    const TextStyle labelStyle = TextStyle(color: Colors.amber);
+    final debugger = UniqueKey();
+    const labelStyle = TextStyle(color: _amber);
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: SemanticsDebugger(
           key: debugger,
           labelStyle: labelStyle,
-          child: Semantics(
-            label: 'label',
-            textDirection: TextDirection.ltr,
-          ),
+          child: Semantics(label: 'label', textDirection: TextDirection.ltr),
         ),
       ),
     );
 
-    expect(_getSemanticsDebuggerPainter(debuggerKey: debugger, tester: tester).labelStyle, labelStyle);
+    expect(
+      // ignore: avoid_dynamic_calls
+      _getSemanticsDebuggerPainter(debuggerKey: debugger, tester: tester).labelStyle,
+      labelStyle,
+    );
+  });
+
+  testWidgets('SemanticsDebugger label for rtl.', (WidgetTester tester) async {
+    final debugger = UniqueKey();
+    final Key label = UniqueKey();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.rtl,
+        child: SemanticsDebugger(
+          key: debugger,
+          child: Semantics(label: 'ملصق', textDirection: TextDirection.rtl, key: label),
+        ),
+      ),
+    );
+
+    expect(
+      _getMessageShownInSemanticsDebugger(widgetKey: label, debuggerKey: debugger, tester: tester),
+      '\u2067ملصق\u2069',
+    );
+  });
+
+  testWidgets('SemanticsDebugger turns on semantics.', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/issues/147665.
+    expect(tester.binding.semanticsEnabled, isFalse);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.rtl,
+        child: SemanticsDebugger(child: Semantics(label: 'Hello World')),
+      ),
+    );
+    expect(tester.binding.semanticsEnabled, isTrue);
+  }, semanticsEnabled: false);
+
+  testWidgets('SemanticsDebugger does not crash at zero area', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const TestWidgetsApp(
+        home: Center(
+          child: SizedBox.shrink(child: SemanticsDebugger(child: Placeholder())),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(SemanticsDebugger)), Size.zero);
   });
 }
 
 String _getMessageShownInSemanticsDebugger({
-  @required Key widgetKey,
-  @required Key debuggerKey,
-  @required WidgetTester tester,
+  required Key widgetKey,
+  required Key debuggerKey,
+  required WidgetTester tester,
 }) {
-  final dynamic semanticsDebuggerPainter = _getSemanticsDebuggerPainter(debuggerKey: debuggerKey, tester: tester);
-  return semanticsDebuggerPainter.getMessage(tester.renderObject(find.byKey(widgetKey)).debugSemantics) as String;
+  final dynamic semanticsDebuggerPainter = _getSemanticsDebuggerPainter(
+    debuggerKey: debuggerKey,
+    tester: tester,
+  );
+  // ignore: avoid_dynamic_calls
+  return semanticsDebuggerPainter.getMessage(
+    tester.renderObject(find.byKey(widgetKey)).debugSemantics,
+  ) as String;
 }
 
-dynamic _getSemanticsDebuggerPainter({
-  @required Key debuggerKey,
-  @required WidgetTester tester,
-}) {
-  final CustomPaint customPaint = tester.widgetList(find.descendant(
-    of: find.byKey(debuggerKey),
-    matching: find.byType(CustomPaint),
-  )).first as CustomPaint;
+dynamic _getSemanticsDebuggerPainter({required Key debuggerKey, required WidgetTester tester}) {
+  final customPaint =
+      tester
+              .widgetList(
+                find.descendant(of: find.byKey(debuggerKey), matching: find.byType(CustomPaint)),
+              )
+              .first
+          as CustomPaint;
   final dynamic semanticsDebuggerPainter = customPaint.foregroundPainter;
   expect(semanticsDebuggerPainter.runtimeType.toString(), '_SemanticsDebuggerPainter');
   return semanticsDebuggerPainter;

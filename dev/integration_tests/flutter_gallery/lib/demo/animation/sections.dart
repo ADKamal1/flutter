@@ -14,16 +14,11 @@ const Color _mySin = Color(0xFFF3A646);
 const String _kGalleryAssetsPackage = 'flutter_gallery_assets';
 
 class SectionDetail {
-  const SectionDetail({
-    this.title,
-    this.subtitle,
-    this.imageAsset,
-    this.imageAssetPackage,
-  });
-  final String title;
-  final String subtitle;
-  final String imageAsset;
-  final String imageAssetPackage;
+  const SectionDetail({this.title, this.subtitle, this.imageAsset, this.imageAssetPackage});
+  final String? title;
+  final String? subtitle;
+  final String? imageAsset;
+  final String? imageAssetPackage;
 }
 
 @immutable
@@ -36,17 +31,16 @@ class Section {
     this.rightColor,
     this.details,
   });
-  final String title;
-  final String backgroundAsset;
-  final String backgroundAssetPackage;
-  final Color leftColor;
-  final Color rightColor;
-  final List<SectionDetail> details;
+  final String? title;
+  final String? backgroundAsset;
+  final String? backgroundAssetPackage;
+  final Color? leftColor;
+  final Color? rightColor;
+  final List<SectionDetail>? details;
 
   @override
-  bool operator==(Object other) {
-    return other is Section
-        && other.title == title;
+  bool operator ==(Object other) {
+    return other is Section && other.title == title;
   }
 
   @override

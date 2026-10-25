@@ -2,9 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/material.dart';
+///
+/// @docImport 'monodrag.dart';
+/// @docImport 'recognizer.dart';
+/// @docImport 'tap.dart';
+library;
 
 import 'arena.dart';
 import 'binding.dart';
+
+export 'arena.dart' show GestureArenaEntry, GestureArenaMember;
 
 class _CombiningGestureArenaEntry implements GestureArenaEntry {
   _CombiningGestureArenaEntry(this._combiner, this._member);
@@ -36,8 +44,9 @@ class _CombiningGestureArenaMember extends GestureArenaMember {
     _close();
     _winner ??= _owner.captain ?? _members[0];
     for (final GestureArenaMember member in _members) {
-      if (member != _winner)
+      if (member != _winner) {
         member.rejectGesture(pointer);
+      }
     }
     _winner!.acceptGesture(pointer);
   }
@@ -46,8 +55,9 @@ class _CombiningGestureArenaMember extends GestureArenaMember {
   void rejectGesture(int pointer) {
     assert(_pointer == pointer);
     _close();
-    for (final GestureArenaMember member in _members)
+    for (final GestureArenaMember member in _members) {
       member.rejectGesture(pointer);
+    }
   }
 
   void _close() {
@@ -61,22 +71,24 @@ class _CombiningGestureArenaMember extends GestureArenaMember {
     assert(!_resolved);
     assert(_pointer == pointer);
     _members.add(member);
-    _entry ??= GestureBinding.instance!.gestureArena.add(pointer, this);
+    _entry ??= GestureBinding.instance.gestureArena.add(pointer, this);
     return _CombiningGestureArenaEntry(this, member);
   }
 
   void _resolve(GestureArenaMember member, GestureDisposition disposition) {
-    if (_resolved)
+    if (_resolved) {
       return;
-    if (disposition == GestureDisposition.rejected) {
-      _members.remove(member);
-      member.rejectGesture(_pointer);
-      if (_members.isEmpty)
+    }
+    switch (disposition) {
+      case GestureDisposition.accepted:
+        _winner ??= _owner.captain ?? member;
         _entry!.resolve(disposition);
-    } else {
-      assert(disposition == GestureDisposition.accepted);
-      _winner ??= _owner.captain ?? member;
-      _entry!.resolve(disposition);
+      case GestureDisposition.rejected:
+        _members.remove(member);
+        member.rejectGesture(_pointer);
+        if (_members.isEmpty) {
+          _entry!.resolve(disposition);
+        }
     }
   }
 }
@@ -114,11 +126,13 @@ class _CombiningGestureArenaMember extends GestureArenaMember {
 /// [AndroidView] uses a team with a captain to decide which gestures are
 /// forwarded to the native view. For example if we want to forward taps and
 /// vertical scrolls to a native Android view, [TapGestureRecognizer]s and
-/// [VerticalDragGestureRecognizer] are added to a team with a captain(the captain is set to be a
-/// gesture recognizer that never explicitly claims the gesture).
-/// The captain allows [AndroidView] to know when any gestures in the team has been
-/// recognized (or all other arena members are out), once the captain wins the
-/// gesture is forwarded to the Android view.
+/// [VerticalDragGestureRecognizer] are added to a team with a captain (the
+/// captain is set to be a gesture recognizer that never explicitly claims the
+/// gesture).
+///
+/// The captain allows [AndroidView] to know when any gestures in the team has
+/// been recognized (or all other arena members are out), once the captain wins
+/// the gesture is forwarded to the Android view.
 ///
 /// To assign a gesture recognizer to a team, set
 /// [OneSequenceGestureRecognizer.team] to an instance of [GestureArenaTeam].
@@ -141,7 +155,9 @@ class GestureArenaTeam {
   /// [OneSequenceGestureRecognizer.team].
   GestureArenaEntry add(int pointer, GestureArenaMember member) {
     final _CombiningGestureArenaMember combiner = _combiners.putIfAbsent(
-        pointer, () => _CombiningGestureArenaMember(this, pointer));
+      pointer,
+      () => _CombiningGestureArenaMember(this, pointer),
+    );
     return combiner._add(pointer, member);
   }
 }

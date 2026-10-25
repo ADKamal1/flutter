@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 
 import 'tolerance.dart';
 
+export 'tolerance.dart' show Tolerance;
+
 /// The base class for all simulations.
 ///
 /// A simulation models an object, in a one-dimensional space, on which particular
@@ -33,7 +35,7 @@ import 'tolerance.dart';
 /// related objects.
 abstract class Simulation {
   /// Initializes the [tolerance] field for subclasses.
-  Simulation({ this.tolerance = Tolerance.defaultTolerance });
+  Simulation({this.tolerance = Tolerance.defaultTolerance});
 
   /// The position of the object in the simulation at the given time.
   double x(double time);

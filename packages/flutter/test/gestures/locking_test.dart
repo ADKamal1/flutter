@@ -2,24 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 typedef HandleEventCallback = void Function(PointerEvent event);
 
 class TestGestureFlutterBinding extends BindingBase with GestureBinding {
-  HandleEventCallback callback;
+  HandleEventCallback? callback;
 
   @override
   void handleEvent(PointerEvent event, HitTestEntry entry) {
-    if (callback != null)
-      callback(event);
+    callback?.call(event);
     super.handleEvent(event, entry);
   }
 
@@ -31,28 +27,22 @@ class TestGestureFlutterBinding extends BindingBase with GestureBinding {
   );
 
   Future<void> test(VoidCallback callback) {
-    assert(callback != null);
     return _binding.lockEvents(() async {
-      ui.window.onPointerDataPacket(packet);
+      GestureBinding.instance.platformDispatcher.onPointerDataPacket?.call(packet);
       callback();
     });
   }
 }
 
-TestGestureFlutterBinding _binding = TestGestureFlutterBinding();
-
-void ensureTestGestureBinding() {
-  _binding ??= TestGestureFlutterBinding();
-  assert(GestureBinding.instance != null);
-}
+late TestGestureFlutterBinding _binding;
 
 void main() {
-  setUp(ensureTestGestureBinding);
+  _binding = TestGestureFlutterBinding();
 
   test('Pointer events are locked during reassemble', () async {
-    final List<PointerEvent> events = <PointerEvent>[];
+    final events = <PointerEvent>[];
     _binding.callback = events.add;
-    bool tested = false;
+    var tested = false;
     await _binding.test(() {
       expect(events.length, 0);
       tested = true;

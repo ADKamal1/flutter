@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('Intrinsic stepWidth, stepHeight', (WidgetTester tester) async {
     // Regression test for https://github.com/flutter/flutter/issues/25224
-    Widget buildFrame(double stepWidth, double stepHeight) {
+    Widget buildFrame(double? stepWidth, double? stepHeight) {
       return Center(
         child: IntrinsicWidth(
           stepWidth: stepWidth,
@@ -26,7 +24,23 @@ void main() {
     await tester.pumpWidget(buildFrame(0.0, 0.0));
     expect(tester.getSize(find.byType(IntrinsicWidth)), const Size(100.0, 50.0));
 
-    expect(() { buildFrame(-1.0, 0.0); }, throwsAssertionError);
-    expect(() { buildFrame(0.0, -1.0); }, throwsAssertionError);
+    expect(() {
+      buildFrame(-1.0, 0.0);
+    }, throwsAssertionError);
+    expect(() {
+      buildFrame(0.0, -1.0);
+    }, throwsAssertionError);
+  });
+
+  testWidgets('IntrinsicWidth does not crash at zero area', (WidgetTester tester) async {
+    tester.view.physicalSize = Size.zero;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: IntrinsicWidth(child: Placeholder())),
+      ),
+    );
+    expect(tester.getSize(find.byType(IntrinsicWidth)), Size.zero);
   });
 }

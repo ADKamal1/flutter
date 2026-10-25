@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
+/// @docImport 'elevated_button.dart';
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -10,14 +11,17 @@ import 'package:flutter/widgets.dart';
 import 'button_style.dart';
 import 'theme.dart';
 
+// Examples can assume:
+// late BuildContext context;
+
 /// A [ButtonStyle] that overrides the default appearance of
 /// [ElevatedButton]s when it's used with [ElevatedButtonTheme] or with the
 /// overall [Theme]'s [ThemeData.elevatedButtonTheme].
 ///
 /// The [style]'s properties override [ElevatedButton]'s default style,
-/// i.e.  the [ButtonStyle] returned by [ElevatedButton.defaultStyleOf]. Only
+/// i.e. the [ButtonStyle] returned by [ElevatedButton.defaultStyleOf]. Only
 /// the style's non-null property values or resolved non-null
-/// [MaterialStateProperty] values are used.
+/// [WidgetStateProperty] values are used.
 ///
 /// See also:
 ///
@@ -26,8 +30,8 @@ import 'theme.dart';
 ///    for text buttons.
 ///  * [ElevatedButton.styleFrom], which converts simple values into a
 ///    [ButtonStyle] that's consistent with [ElevatedButton]'s defaults.
-///  * [MaterialStateProperty.resolve], "resolve" a material state property
-///    to a simple value based on a set of [MaterialState]s.
+///  * [WidgetStateProperty.resolve], "resolve" a material state property
+///    to a simple value based on a set of [WidgetState]s.
 ///  * [ThemeData.elevatedButtonTheme], which can be used to override the default
 ///    [ButtonStyle] for [ElevatedButton]s below the overall [Theme].
 @immutable
@@ -35,38 +39,40 @@ class ElevatedButtonThemeData with Diagnosticable {
   /// Creates an [ElevatedButtonThemeData].
   ///
   /// The [style] may be null.
-  const ElevatedButtonThemeData({ this.style });
+  const ElevatedButtonThemeData({this.style});
 
   /// Overrides for [ElevatedButton]'s default style.
   ///
-  /// Non-null properties or non-null resolved [MaterialStateProperty]
+  /// Non-null properties or non-null resolved [WidgetStateProperty]
   /// values override the [ButtonStyle] returned by
   /// [ElevatedButton.defaultStyleOf].
   ///
   /// If [style] is null, then this theme doesn't override anything.
-  final ButtonStyle style;
+  final ButtonStyle? style;
 
   /// Linearly interpolate between two elevated button themes.
-  static ElevatedButtonThemeData lerp(ElevatedButtonThemeData a, ElevatedButtonThemeData b, double t) {
-    assert (t != null);
-    if (a == null && b == null)
-      return null;
-    return ElevatedButtonThemeData(
-      style: ButtonStyle.lerp(a?.style, b?.style, t),
-    );
+  static ElevatedButtonThemeData? lerp(
+    ElevatedButtonThemeData? a,
+    ElevatedButtonThemeData? b,
+    double t,
+  ) {
+    if (identical(a, b)) {
+      return a;
+    }
+    return ElevatedButtonThemeData(style: ButtonStyle.lerp(a?.style, b?.style, t));
   }
 
   @override
-  int get hashCode {
-    return style.hashCode;
-  }
+  int get hashCode => style.hashCode;
 
   @override
   bool operator ==(Object other) {
-    if (identical(this, other))
+    if (identical(this, other)) {
       return true;
-    if (other.runtimeType != runtimeType)
+    }
+    if (other.runtimeType != runtimeType) {
       return false;
+    }
     return other is ElevatedButtonThemeData && other.style == style;
   }
 
@@ -90,18 +96,12 @@ class ElevatedButtonThemeData with Diagnosticable {
 ///    [ButtonStyle] for [ElevatedButton]s below the overall [Theme].
 class ElevatedButtonTheme extends InheritedTheme {
   /// Create a [ElevatedButtonTheme].
-  ///
-  /// The [data] parameter must not be null.
-  const ElevatedButtonTheme({
-    Key key,
-    @required this.data,
-    Widget child,
-  }) : assert(data != null), super(key: key, child: child);
+  const ElevatedButtonTheme({super.key, required this.data, required super.child});
 
   /// The configuration of this theme.
   final ElevatedButtonThemeData data;
 
-  /// The closest instance of this class that encloses the given context.
+  /// Retrieves the [ElevatedButtonThemeData] from the closest ancestor [ElevatedButtonTheme].
   ///
   /// If there is no enclosing [ElevatedButtonTheme] widget, then
   /// [ThemeData.elevatedButtonTheme] is used.
@@ -109,17 +109,17 @@ class ElevatedButtonTheme extends InheritedTheme {
   /// Typical usage is as follows:
   ///
   /// ```dart
-  /// ElevatedButtonTheme theme = ElevatedButtonTheme.of(context);
+  /// ElevatedButtonThemeData theme = ElevatedButtonTheme.of(context);
   /// ```
   static ElevatedButtonThemeData of(BuildContext context) {
-    final ElevatedButtonTheme buttonTheme = context.dependOnInheritedWidgetOfExactType<ElevatedButtonTheme>();
+    final ElevatedButtonTheme? buttonTheme = context
+        .dependOnInheritedWidgetOfExactType<ElevatedButtonTheme>();
     return buttonTheme?.data ?? Theme.of(context).elevatedButtonTheme;
   }
 
   @override
   Widget wrap(BuildContext context, Widget child) {
-    final ElevatedButtonTheme ancestorTheme = context.findAncestorWidgetOfExactType<ElevatedButtonTheme>();
-    return identical(this, ancestorTheme) ? child : ElevatedButtonTheme(data: data, child: child);
+    return ElevatedButtonTheme(data: data, child: child);
   }
 
   @override

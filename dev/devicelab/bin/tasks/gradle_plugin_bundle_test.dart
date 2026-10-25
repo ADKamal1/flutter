@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:io';
-
 import 'package:flutter_devicelab/framework/apk_utils.dart';
 import 'package:flutter_devicelab/framework/framework.dart';
+import 'package:flutter_devicelab/framework/task_result.dart';
 import 'package:flutter_devicelab/framework/utils.dart';
 import 'package:path/path.dart' as path;
 
@@ -19,7 +18,10 @@ Future<void> main() async {
     try {
       await runProjectTest((FlutterProject project) async {
         section('App bundle content for task bundleRelease without explicit target platform');
-        await project.runGradleTask('bundleRelease');
+
+        await inDirectory(project.rootPath, () {
+          return flutter('build', options: <String>['appbundle']);
+        });
 
         final String releaseBundle = path.join(
           project.rootPath,
@@ -37,24 +39,26 @@ Future<void> main() async {
           'base/lib/arm64-v8a/libflutter.so',
           'base/lib/armeabi-v7a/libapp.so',
           'base/lib/armeabi-v7a/libflutter.so',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libflutter.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libflutter.so.sym',
         ], await getFilesInAppBundle(releaseBundle));
       });
 
       await runProjectTest((FlutterProject project) async {
-        if (Platform.isWindows) {
-          // https://github.com/flutter/flutter/issues/42985
-          return;
-        }
         section('App bundle content using flavors without explicit target platform');
         // Add a few flavors.
-        await project.addProductFlavors(<String> [
+        await project.addProductFlavors(<String>[
           'production',
           'staging',
           'development',
           'flavor_underscore', // https://github.com/flutter/flutter/issues/36067
         ]);
         // Build the production flavor in release mode.
-        await project.runGradleTask('bundleProductionRelease');
+        await inDirectory(project.rootPath, () {
+          return flutter('build', options: <String>['appbundle', '--flavor', 'production']);
+        });
 
         final String bundleFromGradlePath = path.join(
           project.rootPath,
@@ -72,20 +76,16 @@ Future<void> main() async {
           'base/lib/arm64-v8a/libflutter.so',
           'base/lib/armeabi-v7a/libapp.so',
           'base/lib/armeabi-v7a/libflutter.so',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libflutter.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libflutter.so.sym',
         ], await getFilesInAppBundle(bundleFromGradlePath));
 
         section('Build app bundle using the flutter tool - flavor: flavor_underscore');
 
-        int exitCode;
-        await inDirectory(project.rootPath, () async {
-          exitCode = await flutter(
-            'build',
-            options: <String>[
-              'appbundle',
-              '--flavor=flavor_underscore',
-              '--verbose',
-            ],
-          );
+        int exitCode = await inDirectory(project.rootPath, () {
+          return flutter('build', options: <String>['appbundle', '--flavor=flavor_underscore']);
         });
 
         if (exitCode != 0) {
@@ -108,19 +108,16 @@ Future<void> main() async {
           'base/lib/arm64-v8a/libflutter.so',
           'base/lib/armeabi-v7a/libapp.so',
           'base/lib/armeabi-v7a/libflutter.so',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libflutter.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libflutter.so.sym',
         ], await getFilesInAppBundle(flavorUnderscoreBundlePath));
 
         section('Build app bundle using the flutter tool - flavor: production');
 
-        await inDirectory(project.rootPath, () async {
-          exitCode = await flutter(
-            'build',
-            options: <String>[
-              'appbundle',
-              '--flavor=production',
-              '--verbose',
-            ],
-          );
+        exitCode = await inDirectory(project.rootPath, () {
+          return flutter('build', options: <String>['appbundle', '--flavor=production']);
         });
 
         if (exitCode != 0) {
@@ -143,13 +140,19 @@ Future<void> main() async {
           'base/lib/arm64-v8a/libflutter.so',
           'base/lib/armeabi-v7a/libapp.so',
           'base/lib/armeabi-v7a/libflutter.so',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libapp.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/libflutter.so.sym',
+          'BUNDLE-METADATA/com.android.tools.build.debugsymbols/armeabi-v7a/libflutter.so.sym',
         ], await getFilesInAppBundle(productionBundlePath));
       });
 
       await runProjectTest((FlutterProject project) async {
         section('App bundle content for task bundleRelease with target platform = android-arm');
-        await project.runGradleTask('bundleRelease',
-            options: <String>['-Ptarget-platform=android-arm']);
+
+        await inDirectory(project.rootPath, () {
+          return flutter('build', options: <String>['appbundle', '--target-platform=android-arm']);
+        });
 
         final String releaseBundle = path.join(
           project.rootPath,
@@ -177,7 +180,8 @@ Future<void> main() async {
       return TaskResult.success(null);
     } on TaskResult catch (taskResult) {
       return taskResult;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Task exception stack trace:\n$stackTrace');
       return TaskResult.failure(e.toString());
     }
   });

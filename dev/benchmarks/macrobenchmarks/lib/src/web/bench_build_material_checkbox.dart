@@ -14,7 +14,7 @@ class BenchBuildMaterialCheckbox extends WidgetBuildRecorder {
 
   static const String benchmarkName = 'build_material_checkbox';
 
-  static bool _isChecked;
+  static bool? _isChecked;
 
   @override
   Widget createWidget() {
@@ -31,13 +31,11 @@ class BenchBuildMaterialCheckbox extends WidgetBuildRecorder {
   }
 
   Row _buildRow() {
-    if (_isChecked == null) {
-      _isChecked = true;
-    } else if (_isChecked) {
-      _isChecked = false;
-    } else {
-      _isChecked = null;
-    }
+    _isChecked = switch (_isChecked) {
+      null => true,
+      true => false,
+      false => null,
+    };
 
     return Row(
       children: List<Widget>.generate(10, (int i) {
@@ -45,7 +43,7 @@ class BenchBuildMaterialCheckbox extends WidgetBuildRecorder {
           child: Checkbox(
             value: _isChecked,
             tristate: true,
-            onChanged: (bool newValue) {
+            onChanged: (bool? newValue) {
               // Intentionally empty.
             },
           ),

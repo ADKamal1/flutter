@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/gestures.dart';
 
 const List<PointerEvent> velocityEventData = <PointerEvent>[
@@ -1575,7 +1573,6 @@ const List<PointerEvent> interruptedVelocityEventData = <PointerEvent>[
   // The pointer "stops" here because we've introduced a 40+ms gap
   // in the move event stream. See kAssumePointerMoveStoppedMilliseconds
   // in velocity_tracker.dart.
-
   PointerMoveEvent(
     timeStamp: Duration(milliseconds: 216698374 + 40),
     pointer: 13,

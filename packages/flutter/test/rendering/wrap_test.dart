@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tester.dart';
 
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   test('Wrap test; toStringDeep', () {
-    final RenderWrap renderWrap = RenderWrap();
+    final renderWrap = RenderWrap();
     expect(renderWrap, hasAGoodToStringDeep);
     expect(
       renderWrap.toStringDeep(minLevel: DiagnosticLevel.info),
@@ -25,34 +25,25 @@ void main() {
         '   spacing: 0.0\n'
         '   runAlignment: start\n'
         '   runSpacing: 0.0\n'
-        '   crossAxisAlignment: 0.0\n'
+        '   crossAxisAlignment: 0.0\n',
       ),
     );
   });
 
   test('Compute intrinsic height test', () {
-    final List<RenderBox> children = <RenderBox>[
+    final children = <RenderBox>[
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
     ];
 
-    final RenderWrap renderWrap = RenderWrap();
+    final renderWrap = RenderWrap();
 
     children.forEach(renderWrap.add);
 
@@ -71,8 +62,8 @@ void main() {
   });
 
   test('Compute intrinsic height test for width-in-height-out children', () {
-    const double lineHeight = 15.0;
-    final RenderWrap renderWrap = RenderWrap();
+    const lineHeight = 15.0;
+    final renderWrap = RenderWrap();
     renderWrap.add(
       RenderParagraph(
         const TextSpan(
@@ -93,8 +84,8 @@ void main() {
   });
 
   test('Compute intrinsic width test for height-in-width-out children', () {
-    const double lineHeight = 15.0;
-    final RenderWrap renderWrap = RenderWrap();
+    const lineHeight = 15.0;
+    final renderWrap = RenderWrap();
     renderWrap.add(
       // Rotates a width-in-height-out render object to make it height-in-width-out.
       RenderRotatedBox(
@@ -105,7 +96,7 @@ void main() {
             style: TextStyle(fontSize: lineHeight),
           ),
           textDirection: TextDirection.ltr,
-        )
+        ),
       ),
     );
 
@@ -119,28 +110,19 @@ void main() {
   });
 
   test('Compute intrinsic width test', () {
-    final List<RenderBox> children = <RenderBox>[
+    final children = <RenderBox>[
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
       RenderConstrainedBox(
-        additionalConstraints: const BoxConstraints(
-          minWidth: 80,
-          minHeight: 80,
-        ),
+        additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
       ),
     ];
 
-    final RenderWrap renderWrap = RenderWrap();
+    final renderWrap = RenderWrap();
 
     children.forEach(renderWrap.add);
 
@@ -160,13 +142,10 @@ void main() {
 
   test('Compute intrinsic height for only one run', () {
     final RenderBox child = RenderConstrainedBox(
-      additionalConstraints: const BoxConstraints(
-        minWidth: 80,
-        minHeight: 80,
-      ),
+      additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
     );
 
-    final RenderWrap renderWrap = RenderWrap();
+    final renderWrap = RenderWrap();
     renderWrap.add(child);
 
     renderWrap.spacing = 5;
@@ -183,13 +162,10 @@ void main() {
 
   test('Compute intrinsic width for only one run', () {
     final RenderBox child = RenderConstrainedBox(
-      additionalConstraints: const BoxConstraints(
-        minWidth: 80,
-        minHeight: 80,
-      ),
+      additionalConstraints: const BoxConstraints(minWidth: 80, minHeight: 80),
     );
 
-    final RenderWrap renderWrap = RenderWrap();
+    final renderWrap = RenderWrap();
     renderWrap.add(child);
 
     renderWrap.spacing = 5;
@@ -205,20 +181,33 @@ void main() {
   });
 
   test('Wrap respects clipBehavior', () {
-    const BoxConstraints viewport = BoxConstraints(maxHeight: 100.0, maxWidth: 100.0);
-    final TestClipPaintingContext context = TestClipPaintingContext();
+    const viewport = BoxConstraints(maxHeight: 100.0, maxWidth: 100.0);
+    final context = TestClipPaintingContext();
 
-    // By default, clipBehavior should be Clip.none
-    final RenderWrap defaultWrap = RenderWrap(textDirection: TextDirection.ltr, children: <RenderBox>[box200x200]);
-    layout(defaultWrap, constraints: viewport, phase: EnginePhase.composite, onErrors: expectOverflowedErrors);
-    defaultWrap.paint(context, Offset.zero);
-    expect(context.clipBehavior, equals(Clip.none));
-
-    for (final Clip clip in Clip.values) {
-      final RenderWrap wrap = RenderWrap(textDirection: TextDirection.ltr, children: <RenderBox>[box200x200], clipBehavior: clip);
-      layout(wrap, constraints: viewport, phase: EnginePhase.composite, onErrors: expectOverflowedErrors);
-      wrap.paint(context, Offset.zero);
-      expect(context.clipBehavior, equals(clip));
+    for (final clip in <Clip?>[null, ...Clip.values]) {
+      final RenderWrap wrap;
+      switch (clip) {
+        case Clip.none:
+        case Clip.hardEdge:
+        case Clip.antiAlias:
+        case Clip.antiAliasWithSaveLayer:
+          wrap = RenderWrap(
+            textDirection: TextDirection.ltr,
+            children: <RenderBox>[box200x200],
+            clipBehavior: clip!,
+          );
+        case null:
+          wrap = RenderWrap(textDirection: TextDirection.ltr, children: <RenderBox>[box200x200]);
+      }
+      layout(
+        wrap,
+        constraints: viewport,
+        phase: EnginePhase.composite,
+        onErrors: expectNoFlutterErrors,
+      );
+      context.paintChild(wrap, Offset.zero);
+      // By default, clipBehavior should be Clip.none
+      expect(context.clipBehavior, equals(clip ?? Clip.none));
     }
   });
 }

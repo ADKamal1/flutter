@@ -2,33 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-class TestRoute<T> extends PageRoute<T> {
-  TestRoute({ this.child, RouteSettings settings }) : super(settings: settings);
-
-  final Widget child;
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 150);
-
-  @override
-  Color get barrierColor => null;
-
-  @override
-  String get barrierLabel => null;
-
-  @override
-  bool get maintainState => false;
-
-  @override
-  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
-    return child;
-  }
-}
+import 'route_tester.dart';
 
 Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
@@ -58,9 +35,11 @@ void main() {
     expect(find.byType(Navigator), findsOneWidget);
     expect(find.byType(PerformanceOverlay), findsOneWidget);
     expect(find.byType(CheckedModeBanner), findsOneWidget);
+    WidgetsApp.showPerformanceOverlayOverride = false;
   });
 
   testWidgets('showPerformanceOverlayOverride false', (WidgetTester tester) async {
+    WidgetsApp.showPerformanceOverlayOverride = true;
     expect(WidgetsApp.showPerformanceOverlayOverride, true);
     WidgetsApp.showPerformanceOverlayOverride = false;
     await pumpApp(tester);
@@ -79,9 +58,11 @@ void main() {
     expect(find.byType(Navigator), findsOneWidget);
     expect(find.byType(PerformanceOverlay), findsNothing);
     expect(find.byType(CheckedModeBanner), findsNothing);
+    WidgetsApp.debugAllowBannerOverride = true; // restore to default value
   });
 
   testWidgets('debugAllowBannerOverride true', (WidgetTester tester) async {
+    WidgetsApp.debugAllowBannerOverride = false;
     expect(WidgetsApp.showPerformanceOverlayOverride, false);
     expect(WidgetsApp.debugAllowBannerOverride, false);
     WidgetsApp.debugAllowBannerOverride = true;

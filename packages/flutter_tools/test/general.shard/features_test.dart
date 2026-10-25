@@ -2,449 +2,589 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_tools/src/base/config.dart';
+import 'package:file/memory.dart';
+import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/features.dart';
-import 'package:flutter_tools/src/version.dart';
-import 'package:mockito/mockito.dart';
+import 'package:flutter_tools/src/flutter_features.dart';
+import 'package:flutter_tools/src/flutter_features_config.dart';
 
 import '../src/common.dart';
-import '../src/testbed.dart';
+import '../src/context.dart';
+import '../src/fakes.dart';
 
 void main() {
   group('Features', () {
-    MockFlutterVerion mockFlutterVerion;
-    MockFlutterConfig mockFlutterConfig;
-    MockPlatform mockPlatform;
-    Testbed testbed;
-
-    setUp(() {
-      mockFlutterVerion = MockFlutterVerion();
-      mockFlutterConfig = MockFlutterConfig();
-      mockPlatform = MockPlatform();
-      when<bool>(mockFlutterConfig.getValue(any) as bool).thenReturn(false);
-      when(mockPlatform.environment).thenReturn(const <String, String>{});
-      testbed = Testbed(overrides: <Type, Generator>{
-        FlutterVersion: () => mockFlutterVerion,
-        FeatureFlags: () => const FlutterFeatureFlags(),
-        Config: () => mockFlutterConfig,
-        Platform: () => mockPlatform,
-      });
-    });
-
-    test('setting has safe defaults', () {
-      const FeatureChannelSetting featureSetting = FeatureChannelSetting();
+    testWithoutContext('setting has safe defaults', () {
+      const featureSetting = FeatureChannelSetting();
 
       expect(featureSetting.available, false);
       expect(featureSetting.enabledByDefault, false);
     });
 
-    test('has safe defaults', () {
-      const Feature feature = Feature(name: 'example');
+    testWithoutContext('has safe defaults', () {
+      const feature = Feature(name: 'example');
 
       expect(feature.name, 'example');
       expect(feature.environmentOverride, null);
       expect(feature.configSetting, null);
+      expect(feature.warningMessageOnDisable, null);
     });
 
-    test('retrieves the correct setting for each branch', () {
-      final FeatureChannelSetting masterSetting = FeatureChannelSetting(available: nonconst(true));
-      final FeatureChannelSetting devSetting = FeatureChannelSetting(available: nonconst(true));
-      final FeatureChannelSetting betaSetting = FeatureChannelSetting(available: nonconst(true));
-      final FeatureChannelSetting stableSetting = FeatureChannelSetting(available: nonconst(true));
-      final Feature feature = Feature(
+    testWithoutContext('retrieves the correct setting for each branch', () {
+      const masterSetting = FeatureChannelSetting(available: true);
+      const betaSetting = FeatureChannelSetting(available: true);
+      const stableSetting = FeatureChannelSetting(available: true);
+      const feature = Feature(
         name: 'example',
         master: masterSetting,
-        dev: devSetting,
         beta: betaSetting,
         stable: stableSetting,
       );
 
       expect(feature.getSettingForChannel('master'), masterSetting);
-      expect(feature.getSettingForChannel('dev'), devSetting);
       expect(feature.getSettingForChannel('beta'), betaSetting);
       expect(feature.getSettingForChannel('stable'), stableSetting);
       expect(feature.getSettingForChannel('unknown'), masterSetting);
     });
 
-    test('env variables are only enabled with "true" string', () => testbed.run(() {
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'hello'});
-
-      expect(featureFlags.isWebEnabled, false);
-
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'true'});
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web help string', () {
-      expect(flutterWebFeature.generateHelpMessage(),
-      'Enable or disable Flutter for web. '
-      'This setting will take effect on the master, dev, and beta channels.');
-    });
-
-    test('flutter macOS desktop help string', () {
-      expect(flutterMacOSDesktopFeature.generateHelpMessage(),
-      'Enable or disable Flutter for desktop on macOS. '
-      'This setting will take effect on the master and dev channels.');
-    });
-
-    test('flutter Linux desktop help string', () {
-      expect(flutterLinuxDesktopFeature.generateHelpMessage(),
-      'Enable or disable Flutter for desktop on Linux. '
-      'This setting will take effect on the master and dev channels.');
-    });
-
-    test('flutter Windows desktop help string', () {
-      expect(flutterWindowsDesktopFeature.generateHelpMessage(),
-      'Enable or disable Flutter for desktop on Windows. '
-      'This setting will take effect on the master and dev channels.');
-    });
-
-    test('help string on multiple channels', () {
-      const Feature testFeature = Feature(
+    testWithoutContext('reads from configuration if available', () {
+      const exampleFeature = Feature(
         name: 'example',
         master: FeatureChannelSetting(available: true),
-        dev: FeatureChannelSetting(available: true),
-        beta: FeatureChannelSetting(available: true),
-        stable: FeatureChannelSetting(available: true),
-        configSetting: 'foo',
       );
 
-      expect(testFeature.generateHelpMessage(), 'Enable or disable example. '
-          'This setting will take effect on the master, dev, beta, and stable channels.');
+      final flags = FlutterFeatureFlags(
+        flutterVersion: FakeFlutterVersion(),
+        featuresConfig: _FakeFeaturesConfig()..cannedResponse[exampleFeature] = true,
+        platform: FakePlatform(),
+      );
+      expect(flags.isEnabled(exampleFeature), true);
     });
 
-    /// Flutter Web
-
-    test('flutter web off by default on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    test('flutter web enabled with config on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when<bool>(mockFlutterConfig.getValue('enable-web') as bool).thenReturn(true);
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web enabled with environment variable on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'true'});
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web off by default on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    test('flutter web enabled with config on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when<bool>(mockFlutterConfig.getValue('enable-web') as bool).thenReturn(true);
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web enabled with environment variable on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'true'});
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web off by default on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    test('flutter web enabled with config on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when<bool>(mockFlutterConfig.getValue('enable-web') as bool).thenReturn(true);
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web not enabled with environment variable on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'true'});
-
-      expect(featureFlags.isWebEnabled, true);
-    }));
-
-    test('flutter web off by default on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    test('flutter web not enabled with config on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when<bool>(mockFlutterConfig.getValue('enable-web') as bool).thenReturn(true);
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    test('flutter web not enabled with environment variable on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WEB': 'enabled'});
-
-      expect(featureFlags.isWebEnabled, false);
-    }));
-
-    /// Flutter macOS desktop.
-
-    test('flutter macos desktop off by default on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop enabled with config on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when<bool>(mockFlutterConfig.getValue('enable-macos-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isMacOSEnabled, true);
-    }));
-
-    test('flutter macos desktop enabled with environment variable on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_MACOS': 'true'});
-
-      expect(featureFlags.isMacOSEnabled, true);
-    }));
-
-    test('flutter macos desktop off by default on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop enabled with config on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when<bool>(mockFlutterConfig.getValue('enable-macos-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isMacOSEnabled, true);
-    }));
-
-    test('flutter macos desktop enabled with environment variable on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_MACOS': 'true'});
-
-      expect(featureFlags.isMacOSEnabled, true);
-    }));
-
-    test('flutter macos desktop off by default on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('fflutter macos desktop not enabled with config on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when<bool>(mockFlutterConfig.getValue('flutter-desktop-macos') as bool).thenReturn(true);
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop not enabled with environment variable on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_MACOS': 'true'});
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop off by default on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop not enabled with config on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when<bool>(mockFlutterConfig.getValue('flutter-desktop-macos') as bool).thenReturn(true);
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    test('flutter macos desktop not enabled with environment variable on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_MACOS': 'true'});
-
-      expect(featureFlags.isMacOSEnabled, false);
-    }));
-
-    /// Flutter Linux Desktop
-    test('flutter linux desktop off by default on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop enabled with config on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when<bool>(mockFlutterConfig.getValue('enable-linux-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isLinuxEnabled, true);
-    }));
-
-    test('flutter linux desktop enabled with environment variable on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_LINUX': 'true'});
-
-      expect(featureFlags.isLinuxEnabled, true);
-    }));
-
-    test('flutter linux desktop off by default on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop enabled with config on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when<bool>(mockFlutterConfig.getValue('enable-linux-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isLinuxEnabled, true);
-    }));
-
-    test('flutter linux desktop enabled with environment variable on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_LINUX': 'true'});
-
-      expect(featureFlags.isLinuxEnabled, true);
-    }));
-
-    test('flutter linux desktop off by default on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('fflutter linux desktop not enabled with config on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when<bool>(mockFlutterConfig.getValue('enable-linux-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop not enabled with environment variable on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_LINUX': 'true'});
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop off by default on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop not enabled with config on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when<bool>(mockFlutterConfig.getValue('enable-linux-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    test('flutter linux desktop not enabled with environment variable on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_LINUX': 'true'});
-
-      expect(featureFlags.isLinuxEnabled, false);
-    }));
-
-    /// Flutter Windows desktop.
-    test('flutter windows desktop off by default on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop enabled with config on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when<bool>(mockFlutterConfig.getValue('enable-windows-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isWindowsEnabled, true);
-    }));
-
-    test('flutter windows desktop enabled with environment variable on master', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('master');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WINDOWS': 'true'});
-
-      expect(featureFlags.isWindowsEnabled, true);
-    }));
-
-    test('flutter windows desktop off by default on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop enabled with config on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when<bool>(mockFlutterConfig.getValue('enable-windows-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isWindowsEnabled, true);
-    }));
-
-    test('flutter windows desktop not enabled with environment variable on dev', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('dev');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WINDOWS': 'true'});
-
-      expect(featureFlags.isWindowsEnabled, true);
-    }));
-
-    test('flutter windows desktop off by default on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('fflutter windows desktop not enabled with config on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when<bool>(mockFlutterConfig.getValue('enable-windows-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop not enabled with environment variable on beta', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('beta');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WINDOWS': 'true'});
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop off by default on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop not enabled with config on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when<bool>(mockFlutterConfig.getValue('enable-windows-desktop') as bool).thenReturn(true);
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
-
-    test('flutter windows desktop not enabled with environment variable on stable', () => testbed.run(() {
-      when(mockFlutterVerion.channel).thenReturn('stable');
-      when(mockPlatform.environment).thenReturn(<String, String>{'FLUTTER_WINDOWS': 'true'});
-
-      expect(featureFlags.isWindowsEnabled, false);
-    }));
+    testWithoutContext('returns false if not available', () {
+      const exampleFeature = Feature(name: 'example');
+
+      final flags = FlutterFeatureFlags(
+        flutterVersion: FakeFlutterVersion(),
+        featuresConfig: _FakeFeaturesConfig()..cannedResponse[exampleFeature] = true,
+        platform: FakePlatform(),
+      );
+      expect(flags.isEnabled(exampleFeature), false);
+    });
+
+    FileSystem createFsWithPubspec() {
+      final FileSystem fs = MemoryFileSystem.test();
+      fs.currentDirectory.childFile('pubspec.yaml').writeAsStringSync('''
+        flutter:
+          config:
+            enable-foo: true
+            enable-bar: false
+            enable-baz: true
+      ''');
+      return fs;
+    }
+
+    testUsingContext(
+      'FeatureFlags is influenced by the CWD',
+      () {
+        // This test intentionally uses Context, as featureFlags is read that way at runtime.
+        final FeatureFlags featureFlagsFromContext = featureFlags;
+
+        // Try a few flags that don't actually exist, but we want to check configuration more e2e-y.
+        expect(
+          featureFlagsFromContext.isEnabled(
+            const Feature(
+              name: 'foo',
+              configSetting: 'enable-foo',
+              master: FeatureChannelSetting(available: true),
+            ),
+          ),
+          isTrue,
+          reason: 'enable-foo: true is in pubspec.yaml',
+        );
+
+        expect(
+          featureFlagsFromContext.isEnabled(
+            const Feature.fullyEnabled(name: 'bar', configSetting: 'enable-bar'),
+          ),
+          isFalse,
+          reason: 'enable-bar: false is in pubspec.yaml',
+        );
+
+        expect(
+          featureFlagsFromContext.isEnabled(
+            const Feature(name: 'baz', configSetting: 'enable-baz'),
+          ),
+          isFalse,
+          reason: 'Is not available',
+        );
+      },
+      overrides: <Type, Generator>{
+        ProcessManager: FakeProcessManager.empty,
+        FileSystem: createFsWithPubspec,
+      },
+    );
+
+    FileSystem createFsWithPubspecInParentDir() {
+      final FileSystem fs = MemoryFileSystem.test();
+      // Create pubspec.yaml in the root directory
+      fs.currentDirectory.childFile('pubspec.yaml').writeAsStringSync('''
+        flutter:
+          config:
+            enable-foo: true
+            enable-bar: false
+      ''');
+      // Create a subdirectory and set it as the current directory
+      final Directory subdir = fs.currentDirectory.childDirectory('lib').childDirectory('src');
+      subdir.createSync(recursive: true);
+      fs.currentDirectory = subdir;
+      return fs;
+    }
+
+    testUsingContext(
+      'FeatureFlags finds pubspec.yaml in parent directory when CWD is a subdirectory',
+      () {
+        // This test verifies that findProjectRoot is used to locate pubspec.yaml
+        // even when the current directory is a subdirectory of the project.
+        final FeatureFlags featureFlagsFromContext = featureFlags;
+
+        expect(
+          featureFlagsFromContext.isEnabled(
+            const Feature(
+              name: 'foo',
+              configSetting: 'enable-foo',
+              master: FeatureChannelSetting(available: true),
+            ),
+          ),
+          isTrue,
+          reason: 'enable-foo: true should be found in pubspec.yaml in parent directory',
+        );
+
+        expect(
+          featureFlagsFromContext.isEnabled(
+            const Feature.fullyEnabled(name: 'bar', configSetting: 'enable-bar'),
+          ),
+          isFalse,
+          reason: 'enable-bar: false should be found in pubspec.yaml in parent directory',
+        );
+      },
+      overrides: <Type, Generator>{
+        ProcessManager: FakeProcessManager.empty,
+        FileSystem: createFsWithPubspecInParentDir,
+      },
+    );
+
+    testUsingContext('Test feature flags match feature flags', () {
+      final FeatureFlags testFeatureFlags = TestFeatureFlags();
+
+      expect(featureFlags.allFeatures.length, equals(testFeatureFlags.allFeatures.length));
+
+      final List<String> featureNames = featureFlags.allFeatures
+          .map((Feature feature) => feature.name)
+          .toList();
+      final List<String> testFeatureNames = testFeatureFlags.allFeatures
+          .map((Feature feature) => feature.name)
+          .toList();
+
+      expect(featureNames, unorderedEquals(testFeatureNames));
+    });
+
+    testUsingContext('Feature runtime IDs are valid', () {
+      // Verify features' runtime IDs can be encoded into a Dart define.
+      final runtimeIdPattern = RegExp(r'^[a-zA-Z_]+$');
+      assert(runtimeIdPattern.hasMatch('multi_window'));
+      assert(!runtimeIdPattern.hasMatch('multi-window'));
+
+      final Iterable<String> runtimeIds = featureFlags.allFeatures
+          .map((Feature feature) => feature.runtimeId)
+          .nonNulls;
+
+      expect(
+        runtimeIds,
+        everyElement(matches(runtimeIdPattern)),
+        reason: 'Feature runtime ID must contain only alphabetical or underscore characters',
+      );
+    });
+  });
+
+  group('Linux Destkop', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterLinuxDesktopFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterLinuxDesktopFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterLinuxDesktopFeature.configSetting, 'enable-linux-desktop');
+      expect(flutterLinuxDesktopFeature.environmentOverride, 'FLUTTER_LINUX');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterLinuxDesktopFeature);
+      expect(checkFlags.isLinuxEnabled, isTrue);
+    });
+  });
+
+  group('MacOS Desktop', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterMacOSDesktopFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterMacOSDesktopFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterMacOSDesktopFeature.configSetting, 'enable-macos-desktop');
+      expect(flutterMacOSDesktopFeature.environmentOverride, 'FLUTTER_MACOS');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterMacOSDesktopFeature);
+      expect(checkFlags.isMacOSEnabled, isTrue);
+    });
+  });
+
+  group('Windows Desktop', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterWindowsDesktopFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterWindowsDesktopFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterWindowsDesktopFeature.configSetting, 'enable-windows-desktop');
+      expect(flutterWindowsDesktopFeature.environmentOverride, 'FLUTTER_WINDOWS');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterWindowsDesktopFeature);
+      expect(checkFlags.isWindowsEnabled, isTrue);
+    });
+  });
+
+  group('Web', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterWebFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterWebFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterWebFeature.configSetting, 'enable-web');
+      expect(flutterWebFeature.environmentOverride, 'FLUTTER_WEB');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterWebFeature);
+      expect(checkFlags.isWebEnabled, isTrue);
+    });
+  });
+
+  group('Android', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterAndroidFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterAndroidFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterAndroidFeature.configSetting, 'enable-android');
+      expect(flutterAndroidFeature.environmentOverride, isNull);
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterAndroidFeature);
+      expect(checkFlags.isAndroidEnabled, isTrue);
+    });
+  });
+
+  group('iOS', () {
+    testUsingContext('is fully enabled', () {
+      expect(flutterIOSFeature, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(flutterIOSFeature));
+    });
+
+    test('can be configured', () {
+      expect(flutterIOSFeature.configSetting, 'enable-ios');
+      expect(flutterIOSFeature.environmentOverride, isNull);
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterIOSFeature);
+      expect(checkFlags.isIOSEnabled, isTrue);
+    });
+  });
+
+  group('Fuchsia', () {
+    test('is only available on master', () {
+      expect(
+        flutterFuchsiaFeature,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: false),
+          _onChannelIs('stable', available: false, enabledByDefault: false),
+          _onChannelIs('beta', available: false, enabledByDefault: false),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(flutterFuchsiaFeature.configSetting, 'enable-fuchsia');
+      expect(flutterFuchsiaFeature.environmentOverride, 'FLUTTER_FUCHSIA');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterFuchsiaFeature);
+      expect(checkFlags.isFuchsiaEnabled, isTrue);
+    });
+  });
+
+  group('Custom Devices', () {
+    test('is always available but not enabled by default', () {
+      expect(
+        flutterCustomDevicesFeature,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: false),
+          _onChannelIs('stable', available: true, enabledByDefault: false),
+          _onChannelIs('beta', available: true, enabledByDefault: false),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(flutterCustomDevicesFeature.configSetting, 'enable-custom-devices');
+      expect(flutterCustomDevicesFeature.environmentOverride, 'FLUTTER_CUSTOM_DEVICES');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: flutterCustomDevicesFeature);
+      expect(checkFlags.areCustomDevicesEnabled, isTrue);
+    });
+  });
+
+  group('CLI Animations', () {
+    testUsingContext('is always enabled', () {
+      expect(cliAnimation, _isFullyEnabled);
+      expect(featureFlags.allEnabledFeatures, contains(cliAnimation));
+    });
+
+    test('can be disabled by TERM=dumb', () {
+      final features = FlutterFeatureFlags(
+        flutterVersion: FakeFlutterVersion(),
+        featuresConfig: _FakeFeaturesConfig(),
+        platform: FakePlatform(environment: <String, String>{'TERM': 'dumb'}),
+      );
+
+      expect(features.isCliAnimationEnabled, isFalse);
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: cliAnimation);
+      expect(checkFlags.isCliAnimationEnabled, isTrue);
+    });
+  });
+
+  group('Native Assets', () {
+    test('is available on master', () {
+      expect(
+        nativeAssets,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: true),
+          _onChannelIs('stable', available: true, enabledByDefault: true),
+          _onChannelIs('beta', available: true, enabledByDefault: true),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(nativeAssets.configSetting, 'enable-native-assets');
+      expect(nativeAssets.environmentOverride, 'FLUTTER_NATIVE_ASSETS');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: nativeAssets);
+      expect(checkFlags.isNativeAssetsEnabled, isTrue);
+    });
+  });
+
+  group('Swift Package Manager', () {
+    test('is available on all channels', () {
+      expect(
+        swiftPackageManager,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: true),
+          _onChannelIs('stable', available: true, enabledByDefault: true),
+          _onChannelIs('beta', available: true, enabledByDefault: true),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(swiftPackageManager.configSetting, 'enable-swift-package-manager');
+      expect(swiftPackageManager.environmentOverride, 'FLUTTER_SWIFT_PACKAGE_MANAGER');
+      expect(swiftPackageManager.warningMessageOnDisable, kSwiftPackageManagerDisabledWarning);
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: swiftPackageManager);
+      expect(checkFlags.isSwiftPackageManagerEnabled, isTrue);
+    });
+  });
+
+  group('macosArm64Only', () {
+    test('is available on all channels, disabled by default', () {
+      expect(
+        macOSArm64Only,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: false),
+          _onChannelIs('stable', available: true, enabledByDefault: false),
+          _onChannelIs('beta', available: true, enabledByDefault: false),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(macOSArm64Only.configSetting, 'enable-macos-arm64-only');
+      expect(macOSArm64Only.environmentOverride, 'FLUTTER_MACOS_ARM64_ONLY');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: macOSArm64Only);
+      expect(checkFlags.isMacOSArm64OnlyEnabled, isTrue);
+    });
+  });
+
+  group('hcpp', () {
+    test('is available on all channels, enabled by default on master and beta', () {
+      expect(
+        hcpp,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: true),
+          _onChannelIs('beta', available: true, enabledByDefault: true),
+          _onChannelIs('stable', available: true, enabledByDefault: false),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(hcpp.configSetting, 'enable-hcpp');
+      expect(hcpp.environmentOverride, 'FLUTTER_ENABLE_HCPP');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: hcpp);
+      expect(checkFlags.isHcppEnabled, isTrue);
+    });
+  });
+
+  group('Tool Extensions', () {
+    test('is available only on master', () {
+      expect(
+        toolExtensionsFeature,
+        allOf(<Matcher>[
+          _onChannelIs('master', available: true, enabledByDefault: false),
+          _onChannelIs('stable', available: false, enabledByDefault: false),
+          _onChannelIs('beta', available: false, enabledByDefault: false),
+        ]),
+      );
+    });
+
+    test('can be configured', () {
+      expect(toolExtensionsFeature.configSetting, 'enable-tool-extensions');
+      expect(toolExtensionsFeature.environmentOverride, 'FLUTTER_TOOL_EXTENSIONS');
+    });
+
+    test('forwards to isEnabled', () {
+      final checkFlags = _TestIsGetterForwarding(shouldInvoke: toolExtensionsFeature);
+      expect(checkFlags.isToolExtensionsEnabled, isTrue);
+    });
   });
 }
 
-class MockFlutterVerion extends Mock implements FlutterVersion {}
-class MockFlutterConfig extends Mock implements Config {}
-class MockPlatform extends Mock implements Platform {}
+final class _FakeFeaturesConfig implements FlutterFeaturesConfig {
+  final cannedResponse = <Feature, bool?>{};
 
-T nonconst<T>(T item) => item;
+  @override
+  bool? isEnabled(Feature feature) => cannedResponse[feature];
+}
+
+Matcher _onChannelIs(String channel, {required bool available, required bool enabledByDefault}) {
+  return _FeaturesMatcher(
+    channel: channel,
+    available: available,
+    enabledByDefault: enabledByDefault,
+  );
+}
+
+Matcher get _isFullyEnabled {
+  return allOf(const <_FeaturesMatcher>[
+    _FeaturesMatcher(channel: 'master', available: true, enabledByDefault: true),
+    _FeaturesMatcher(channel: 'stable', available: true, enabledByDefault: true),
+    _FeaturesMatcher(channel: 'beta', available: true, enabledByDefault: true),
+  ]);
+}
+
+final class _FeaturesMatcher extends Matcher {
+  const _FeaturesMatcher({
+    required this.channel,
+    required this.available,
+    required this.enabledByDefault,
+  });
+
+  final String channel;
+  final bool available;
+  final bool enabledByDefault;
+
+  @override
+  Description describe(Description description) {
+    description = description.add('feature on the "$channel" channel ');
+    if (available) {
+      description = description.add('is available ');
+    } else {
+      description = description.add('is not available');
+    }
+    description = description.add('and is ');
+    if (enabledByDefault) {
+      description = description.add('is enabled by default');
+    } else {
+      description = description.add('is not enabled by default');
+    }
+    return description;
+  }
+
+  @override
+  bool matches(Object? item, Map<Object?, Object?> matchState) {
+    if (item is! Feature) {
+      return false;
+    }
+    final FeatureChannelSetting setting = switch (channel) {
+      'master' => item.master,
+      'stable' => item.stable,
+      'beta' => item.beta,
+      _ => throw StateError('Invalid channel: "$channel"'),
+    };
+    if (setting.available != available) {
+      return false;
+    }
+    if (setting.enabledByDefault != enabledByDefault) {
+      return false;
+    }
+    return true;
+  }
+}
+
+final class _TestIsGetterForwarding with FlutterFeatureFlagsIsEnabled {
+  _TestIsGetterForwarding({required this.shouldInvoke});
+
+  final Feature shouldInvoke;
+  @override
+  final Platform platform = FakePlatform();
+
+  @override
+  bool isEnabled(Feature feature) {
+    return feature == shouldInvoke;
+  }
+
+  @override
+  List<Feature> get allFeatures => throw UnimplementedError();
+
+  @override
+  List<Feature> get allConfigurableFeatures => throw UnimplementedError();
+
+  @override
+  Iterable<Feature> get allEnabledFeatures => throw UnimplementedError();
+}

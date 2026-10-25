@@ -2,31 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/animation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('AnimationLocalStatusListenersMixin with AnimationLazyListenerMixin - removing unregistered listener is no-op', () {
-    final _TestAnimationLocalStatusListeners uut = _TestAnimationLocalStatusListeners();
-    final AnimationStatusListener fakeListener = (AnimationStatus status) { };
+    final uut = _TestAnimationLocalStatusListeners();
+    void fakeListener(AnimationStatus status) {}
     uut.removeStatusListener(fakeListener);
     expect(uut.callsToStart, 0);
     expect(uut.callsToStop, 0);
   });
 
   test('AnimationLocalListenersMixin with AnimationLazyListenerMixin - removing unregistered listener is no-op', () {
-    final _TestAnimationLocalListeners uut = _TestAnimationLocalListeners();
-    final VoidCallback fakeListener = () { };
+    final uut = _TestAnimationLocalListeners();
+    void fakeListener() {}
     uut.removeListener(fakeListener);
     expect(uut.callsToStart, 0);
     expect(uut.callsToStop, 0);
   });
 }
 
-class _TestAnimationLocalStatusListeners with AnimationLocalStatusListenersMixin, AnimationLazyListenerMixin {
+class _TestAnimationLocalStatusListeners
+    with AnimationLocalStatusListenersMixin, AnimationLazyListenerMixin {
   int callsToStart = 0;
   int callsToStop = 0;
 

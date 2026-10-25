@@ -7,13 +7,16 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class PostBackdropFilterPage extends StatefulWidget {
+  const PostBackdropFilterPage({super.key});
+
   @override
-  _PostBackdropFilterPageState createState() => _PostBackdropFilterPageState();
+  State<PostBackdropFilterPage> createState() => _PostBackdropFilterPageState();
 }
 
-class _PostBackdropFilterPageState extends State<PostBackdropFilterPage> with TickerProviderStateMixin {
+class _PostBackdropFilterPageState extends State<PostBackdropFilterPage>
+    with TickerProviderStateMixin {
   bool _includeBackdropFilter = false;
-  AnimationController animation;
+  late AnimationController animation;
 
   @override
   void initState() {
@@ -58,40 +61,47 @@ class _PostBackdropFilterPageState extends State<PostBackdropFilterPage> with Ti
             children: <Widget>[
               Expanded(
                 child: RepaintBoundary(
-                    child: Center(
-                      child: AnimatedBuilder(
-                          animation: animation,
-                          builder: (BuildContext c, Widget w) {
-                            final int val = (animation.value * 255).round();
-                            return Container(
-                                width: 50,
-                                height: 50,
-                                color: Color.fromARGB(255, val, val, val));
-                          }),
-                    )),
+                  child: Center(
+                    child: AnimatedBuilder(
+                      animation: animation,
+                      builder: (BuildContext c, Widget? w) {
+                        final int val = (animation.value * 255).round();
+                        return Container(
+                          width: 50,
+                          height: 50,
+                          color: Color.fromARGB(255, val, val, val),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
               getConditionalBackdrop(),
               RepaintBoundary(
-                child: Container(
+                child: ColoredBox(
                   color: Colors.white,
-                  child:Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       const Text('Include BackdropFilter:'),
                       Checkbox(
                         key: const Key('bdf-checkbox'), // this key is used by the driver test
                         value: _includeBackdropFilter,
-                        onChanged: (bool v) => setState(() { _includeBackdropFilter = v; }),
+                        onChanged: (bool? v) => setState(() {
+                          _includeBackdropFilter = v ?? false;
+                        }),
                       ),
                       MaterialButton(
                         key: const Key('bdf-animate'), // this key is used by the driver test
                         child: const Text('Animate'),
-                        onPressed: () => setState(() { animation.repeat(); }),
+                        onPressed: () => setState(() {
+                          animation.repeat();
+                        }),
                       ),
                     ],
                   ),
                 ),
-              )
+              ),
             ],
           ),
         ],

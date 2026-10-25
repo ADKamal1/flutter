@@ -2,59 +2,70 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/painting.dart';
-import '../rendering/mock_canvas.dart';
 
 void main() {
-  testWidgets('Divider control test', (WidgetTester tester) async {
+  testWidgets('Material3 - Divider control test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: Center(child: Divider())));
+    final RenderBox box = tester.firstRenderObject(find.byType(Divider));
+    expect(box.size.height, 16.0);
+    final Container container = tester.widget(find.byType(Container));
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.border!.bottom.width, 1.0);
+  });
+
+  testWidgets('Material2 - Divider control test', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const Directionality(
-        textDirection: TextDirection.ltr,
-        child: Center(
-          child: Divider(),
-        ),
+      MaterialApp(
+        theme: ThemeData(useMaterial3: false),
+        home: const Center(child: Divider()),
       ),
     );
     final RenderBox box = tester.firstRenderObject(find.byType(Divider));
     expect(box.size.height, 16.0);
     final Container container = tester.widget(find.byType(Container));
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    expect(decoration.border.bottom.width, 0.0);
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.border!.bottom.width, 0.0);
   });
 
   testWidgets('Divider custom thickness', (WidgetTester tester) async {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: Divider(
-            thickness: 5.0,
-          ),
-        ),
+        child: Center(child: Divider(thickness: 5.0)),
       ),
     );
     final Container container = tester.widget(find.byType(Container));
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    expect(decoration.border.bottom.width, 5.0);
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.border!.bottom.width, 5.0);
+  });
+
+  testWidgets('Divider custom radius', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: Divider(radius: BorderRadius.all(Radius.circular(5)))),
+      ),
+    );
+    final Container container = tester.widget(find.byType(Container));
+    final decoration = container.decoration! as BoxDecoration;
+    final borderRadius = decoration.borderRadius! as BorderRadius;
+    expect(borderRadius.bottomLeft, const Radius.circular(5));
+    expect(borderRadius.bottomRight, const Radius.circular(5));
+    expect(borderRadius.topLeft, const Radius.circular(5));
+    expect(borderRadius.topRight, const Radius.circular(5));
   });
 
   testWidgets('Horizontal divider custom indentation', (WidgetTester tester) async {
-    const double customIndent = 10.0;
+    const customIndent = 10.0;
     Rect dividerRect;
     Rect lineRect;
 
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: Divider(
-            indent: customIndent,
-          ),
-        ),
+        child: Center(child: Divider(indent: customIndent)),
       ),
     );
     // The divider line is drawn with a DecoratedBox with a border
@@ -66,11 +77,7 @@ void main() {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: Divider(
-            endIndent: customIndent,
-          ),
-        ),
+        child: Center(child: Divider(endIndent: customIndent)),
       ),
     );
     dividerRect = tester.getRect(find.byType(Divider));
@@ -82,10 +89,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: Center(
-          child: Divider(
-            indent: customIndent,
-            endIndent: customIndent,
-          ),
+          child: Divider(indent: customIndent, endIndent: customIndent),
         ),
       ),
     );
@@ -95,20 +99,28 @@ void main() {
     expect(lineRect.right, dividerRect.right - customIndent);
   });
 
-  testWidgets('Vertical Divider Test', (WidgetTester tester) async {
+  testWidgets('Material3 - Vertical Divider Test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: Center(child: VerticalDivider())));
+    final RenderBox box = tester.firstRenderObject(find.byType(VerticalDivider));
+    expect(box.size.width, 16.0);
+    final Container container = tester.widget(find.byType(Container));
+    final decoration = container.decoration! as BoxDecoration;
+    final border = decoration.border! as Border;
+    expect(border.left.width, 1.0);
+  });
+
+  testWidgets('Material2 - Vertical Divider Test', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const Directionality(
-        textDirection: TextDirection.ltr,
-        child: Center(
-          child: VerticalDivider(),
-        ),
+      MaterialApp(
+        theme: ThemeData(useMaterial3: false),
+        home: const Center(child: VerticalDivider()),
       ),
     );
     final RenderBox box = tester.firstRenderObject(find.byType(VerticalDivider));
     expect(box.size.width, 16.0);
     final Container container = tester.widget(find.byType(Container));
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    final Border border = decoration.border as Border;
+    final decoration = container.decoration! as BoxDecoration;
+    final border = decoration.border! as Border;
     expect(border.left.width, 0.0);
   });
 
@@ -116,31 +128,23 @@ void main() {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: VerticalDivider(
-            thickness: 5.0,
-          ),
-        ),
+        child: Center(child: VerticalDivider(thickness: 5.0)),
       ),
     );
     final Container container = tester.widget(find.byType(Container));
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    final Border border = decoration.border as Border;
+    final decoration = container.decoration! as BoxDecoration;
+    final border = decoration.border! as Border;
     expect(border.left.width, 5.0);
   });
 
   testWidgets('Vertical Divider Test 2', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Material(
-          child: Container(
+        theme: ThemeData(useMaterial3: false),
+        home: const Material(
+          child: SizedBox(
             height: 24.0,
-            child: Row(
-              children: const <Widget>[
-                Text('Hey.'),
-                VerticalDivider(),
-              ],
-            ),
+            child: Row(children: <Widget>[Text('Hey.'), VerticalDivider()]),
           ),
         ),
       ),
@@ -154,18 +158,14 @@ void main() {
   });
 
   testWidgets('Vertical divider custom indentation', (WidgetTester tester) async {
-    const double customIndent = 10.0;
+    const customIndent = 10.0;
     Rect dividerRect;
     Rect lineRect;
 
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: VerticalDivider(
-            indent: customIndent,
-          ),
-        ),
+        child: Center(child: VerticalDivider(indent: customIndent)),
       ),
     );
     // The divider line is drawn with a DecoratedBox with a border
@@ -177,11 +177,7 @@ void main() {
     await tester.pumpWidget(
       const Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: VerticalDivider(
-            endIndent: customIndent,
-          ),
-        ),
+        child: Center(child: VerticalDivider(endIndent: customIndent)),
       ),
     );
     dividerRect = tester.getRect(find.byType(VerticalDivider));
@@ -193,10 +189,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: Center(
-          child: VerticalDivider(
-            indent: customIndent,
-            endIndent: customIndent,
-          ),
+          child: VerticalDivider(indent: customIndent, endIndent: customIndent),
         ),
       ),
     );
@@ -206,10 +199,46 @@ void main() {
     expect(lineRect.bottom, dividerRect.bottom - customIndent);
   });
 
+  testWidgets('VerticalDivider custom radius', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: VerticalDivider(radius: BorderRadius.all(Radius.circular(5)))),
+      ),
+    );
+    final Container container = tester.widget(find.byType(Container));
+    final decoration = container.decoration! as BoxDecoration;
+    final borderRadius = decoration.borderRadius! as BorderRadius;
+    expect(borderRadius.bottomLeft, const Radius.circular(5));
+    expect(borderRadius.bottomRight, const Radius.circular(5));
+    expect(borderRadius.topLeft, const Radius.circular(5));
+    expect(borderRadius.topRight, const Radius.circular(5));
+  });
+
   // Regression test for https://github.com/flutter/flutter/issues/39533
-  testWidgets('createBorderSide does not throw exception with null context', (WidgetTester tester) async {
+  testWidgets('createBorderSide does not throw exception with null context', (
+    WidgetTester tester,
+  ) async {
     // Passing a null context used to throw an exception but no longer does.
     expect(() => Divider.createBorderSide(null), isNot(throwsAssertionError));
     expect(() => Divider.createBorderSide(null), isNot(throwsNoSuchMethodError));
+  });
+
+  testWidgets('Divider does not crash at zero area', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(child: SizedBox.shrink(child: Divider())),
+      ),
+    );
+    expect(tester.getSize(find.byType(Divider)), Size.zero);
+  });
+
+  testWidgets('VerticalDivider does not crash at zero area', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(child: SizedBox.shrink(child: VerticalDivider())),
+      ),
+    );
+    expect(tester.getSize(find.byType(VerticalDivider)), Size.zero);
   });
 }

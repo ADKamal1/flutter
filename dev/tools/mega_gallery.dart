@@ -2,23 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/// Make `n` copies of flutter_gallery.
-
 import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:path/path.dart' as path;
+import 'package:yaml_edit/yaml_edit.dart';
 
 /// If no `copies` param is passed in, we scale the generated app up to 60k lines.
 const int kTargetLineCount = 60 * 1024;
 
+/// Make `n` copies of flutter_gallery.
 void main(List<String> args) {
   // If we're run from the `tools` dir, set the cwd to the repo root.
-  if (path.basename(Directory.current.path) == 'tools')
+  if (path.basename(Directory.current.path) == 'tools') {
     Directory.current = Directory.current.parent.parent;
+  }
 
-  final ArgParser argParser = ArgParser();
-  argParser.addOption('out');
+  final argParser = ArgParser();
+  argParser.addOption('out', mandatory: true);
   argParser.addOption('copies');
   argParser.addFlag('delete', negatable: false);
   argParser.addFlag('help', abbr: 'h', negatable: false);
@@ -32,13 +33,14 @@ void main(List<String> args) {
     exit(0);
   }
 
-  final Directory source = Directory(_normalize('dev/integration_tests/flutter_gallery'));
-  final Directory out = Directory(_normalize(results['out'] as String));
+  final source = Directory(_normalize('dev/integration_tests/flutter_gallery'));
+  final outParent = Directory(_normalize(results['out'] as String));
+  final out = Directory(path.join(outParent.path, 'packages'));
 
   if (results['delete'] as bool) {
-    if (out.existsSync()) {
-      print('Deleting ${out.path}');
-      out.deleteSync(recursive: true);
+    if (outParent.existsSync()) {
+      print('Deleting ${outParent.path}');
+      outParent.deleteSync(recursive: true);
     }
 
     exit(0);
@@ -62,29 +64,41 @@ void main(List<String> args) {
   print('');
   print('Stats:');
   print('  packages/flutter            : ${getStatsFor(Directory("packages/flutter"))}');
-  print('  dev/integration_tests/flutter_gallery    : ${getStatsFor(Directory("dev/integration_tests/flutter_gallery"))}');
+  print(
+    '  dev/integration_tests/flutter_gallery    : ${getStatsFor(Directory("dev/integration_tests/flutter_gallery"))}',
+  );
 
   final Directory lib = _dir(out, 'lib');
-  if (lib.existsSync())
+  if (lib.existsSync()) {
     lib.deleteSync(recursive: true);
+  }
 
   // Copy everything that's not a symlink, dot directory, or build/.
   _copy(source, out);
 
   // Make n - 1 copies.
-  for (int i = 1; i < copies; i++)
+  for (var i = 1; i < copies; i++) {
     _copyGallery(out, i);
+  }
 
   // Create a new entry-point.
   _createEntry(_file(out, 'lib/main.dart'), copies);
 
   // Update the pubspec.
-  String pubspec = _file(out, 'pubspec.yaml').readAsStringSync();
-  pubspec = pubspec.replaceAll('../../packages/flutter', '../../../packages/flutter');
-  _file(out, 'pubspec.yaml').writeAsStringSync(pubspec);
+  final String pubspec = _file(Directory(''), 'pubspec.yaml').readAsStringSync();
 
-  // Remove the (flutter_gallery specific) analysis_options.yaml file.
-  _file(out, 'analysis_options.yaml').deleteSync();
+  final yamlEditor = YamlEditor(pubspec);
+  yamlEditor.update(<String>['workspace'], <String>['packages']);
+  File(path.join(outParent.path, 'pubspec.yaml')).writeAsStringSync(yamlEditor.toString());
+
+  // Replace the (flutter_gallery specific) analysis_options.yaml file with a default one.
+  _file(out, 'analysis_options.yaml').writeAsStringSync('''
+analyzer:
+  errors:
+    # See analysis_options.yaml in the flutter root for context.
+    deprecated_member_use: ignore
+    deprecated_member_use_from_same_package: ignore
+''');
 
   _file(out, '.dartignore').writeAsStringSync('');
 
@@ -94,14 +108,15 @@ void main(List<String> args) {
 
 // TODO(devoncarew): Create an entry-point that builds a UI with all `n` copies.
 void _createEntry(File mainFile, int copies) {
-  final StringBuffer imports = StringBuffer();
+  final imports = StringBuffer();
 
-  for (int i = 1; i < copies; i++) {
+  for (var i = 1; i < copies; i++) {
     imports.writeln('// ignore: unused_import');
     imports.writeln("import 'gallery_$i/main.dart' as main_$i;");
   }
 
-  final String contents = '''
+  final contents =
+      '''
 // Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -131,21 +146,20 @@ void _copyGallery(Directory galleryDir, int index) {
 }
 
 void _copy(Directory source, Directory target) {
-  if (!target.existsSync())
+  if (!target.existsSync()) {
     target.createSync(recursive: true);
+  }
 
   for (final FileSystemEntity entity in source.listSync(followLinks: false)) {
     final String name = path.basename(entity.path);
 
-    if (entity is Directory) {
-      if (name == 'build' || name.startsWith('.'))
-        continue;
-      _copy(entity, Directory(path.join(target.path, name)));
-    } else if (entity is File) {
-      if (name == '.packages' || name == 'pubspec.lock')
-        continue;
-      final File dest = File(path.join(target.path, name));
-      dest.writeAsBytesSync(entity.readAsBytesSync());
+    switch (entity) {
+      case Directory() when name != 'build' && !name.startsWith('.'):
+        _copy(entity, Directory(path.join(target.path, name)));
+
+      case File() when name != '.packages' && name != 'pubspec.lock':
+        final dest = File(path.join(target.path, name));
+        dest.writeAsBytesSync(entity.readAsBytesSync());
     }
   }
 }
@@ -162,10 +176,10 @@ class SourceStats {
   String toString() => '${_comma(files).padLeft(3)} files, ${_comma(lines).padLeft(6)} lines';
 }
 
-SourceStats getStatsFor(Directory dir, [SourceStats stats]) {
+SourceStats getStatsFor(Directory dir, [SourceStats? stats]) {
   stats ??= SourceStats();
 
-  for (final FileSystemEntity entity in dir.listSync(recursive: false, followLinks: false)) {
+  for (final FileSystemEntity entity in dir.listSync(followLinks: false)) {
     final String name = path.basename(entity.path);
     if (entity is File && name.endsWith('.dart')) {
       stats.files += 1;
@@ -181,15 +195,17 @@ SourceStats getStatsFor(Directory dir, [SourceStats stats]) {
 int _lineCount(File file) {
   return file.readAsLinesSync().where((String line) {
     line = line.trim();
-    if (line.isEmpty || line.startsWith('//'))
+    if (line.isEmpty || line.startsWith('//')) {
       return false;
+    }
     return true;
   }).length;
 }
 
 String _comma(int count) {
-  final String str = count.toString();
-  if (str.length > 3)
-    return str.substring(0, str.length - 3) + ',' + str.substring(str.length - 3);
+  final str = count.toString();
+  if (str.length > 3) {
+    return '${str.substring(0, str.length - 3)},${str.substring(str.length - 3)}';
+  }
   return str;
 }

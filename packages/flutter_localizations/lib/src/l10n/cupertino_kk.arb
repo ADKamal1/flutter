@@ -20,5 +20,20 @@
   "pasteButtonLabel": "Қою",
   "selectAllButtonLabel": "Барлығын таңдау",
   "tabSemanticsLabel": "Қойынды: $tabIndex/$tabCount",
-  "modalBarrierDismissLabel": "Жабу"
+  "modalBarrierDismissLabel": "Жабу",
+  "searchTextFieldPlaceholderLabel": "Іздеу",
+  "noSpellCheckReplacementsLabel": "Ауыстыратын ешнәрсе табылмады.",
+  "menuDismissLabel": "Мәзірді жабу",
+  "lookUpButtonLabel": "Іздеу",
+  "searchWebButtonLabel": "Интернеттен іздеу",
+  "shareButtonLabel": "Бөлісу…",
+  "clearButtonLabel": "Өшіру",
+  "cancelButtonLabel": "Бас тарту",
+  "backButtonLabel": "Артқа",
+  "expansionTileExpandedHint": "жию үшін екі рет түртіңіз",
+  "expansionTileCollapsedHint": "жаю үшін екі рет түртіңіз",
+  "expansionTileExpandedTapHint": "Жию",
+  "expansionTileCollapsedTapHint": "Толық мәлімет алу үшін жайыңыз.",
+  "expandedHint": "Жиылды",
+  "collapsedHint": "Жайылды"
 }

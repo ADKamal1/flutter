@@ -2,24 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'dart:convert' show utf8;
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'text_input_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('TextInput message channels', () {
-    FakeTextChannel fakeTextChannel;
-    FakeAutofillScope scope;
+  group('AutofillClient', () {
+    late FakeTextChannel fakeTextChannel;
+    final scope = FakeAutofillScope();
 
     setUp(() {
       fakeTextChannel = FakeTextChannel((MethodCall call) async {});
       TextInput.setChannel(fakeTextChannel);
-      scope ??= FakeAutofillScope();
       scope.clients.clear();
     });
 
@@ -28,97 +25,135 @@ void main() {
       TextInput.setChannel(SystemChannels.textInput);
     });
 
-    test('mandatory fields are mandatory', () async {
-      AutofillConfiguration config;
+    test('Does not throw if the hint list is empty', () async {
+      Object? exception;
       try {
-        config = AutofillConfiguration(
-          uniqueIdentifier: null,
-          autofillHints: const <String>['test'],
-          currentEditingValue: const TextEditingValue(),
-        );
-      } catch (e) {
-        expect(e.toString(), contains('uniqueIdentifier != null'));
-      }
-
-      expect(config, isNull);
-
-      try {
-        config = AutofillConfiguration(
-          uniqueIdentifier: 'id',
-          autofillHints: null,
-          currentEditingValue: const TextEditingValue(),
-        );
-      } catch (e) {
-        expect(e.toString(), contains('autofillHints != null'));
-      }
-
-      expect(config, isNull);
-    });
-
-    test('throws if the hint list is empty', () async {
-      Map<String, dynamic> json;
-      try {
-        const AutofillConfiguration config = AutofillConfiguration(
+        const AutofillConfiguration(
           uniqueIdentifier: 'id',
           autofillHints: <String>[],
-          currentEditingValue: TextEditingValue(),
+          currentEditingValue: TextEditingValue.empty,
         );
-
-        json = config.toJson();
       } catch (e) {
-        expect(e.toString(), contains('isNotEmpty'));
+        exception = e;
       }
 
-      expect(json, isNull);
+      expect(exception, isNull);
     });
 
-    test(
-      'AutofillClients send the correct configuration to the platform'
-      'and responds to updateEditingStateWithTag method correctly',
-      () async {
-        final FakeAutofillClient client1 = FakeAutofillClient(const TextEditingValue(text: 'test1'));
-        final FakeAutofillClient client2 = FakeAutofillClient(const TextEditingValue(text: 'test2'));
+    test('AutofillClients send the correct configuration to the platform and responds to updateEditingStateWithTag method correctly', () async {
+      final client1 = FakeAutofillClient(const TextEditingValue(text: 'test1'));
+      final client2 = FakeAutofillClient(const TextEditingValue(text: 'test2'));
 
-        client1.textInputConfiguration = TextInputConfiguration(
-          autofillConfiguration: AutofillConfiguration(
-            uniqueIdentifier: client1.autofillId,
-            autofillHints: const <String>['client1'],
-            currentEditingValue: client1.currentTextEditingValue,
-          ),
-        );
+      client1.textInputConfiguration = TextInputConfiguration(
+        autofillConfiguration: AutofillConfiguration(
+          uniqueIdentifier: client1.autofillId,
+          autofillHints: const <String>['client1'],
+          currentEditingValue: client1.currentTextEditingValue,
+        ),
+      );
 
-        client2.textInputConfiguration = TextInputConfiguration(
-          autofillConfiguration: AutofillConfiguration(
-            uniqueIdentifier: client2.autofillId,
-            autofillHints: const <String>['client2'],
-            currentEditingValue: client2.currentTextEditingValue,
-          ),
-        );
+      client2.textInputConfiguration = TextInputConfiguration(
+        autofillConfiguration: AutofillConfiguration(
+          uniqueIdentifier: client2.autofillId,
+          autofillHints: const <String>['client2'],
+          currentEditingValue: client2.currentTextEditingValue,
+        ),
+      );
 
-        scope.register(client1);
-        scope.register(client2);
-        client1.currentAutofillScope = scope;
-        client2.currentAutofillScope = scope;
+      scope.register(client1);
+      scope.register(client2);
+      client1.currentAutofillScope = scope;
+      client2.currentAutofillScope = scope;
 
-        scope.attach(client1, client1.textInputConfiguration);
+      scope.attach(client1, client1.textInputConfiguration);
 
-        final Map<String, dynamic> expectedConfiguration = client1.textInputConfiguration.toJson();
-        expectedConfiguration['fields'] = <Map<String, dynamic>>[
-          client1.textInputConfiguration.toJson(),
-          client2.textInputConfiguration.toJson(),
-        ];
+      final Map<String, dynamic> expectedConfiguration = client1.textInputConfiguration.toJson();
+      expectedConfiguration['fields'] = <Map<String, dynamic>>[
+        client1.textInputConfiguration.toJson(),
+        client2.textInputConfiguration.toJson(),
+      ];
 
-        fakeTextChannel.validateOutgoingMethodCalls(<MethodCall>[
-          MethodCall('TextInput.setClient', <dynamic>[1, expectedConfiguration]),
-        ]);
+      fakeTextChannel.validateOutgoingMethodCalls(<MethodCall>[
+        MethodCall('TextInput.setClient', <dynamic>[1, expectedConfiguration]),
+      ]);
 
-        const TextEditingValue text2 = TextEditingValue(text: 'Text 2');
-        fakeTextChannel.incoming(MethodCall(
-          'TextInputClient.updateEditingStateWithTag',
-          <dynamic>[0, <String, dynamic>{ client2.autofillId : text2.toJSON() }],
-        ));
+      const text2 = TextEditingValue(text: 'Text 2');
+      await fakeTextChannel.incoming?.call(
+        MethodCall('TextInputClient.updateEditingStateWithTag', <dynamic>[
+          0,
+          <String, dynamic>{client2.autofillId: text2.toJSON()},
+        ]),
+      );
 
-        expect(client2.currentTextEditingValue, text2);
+      expect(client2.currentTextEditingValue, text2);
+    });
+  });
+
+  group('AutoFillConfiguration', () {
+    late AutofillConfiguration fakeAutoFillConfiguration;
+    late AutofillConfiguration fakeAutoFillConfiguration2;
+
+    setUp(() {
+      // If you create two objects with `const` with the same values, the second object will be equal to the first one by reference.
+      // This means that even without overriding the `equals` method, the test will pass.
+      // ignore: prefer_const_constructors
+      fakeAutoFillConfiguration = AutofillConfiguration(
+        uniqueIdentifier: 'id1',
+        // ignore: prefer_const_literals_to_create_immutables
+        autofillHints: <String>['client1'],
+        currentEditingValue: TextEditingValue.empty,
+        hintText: 'hint',
+      );
+      // ignore: prefer_const_constructors
+      fakeAutoFillConfiguration2 = AutofillConfiguration(
+        uniqueIdentifier: 'id1',
+        // ignore: prefer_const_literals_to_create_immutables
+        autofillHints: <String>['client1'],
+        currentEditingValue: TextEditingValue.empty,
+        hintText: 'hint',
+      );
+    });
+
+    test('equality operator works correctly', () {
+      expect(fakeAutoFillConfiguration, equals(fakeAutoFillConfiguration2));
+      expect(fakeAutoFillConfiguration.enabled, equals(fakeAutoFillConfiguration2.enabled));
+      expect(
+        fakeAutoFillConfiguration.uniqueIdentifier,
+        equals(fakeAutoFillConfiguration2.uniqueIdentifier),
+      );
+      expect(
+        fakeAutoFillConfiguration.autofillHints,
+        equals(fakeAutoFillConfiguration2.autofillHints),
+      );
+      expect(
+        fakeAutoFillConfiguration.currentEditingValue,
+        equals(fakeAutoFillConfiguration2.currentEditingValue),
+      );
+      expect(fakeAutoFillConfiguration.hintText, equals(fakeAutoFillConfiguration2.hintText));
+    });
+
+    test('hashCode works correctly', () {
+      expect(fakeAutoFillConfiguration.hashCode, equals(fakeAutoFillConfiguration2.hashCode));
+      expect(
+        fakeAutoFillConfiguration.enabled.hashCode,
+        equals(fakeAutoFillConfiguration2.enabled.hashCode),
+      );
+      expect(
+        fakeAutoFillConfiguration.uniqueIdentifier.hashCode,
+        equals(fakeAutoFillConfiguration2.uniqueIdentifier.hashCode),
+      );
+      expect(
+        Object.hashAll(fakeAutoFillConfiguration.autofillHints),
+        equals(Object.hashAll(fakeAutoFillConfiguration2.autofillHints)),
+      );
+      expect(
+        fakeAutoFillConfiguration.currentEditingValue.hashCode,
+        equals(fakeAutoFillConfiguration2.currentEditingValue.hashCode),
+      );
+      expect(
+        fakeAutoFillConfiguration.hintText.hashCode,
+        equals(fakeAutoFillConfiguration2.hintText.hashCode),
+      );
     });
   });
 }
@@ -130,7 +165,7 @@ class FakeAutofillClient implements TextInputClient, AutofillClient {
   String get autofillId => hashCode.toString();
 
   @override
-  TextInputConfiguration textInputConfiguration;
+  late TextInputConfiguration textInputConfiguration;
 
   @override
   void updateEditingValue(TextEditingValue newEditingValue) {
@@ -139,7 +174,7 @@ class FakeAutofillClient implements TextInputClient, AutofillClient {
   }
 
   @override
-  AutofillScope currentAutofillScope;
+  AutofillScope? currentAutofillScope;
 
   String latestMethodCall = '';
 
@@ -157,8 +192,19 @@ class FakeAutofillClient implements TextInputClient, AutofillClient {
   }
 
   @override
+  void insertContent(KeyboardInsertedContent content) {
+    latestMethodCall = 'commitContent';
+  }
+
+  @override
   void updateFloatingCursor(RawFloatingCursorPoint point) {
     latestMethodCall = 'updateFloatingCursor';
+  }
+
+  @override
+  bool onFocusReceived() {
+    latestMethodCall = 'onFocusReceived';
+    return true;
   }
 
   @override
@@ -170,6 +216,34 @@ class FakeAutofillClient implements TextInputClient, AutofillClient {
   void showAutocorrectionPromptRect(int start, int end) {
     latestMethodCall = 'showAutocorrectionPromptRect';
   }
+
+  @override
+  void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {
+    latestMethodCall = 'didChangeInputControl';
+  }
+
+  @override
+  void autofill(TextEditingValue newEditingValue) => updateEditingValue(newEditingValue);
+
+  @override
+  void showToolbar() {
+    latestMethodCall = 'showToolbar';
+  }
+
+  @override
+  void insertTextPlaceholder(Size size) {
+    latestMethodCall = 'insertTextPlaceholder';
+  }
+
+  @override
+  void removeTextPlaceholder() {
+    latestMethodCall = 'removeTextPlaceholder';
+  }
+
+  @override
+  void performSelector(String selectorName) {
+    latestMethodCall = 'performSelector';
+  }
 }
 
 class FakeAutofillScope with AutofillScopeMixin implements AutofillScope {
@@ -179,76 +253,9 @@ class FakeAutofillScope with AutofillScopeMixin implements AutofillScope {
   Iterable<AutofillClient> get autofillClients => clients.values;
 
   @override
-  AutofillClient getAutofillClient(String autofillId) => clients[autofillId];
+  AutofillClient getAutofillClient(String autofillId) => clients[autofillId]!;
 
   void register(AutofillClient client) {
     clients.putIfAbsent(client.autofillId, () => client);
-  }
-}
-
-class FakeTextChannel implements MethodChannel {
-  FakeTextChannel(this.outgoing) : assert(outgoing != null);
-
-  Future<dynamic> Function(MethodCall) outgoing;
-  Future<void> Function(MethodCall) incoming;
-
-  List<MethodCall> outgoingCalls = <MethodCall>[];
-
-  @override
-  BinaryMessenger get binaryMessenger => throw UnimplementedError();
-
-  @override
-  MethodCodec get codec => const JSONMethodCodec();
-
-  @override
-  Future<List<T>> invokeListMethod<T>(String method, [dynamic arguments]) => throw UnimplementedError();
-
-  @override
-  Future<Map<K, V>> invokeMapMethod<K, V>(String method, [dynamic arguments]) => throw UnimplementedError();
-
-  @override
-  Future<T> invokeMethod<T>(String method, [dynamic arguments]) async {
-    final MethodCall call = MethodCall(method, arguments);
-    outgoingCalls.add(call);
-    return await outgoing(call) as T;
-  }
-
-  @override
-  String get name => 'flutter/textinput';
-
-  @override
-  void setMethodCallHandler(Future<void> Function(MethodCall call) handler) {
-    incoming = handler;
-  }
-
-  @override
-  bool checkMethodCallHandler(Future<void> Function(MethodCall call) handler) => throw UnimplementedError();
-
-  @override
-  void setMockMethodCallHandler(Future<void> Function(MethodCall call) handler)  => throw UnimplementedError();
-
-  @override
-  bool checkMockMethodCallHandler(Future<void> Function(MethodCall call) handler) => throw UnimplementedError();
-
-  void validateOutgoingMethodCalls(List<MethodCall> calls) {
-    expect(outgoingCalls.length, calls.length);
-    bool hasError = false;
-    for (int i = 0; i < calls.length; i++) {
-      final ByteData outgoingData = codec.encodeMethodCall(outgoingCalls[i]);
-      final ByteData expectedData = codec.encodeMethodCall(calls[i]);
-      final String outgoingString = utf8.decode(outgoingData.buffer.asUint8List());
-      final String expectedString = utf8.decode(expectedData.buffer.asUint8List());
-
-      if (outgoingString != expectedString) {
-        print(
-          'Index $i did not match:\n'
-          '  actual:   ${outgoingCalls[i]}\n'
-          '  expected: ${calls[i]}');
-        hasError = true;
-      }
-    }
-    if (hasError) {
-      fail('Calls did not match.');
-    }
   }
 }

@@ -25,5 +25,20 @@
   "pasteButtonLabel": "Налепи",
   "selectAllButtonLabel": "Изабери све",
   "tabSemanticsLabel": "$tabIndex. картица од $tabCount",
-  "modalBarrierDismissLabel": "Одбаци"
+  "modalBarrierDismissLabel": "Одбаци",
+  "searchTextFieldPlaceholderLabel": "Претражите",
+  "noSpellCheckReplacementsLabel": "Нису пронађене замене",
+  "menuDismissLabel": "Одбаците мени",
+  "lookUpButtonLabel": "Поглед нагоре",
+  "searchWebButtonLabel": "Претражи веб",
+  "shareButtonLabel": "Дели…",
+  "clearButtonLabel": "Обриши",
+  "cancelButtonLabel": "Откажи",
+  "backButtonLabel": "Назад",
+  "expansionTileExpandedHint": "двапут додирните да бисте скупили",
+  "expansionTileCollapsedHint": "двапут додирните да бисте проширили",
+  "expansionTileExpandedTapHint": "Скупите",
+  "expansionTileCollapsedTapHint": "Проширите за још детаља",
+  "expandedHint": "Скупљено је",
+  "collapsedHint": "Проширено је"
 }

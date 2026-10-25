@@ -15,107 +15,110 @@ import 'version.dart';
 /// must persist across tool invocations.
 abstract class PersistentToolState {
   factory PersistentToolState({
-    @required FileSystem fileSystem,
-    @required Logger logger,
-    @required Platform platform,
-  }) => _DefaultPersistentToolState(
-    fileSystem: fileSystem,
-    logger: logger,
-    platform: platform,
-  );
+    required FileSystem fileSystem,
+    required Logger logger,
+    required Platform platform,
+  }) = _DefaultPersistentToolState;
 
-  factory PersistentToolState.test({
-    @required Directory directory,
-    @required Logger logger,
-  }) => _DefaultPersistentToolState.test(
-    directory: directory,
-    logger: logger,
-  );
+  factory PersistentToolState.test({required Directory directory, required Logger logger}) =
+      _DefaultPersistentToolState.test;
 
-  static PersistentToolState get instance => context.get<PersistentToolState>();
+  static PersistentToolState? get instance => context.get<PersistentToolState>();
 
   /// Whether the welcome message should be redisplayed.
   ///
   /// May give null if the value has not been set.
-  bool redisplayWelcomeMessage;
+  bool? get shouldRedisplayWelcomeMessage;
+  void setShouldRedisplayWelcomeMessage(bool value); // Enforced nonnull setter.
 
   /// Returns the last active version for a given [channel].
   ///
   /// If there was no active prior version, returns `null` instead.
-  String lastActiveVersion(Channel channel);
+  String? lastActiveVersion(Channel channel);
 
   /// Update the last active version for a given [channel].
   void updateLastActiveVersion(String fullGitHash, Channel channel);
 
-  /// Whether this client was already determined to be or not be a bot.
-  bool isRunningOnBot;
+  /// Return the hash of the last active license terms.
+  String? get lastActiveLicenseTermsHash;
+  void setLastActiveLicenseTermsHash(String value); // Enforced nonnull setter.
+
+  /// Whether the Intel Mac warning message should be displayed.
+  ///
+  /// This is typically set to false after the message has been shown once.
+  bool get shouldShowIntelMacWarning;
+  set shouldShowIntelMacWarning(bool value);
 }
 
 class _DefaultPersistentToolState implements PersistentToolState {
   _DefaultPersistentToolState({
-    @required FileSystem fileSystem,
-    @required Logger logger,
-    @required Platform platform,
-  }) : _config = Config(
-      _kFileName,
-      fileSystem: fileSystem,
-      logger: logger,
-      platform: platform,
-    );
+    required FileSystem fileSystem,
+    required Logger logger,
+    required Platform platform,
+  }) : _config = Config(_kFileName, fileSystem: fileSystem, logger: logger, platform: platform);
 
   @visibleForTesting
-  _DefaultPersistentToolState.test({
-    @required Directory directory,
-    @required Logger logger,
-  }) : _config = Config.test(
-      _kFileName,
-      directory: directory,
-      logger: logger,
-    );
+  _DefaultPersistentToolState.test({required Directory directory, required Logger logger})
+    : _config = Config.test(name: _kFileName, directory: directory, logger: logger);
 
-  static const String _kFileName = 'tool_state';
-  static const String _kRedisplayWelcomeMessage = 'redisplay-welcome-message';
-  static const Map<Channel, String> _lastActiveVersionKeys = <Channel,String>{
+  static const _kFileName = 'tool_state';
+  static const _kRedisplayWelcomeMessage = 'redisplay-welcome-message';
+  static const _lastActiveVersionKeys = <Channel, String>{
     Channel.master: 'last-active-master-version',
-    Channel.dev: 'last-active-dev-version',
+    Channel.main: 'last-active-main-version',
     Channel.beta: 'last-active-beta-version',
-    Channel.stable: 'last-active-stable-version'
+    Channel.stable: 'last-active-stable-version',
   };
-  static const String _kBotKey = 'is-bot';
+  static const _kLicenseHash = 'license-hash';
+  static const _kHasShownIntelMacWarningKey = 'displayed-intel-warning-message';
 
   final Config _config;
 
   @override
-  bool get redisplayWelcomeMessage {
-    return _config.getValue(_kRedisplayWelcomeMessage) as bool;
+  bool? get shouldRedisplayWelcomeMessage {
+    return _config.getValue(_kRedisplayWelcomeMessage) as bool?;
   }
 
   @override
-  String lastActiveVersion(Channel channel) {
-    final String versionKey = _versionKeyFor(channel);
-    assert(versionKey != null);
-    return _config.getValue(versionKey) as String;
-  }
-
-  @override
-  set redisplayWelcomeMessage(bool value) {
+  void setShouldRedisplayWelcomeMessage(bool value) {
     _config.setValue(_kRedisplayWelcomeMessage, value);
   }
 
   @override
-  void updateLastActiveVersion(String fullGitHash, Channel channel) {
-    final String versionKey = _versionKeyFor(channel);
+  String? lastActiveVersion(Channel channel) {
+    final String? versionKey = _versionKeyFor(channel);
     assert(versionKey != null);
-    _config.setValue(versionKey, fullGitHash);
+    return _config.getValue(versionKey!) as String?;
   }
 
-  String _versionKeyFor(Channel channel) {
+  @override
+  void updateLastActiveVersion(String fullGitHash, Channel channel) {
+    final String? versionKey = _versionKeyFor(channel);
+    assert(versionKey != null);
+    _config.setValue(versionKey!, fullGitHash);
+  }
+
+  @override
+  String? get lastActiveLicenseTermsHash => _config.getValue(_kLicenseHash) as String?;
+
+  @override
+  void setLastActiveLicenseTermsHash(String value) {
+    _config.setValue(_kLicenseHash, value);
+  }
+
+  String? _versionKeyFor(Channel channel) {
     return _lastActiveVersionKeys[channel];
   }
 
   @override
-  bool get isRunningOnBot => _config.getValue(_kBotKey) as bool;
+  bool get shouldShowIntelMacWarning => _config.getValue(_kHasShownIntelMacWarningKey) == null;
 
   @override
-  set isRunningOnBot(bool value) => _config.setValue(_kBotKey, value);
+  set shouldShowIntelMacWarning(bool value) {
+    if (value) {
+      _config.removeValue(_kHasShownIntelMacWarningKey);
+    } else {
+      _config.setValue(_kHasShownIntelMacWarningKey, true);
+    }
+  }
 }

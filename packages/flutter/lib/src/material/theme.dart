@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'app.dart';
+/// @docImport 'color_scheme.dart';
+/// @docImport 'text_theme.dart';
+library;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 
 import 'material_localizations.dart';
 import 'theme_data.dart';
 import 'typography.dart';
 
-export 'theme_data.dart' show Brightness, ThemeData;
+export 'theme_data.dart' show Brightness, MaterialTapTargetSize, ThemeData;
 
 /// The duration over which theme changes animate by default.
 const Duration kThemeAnimationDuration = Duration(milliseconds: 200);
@@ -19,12 +23,22 @@ const Duration kThemeAnimationDuration = Duration(milliseconds: 200);
 ///
 /// A theme describes the colors and typographic choices of an application.
 ///
+/// {@youtube 560 315 https://www.youtube.com/watch?v=oTvQDJOBXmM}
+///
 /// Descendant widgets obtain the current theme's [ThemeData] object using
 /// [Theme.of]. When a widget uses [Theme.of], it is automatically rebuilt if
 /// the theme later changes, so that the changes can be applied.
 ///
 /// The [Theme] widget implies an [IconTheme] widget, set to the value of the
 /// [ThemeData.iconTheme] of the [data] for the [Theme].
+///
+/// To interact seamlessly with descendant Cupertino widgets, the [Theme] widget
+/// provides a [CupertinoTheme] for its descendants with a [CupertinoThemeData] inherited
+/// from the nearest ancestor [CupertinoTheme] or if none exists, derived from the
+/// Material [data] for the [Theme]. The values in the Material derived [CupertinoThemeData]
+/// are overridable through [ThemeData.cupertinoOverrideTheme]. The values from an
+/// inherited [CupertinoThemeData] can be overridden by wrapping the desired subtree
+/// with a [CupertinoTheme].
 ///
 /// See also:
 ///
@@ -35,37 +49,31 @@ const Duration kThemeAnimationDuration = Duration(milliseconds: 200);
 ///    the [MaterialApp.theme] argument.
 class Theme extends StatelessWidget {
   /// Applies the given theme [data] to [child].
-  ///
-  /// The [data] and [child] arguments must not be null.
-  const Theme({
-    Key? key,
-    required this.data,
-    this.isMaterialAppTheme = false,
-    required this.child,
-  }) : assert(child != null),
-       assert(data != null),
-       super(key: key);
+  const Theme({super.key, required this.data, required this.child});
 
   /// Specifies the color and typography values for descendant widgets.
   final ThemeData data;
 
-  /// True if this theme was installed by the [MaterialApp].
-  ///
-  /// When an app uses the [Navigator] to push a route, the route's widgets
-  /// will only inherit from the app's theme, even though the widget that
-  /// triggered the push may inherit from a theme that "shadows" the app's
-  /// theme because it's deeper in the widget tree. Apps can find the shadowing
-  /// theme with `Theme.of(context, shadowThemeOnly: true)` and pass it along
-  /// to the class that creates a route's widgets. Material widgets that push
-  /// routes, like [PopupMenuButton] and [DropdownButton], do this.
-  final bool isMaterialAppTheme;
-
   /// The widget below this widget in the tree.
   ///
-  /// {@macro flutter.widgets.child}
+  /// {@macro flutter.widgets.ProxyWidget.child}
   final Widget child;
 
-  static final ThemeData _kFallbackTheme = ThemeData.fallback();
+  static ThemeData? _cachedFallbackTheme;
+
+  /// The theme [Theme.of] returns when there is no [Theme] ancestor.
+  ///
+  /// The fallback is cached because constructing a [ThemeData] is expensive,
+  /// but it is rebuilt whenever [defaultTargetPlatform] no longer matches the
+  /// platform it was built for (for example under a `TargetPlatformVariant` or
+  /// after a platform override), so a theme-less subtree adapts to the current
+  /// platform the same way a [MaterialApp] would.
+  static ThemeData get _fallbackTheme {
+    if (_cachedFallbackTheme?.platform != defaultTargetPlatform) {
+      _cachedFallbackTheme = ThemeData.fallback();
+    }
+    return _cachedFallbackTheme!;
+  }
 
   /// The data from the closest [Theme] instance that encloses the given
   /// context.
@@ -74,16 +82,8 @@ class Theme extends StatelessWidget {
   /// [MaterialLocalizations], the returned data is localized according to the
   /// nearest available [MaterialLocalizations].
   ///
-  /// Defaults to [new ThemeData.fallback] if there is no [Theme] in the given
+  /// Defaults to [ThemeData.fallback] if there is no [Theme] in the given
   /// build context.
-  ///
-  /// If [shadowThemeOnly] is true and the closest [Theme] ancestor was
-  /// installed by the [MaterialApp] — in other words if the closest [Theme]
-  /// ancestor does not shadow the application's theme — then this returns null.
-  /// This argument should be used in situations where its useful to wrap a
-  /// route's widgets with a [Theme], but only when the application's overall
-  /// theme is being shadowed by a [Theme] widget that is deeper in the tree.
-  /// See [isMaterialAppTheme].
   ///
   /// Typical usage is as follows:
   ///
@@ -92,7 +92,7 @@ class Theme extends StatelessWidget {
   /// Widget build(BuildContext context) {
   ///   return Text(
   ///     'Example',
-  ///     style: Theme.of(context).textTheme.headline6,
+  ///     style: Theme.of(context).textTheme.titleLarge,
   ///   );
   /// }
   /// ```
@@ -109,14 +109,14 @@ class Theme extends StatelessWidget {
   /// Widget build(BuildContext context) {
   ///   return MaterialApp(
   ///     theme: ThemeData.light(),
-  ///     body: Builder(
+  ///     home: Builder(
   ///       // Create an inner BuildContext so that we can refer to
   ///       // the Theme with Theme.of().
   ///       builder: (BuildContext context) {
   ///         return Center(
   ///           child: Text(
   ///             'Example',
-  ///             style: Theme.of(context).textTheme.headline6,
+  ///             style: Theme.of(context).textTheme.titleLarge,
   ///           ),
   ///         );
   ///       },
@@ -124,18 +124,90 @@ class Theme extends StatelessWidget {
   ///   );
   /// }
   /// ```
-  static ThemeData? of(BuildContext context, { bool shadowThemeOnly = false }) {
-    final _InheritedTheme? inheritedTheme = context.dependOnInheritedWidgetOfExactType<_InheritedTheme>();
-    if (shadowThemeOnly) {
-      if (inheritedTheme == null || inheritedTheme.theme.isMaterialAppTheme)
-        return null;
-      return inheritedTheme.theme.data;
-    }
-
-    final MaterialLocalizations? localizations = MaterialLocalizations.of(context);
+  ///
+  /// See also:
+  ///
+  /// * [ColorScheme.of], a convenience method that returns [ThemeData.colorScheme]
+  ///   from the closest [Theme] ancestor. (equivalent to `Theme.of(context).colorScheme`).
+  /// * [TextTheme.of], a convenience method that returns [ThemeData.textTheme]
+  ///   from the closest [Theme] ancestor. (equivalent to `Theme.of(context).textTheme`).
+  /// * [IconTheme.of], that returns [ThemeData.iconTheme] from the closest [Theme] or
+  ///   [IconThemeData.fallback] if there is no [IconTheme] ancestor.
+  static ThemeData of(BuildContext context) {
+    final _InheritedTheme? inheritedTheme = context
+        .dependOnInheritedWidgetOfExactType<_InheritedTheme>();
+    final MaterialLocalizations? localizations = Localizations.of<MaterialLocalizations>(
+      context,
+      MaterialLocalizations,
+    );
     final ScriptCategory category = localizations?.scriptCategory ?? ScriptCategory.englishLike;
-    final ThemeData theme = inheritedTheme?.theme.data ?? _kFallbackTheme;
+    final InheritedCupertinoTheme? inheritedCupertinoTheme = context
+        .dependOnInheritedWidgetOfExactType<InheritedCupertinoTheme>();
+    final ThemeData theme =
+        inheritedTheme?.theme.data ??
+        (inheritedCupertinoTheme != null
+            ? CupertinoBasedMaterialThemeData(themeData: inheritedCupertinoTheme.theme.data)
+                  .materialTheme
+            : _fallbackTheme);
     return ThemeData.localize(theme, theme.typography.geometryThemeFor(category));
+  }
+
+  // The inherited themes in widgets library can not infer their values from
+  // Theme in material library. Wraps the child with these inherited themes to
+  // overrides their values directly.
+  Widget _wrapsWidgetThemes(BuildContext context, Widget child) {
+    final DefaultSelectionStyle selectionStyle = DefaultSelectionStyle.of(context);
+    return IconTheme(
+      data: data.iconTheme,
+      child: DefaultSelectionStyle(
+        selectionColor: data.textSelectionTheme.selectionColor ?? selectionStyle.selectionColor,
+        cursorColor: data.textSelectionTheme.cursorColor ?? selectionStyle.cursorColor,
+        child: child,
+      ),
+    );
+  }
+
+  CupertinoThemeData _inheritedCupertinoThemeData(BuildContext context) {
+    final InheritedCupertinoTheme? inheritedTheme = context
+        .dependOnInheritedWidgetOfExactType<InheritedCupertinoTheme>();
+    return (inheritedTheme?.theme.data ?? MaterialBasedCupertinoThemeData(materialTheme: data))
+        .resolveFrom(context);
+  }
+
+  /// Retrieves the [Brightness] to use for descendant Material widgets, based
+  /// on the value of [ThemeData.brightness] in the given [context].
+  ///
+  /// If no [InheritedTheme] can be found in the given [context], or its `brightness`
+  /// is null, it will fall back to [MediaQueryData.platformBrightness].
+  ///
+  /// See also:
+  ///
+  /// * [maybeBrightnessOf], which returns null if no valid [InheritedTheme] or
+  ///   [MediaQuery] exists.
+  /// * [ThemeData.brightness], the property that takes precedence over
+  ///   [MediaQueryData.platformBrightness] for descendant Material widgets.
+  static Brightness brightnessOf(BuildContext context) {
+    final _InheritedTheme? inheritedTheme = context
+        .dependOnInheritedWidgetOfExactType<_InheritedTheme>();
+    return inheritedTheme?.theme.data.brightness ?? MediaQuery.platformBrightnessOf(context);
+  }
+
+  /// Retrieves the [Brightness] to use for descendant Material widgets, based
+  /// on the value of [ThemeData.brightness] in the given [context].
+  ///
+  /// If no [InheritedTheme] or [MediaQuery] can be found in the given [context], it will
+  /// return null.
+  ///
+  /// See also:
+  ///
+  /// * [ThemeData.brightness], the property that takes precedence over
+  ///   [MediaQueryData.platformBrightness] for descendant Material widgets.
+  /// * [brightnessOf], which return a default value if no valid [InheritedTheme] or
+  ///   [MediaQuery] exists, instead of returning null.
+  static Brightness? maybeBrightnessOf(BuildContext context) {
+    final _InheritedTheme? inheritedTheme = context
+        .dependOnInheritedWidgetOfExactType<_InheritedTheme>();
+    return inheritedTheme?.theme.data.brightness ?? MediaQuery.maybePlatformBrightnessOf(context);
   }
 
   @override
@@ -143,16 +215,11 @@ class Theme extends StatelessWidget {
     return _InheritedTheme(
       theme: this,
       child: CupertinoTheme(
-        // We're using a MaterialBasedCupertinoThemeData here instead of a
-        // CupertinoThemeData because it defers some properties to the Material
-        // ThemeData.
-        data: MaterialBasedCupertinoThemeData(
-          materialTheme: data,
-        ),
-        child: IconTheme(
-          data: data.iconTheme,
-          child: child,
-        ),
+        // If a CupertinoThemeData doesn't exist, we're using a
+        // MaterialBasedCupertinoThemeData here instead of a CupertinoThemeData
+        // because it defers some properties to the Material ThemeData.
+        data: _inheritedCupertinoThemeData(context),
+        child: _wrapsWidgetThemes(context, child),
       ),
     );
   }
@@ -165,19 +232,13 @@ class Theme extends StatelessWidget {
 }
 
 class _InheritedTheme extends InheritedTheme {
-  const _InheritedTheme({
-    Key? key,
-    required this.theme,
-    required Widget child,
-  }) : assert(theme != null),
-       super(key: key, child: child);
+  const _InheritedTheme({required this.theme, required super.child});
 
   final Theme theme;
 
   @override
   Widget wrap(BuildContext context, Widget child) {
-    final _InheritedTheme? ancestorTheme = context.findAncestorWidgetOfExactType<_InheritedTheme>();
-    return identical(this, ancestorTheme) ? child : Theme(data: theme.data, child: child);
+    return Theme(data: theme.data, child: child);
   }
 
   @override
@@ -196,7 +257,7 @@ class ThemeDataTween extends Tween<ThemeData> {
   /// The [begin] and [end] properties must be non-null before the tween is
   /// first used, but the arguments can be null if the values are going to be
   /// filled in later.
-  ThemeDataTween({ ThemeData? begin, ThemeData? end }) : super(begin: begin, end: end);
+  ThemeDataTween({super.begin, super.end});
 
   @override
   ThemeData lerp(double t) => ThemeData.lerp(begin!, end!, t);
@@ -219,33 +280,26 @@ class ThemeDataTween extends Tween<ThemeData> {
 class AnimatedTheme extends ImplicitlyAnimatedWidget {
   /// Creates an animated theme.
   ///
-  /// By default, the theme transition uses a linear curve. The [data] and
-  /// [child] arguments must not be null.
+  /// By default, the theme transition uses a linear curve.
   const AnimatedTheme({
-    Key? key,
+    super.key,
     required this.data,
-    this.isMaterialAppTheme = false,
-    Curve curve = Curves.linear,
-    Duration duration = kThemeAnimationDuration,
-    VoidCallback? onEnd,
+    super.curve,
+    super.duration = kThemeAnimationDuration,
+    super.onEnd,
     required this.child,
-  }) : assert(child != null),
-       assert(data != null),
-       super(key: key, curve: curve, duration: duration, onEnd: onEnd);
+  });
 
   /// Specifies the color and typography values for descendant widgets.
   final ThemeData data;
 
-  /// True if this theme was created by the [MaterialApp]. See [Theme.isMaterialAppTheme].
-  final bool isMaterialAppTheme;
-
   /// The widget below this widget in the tree.
   ///
-  /// {@macro flutter.widgets.child}
+  /// {@macro flutter.widgets.ProxyWidget.child}
   final Widget child;
 
   @override
-  _AnimatedThemeState createState() => _AnimatedThemeState();
+  AnimatedWidgetBaseState<AnimatedTheme> createState() => _AnimatedThemeState();
 }
 
 class _AnimatedThemeState extends AnimatedWidgetBaseState<AnimatedTheme> {
@@ -253,23 +307,21 @@ class _AnimatedThemeState extends AnimatedWidgetBaseState<AnimatedTheme> {
 
   @override
   void forEachTween(TweenVisitor<dynamic> visitor) {
-    // TODO(ianh): Use constructor tear-offs when it becomes possible, https://github.com/dart-lang/sdk/issues/10659
-    _data = visitor(_data, widget.data, (dynamic value) => ThemeDataTween(begin: value as ThemeData)) as ThemeDataTween;
-    assert(_data != null);
+    _data =
+        visitor(_data, widget.data, (dynamic value) => ThemeDataTween(begin: value as ThemeData))!
+            as ThemeDataTween;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      isMaterialAppTheme: widget.isMaterialAppTheme,
-      child: widget.child,
-      data: _data!.evaluate(animation!),
-    );
+    return Theme(data: _data!.evaluate(animation), child: widget.child);
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder description) {
     super.debugFillProperties(description);
-    description.add(DiagnosticsProperty<ThemeDataTween>('data', _data, showName: false, defaultValue: null));
+    description.add(
+      DiagnosticsProperty<ThemeDataTween>('data', _data, showName: false, defaultValue: null),
+    );
   }
 }

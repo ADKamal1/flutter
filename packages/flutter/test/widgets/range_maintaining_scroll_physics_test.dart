@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'button_tester.dart';
+
+const Color _green = Color(0xFF00FF00);
+const Color _red = Color(0xFFFF0000);
+
 class ExpandingBox extends StatefulWidget {
-  const ExpandingBox({this.collapsedSize, this.expandedSize});
+  const ExpandingBox({super.key, required this.collapsedSize, required this.expandedSize});
 
   final double collapsedSize;
   final double expandedSize;
@@ -18,8 +22,9 @@ class ExpandingBox extends StatefulWidget {
   State<ExpandingBox> createState() => _ExpandingBoxState();
 }
 
-class _ExpandingBoxState extends State<ExpandingBox> with AutomaticKeepAliveClientMixin<ExpandingBox>{
-  double _height;
+class _ExpandingBoxState extends State<ExpandingBox>
+    with AutomaticKeepAliveClientMixin<ExpandingBox> {
+  late double _height;
 
   @override
   void initState() {
@@ -38,13 +43,10 @@ class _ExpandingBoxState extends State<ExpandingBox> with AutomaticKeepAliveClie
     super.build(context);
     return Container(
       height: _height,
-      color: Colors.green,
+      color: _green,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: TextButton(
-          child: const Text('Collapse'),
-          onPressed: toggleSize,
-        ),
+        child: TestButton(onPressed: toggleSize, child: const Text('Collapse')),
       ),
     );
   }
@@ -55,21 +57,23 @@ class _ExpandingBoxState extends State<ExpandingBox> with AutomaticKeepAliveClie
 
 void main() {
   testWidgets('shrink listview', (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: ListView.builder(
-        itemBuilder: (BuildContext context, int index) => index == 0
+    await tester.pumpWidget(
+      TestWidgetsApp(
+        home: ListView.builder(
+          itemBuilder: (BuildContext context, int index) => index == 0
               ? const ExpandingBox(collapsedSize: 400, expandedSize: 1200)
-              : Container(height: 300, color: Colors.red),
-        itemCount: 2,
+              : Container(height: 300, color: _red),
+          itemCount: 2,
+        ),
       ),
-    ));
+    );
 
     final ScrollPosition position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
     expect(position.activity, isInstanceOf<IdleScrollActivity>());
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
     expect(position.pixels, 0.0);
-    await tester.tap(find.byType(TextButton));
+    await tester.tap(find.byType(TestButton));
     await tester.pump();
 
     final TestGesture drag1 = await tester.startGesture(const Offset(10.0, 500.0));
@@ -92,7 +96,7 @@ void main() {
     expect(position.pixels, moreOrLessEquals(900.0));
 
     await tester.pump();
-    await tester.tap(find.byType(TextButton));
+    await tester.tap(find.byType(TestButton));
     await tester.pump();
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
@@ -100,21 +104,23 @@ void main() {
   });
 
   testWidgets('shrink listview while dragging', (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: ListView.builder(
-        itemBuilder: (BuildContext context, int index) => index == 0
+    await tester.pumpWidget(
+      TestWidgetsApp(
+        home: ListView.builder(
+          itemBuilder: (BuildContext context, int index) => index == 0
               ? const ExpandingBox(collapsedSize: 400, expandedSize: 1200)
-              : Container(height: 300, color: Colors.red),
-        itemCount: 2,
+              : Container(height: 300, color: _red),
+          itemCount: 2,
+        ),
       ),
-    ));
+    );
 
     final ScrollPosition position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
     expect(position.activity, isInstanceOf<IdleScrollActivity>());
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
     expect(position.pixels, 0.0);
-    await tester.tap(find.byType(TextButton));
+    await tester.tap(find.byType(TestButton));
     await tester.pump(); // start button animation
     await tester.pump(const Duration(seconds: 1)); // finish button animation
     expect(position.minScrollExtent, 0.0);
@@ -124,7 +130,7 @@ void main() {
     final TestGesture drag1 = await tester.startGesture(const Offset(10.0, 500.0));
     expect(await tester.pumpAndSettle(), 1); // Nothing to animate
     await drag1.moveTo(const Offset(10.0, 0.0));
-    expect(await tester.pumpAndSettle(), 1); // Nothing to animate
+    expect(await tester.pumpAndSettle(), 2); // Nothing to animate, only one semantics update
     await drag1.up();
     expect(await tester.pumpAndSettle(), 1); // Nothing to animate
     expect(position.pixels, moreOrLessEquals(500.0));
@@ -134,14 +140,16 @@ void main() {
     final TestGesture drag2 = await tester.startGesture(const Offset(10.0, 500.0));
     expect(await tester.pumpAndSettle(), 1); // Nothing to animate
     await drag2.moveTo(const Offset(10.0, 100.0));
-    expect(await tester.pumpAndSettle(), 1); // Nothing to animate
+    expect(await tester.pumpAndSettle(), 2); // Nothing to animate, only one semantics update
     expect(position.maxScrollExtent, 900.0);
     expect(position.pixels, lessThanOrEqualTo(900.0));
     expect(position.activity, isInstanceOf<DragScrollActivity>());
 
-    final _ExpandingBoxState expandingBoxState = tester.state<_ExpandingBoxState>(find.byType(ExpandingBox));
+    final _ExpandingBoxState expandingBoxState = tester.state<_ExpandingBoxState>(
+      find.byType(ExpandingBox),
+    );
     expandingBoxState.toggleSize();
-    expect(await tester.pumpAndSettle(), 1); // Nothing to animate
+    expect(await tester.pumpAndSettle(), 2); // Nothing to animate, only one semantics update
     expect(position.activity, isInstanceOf<DragScrollActivity>());
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
@@ -152,27 +160,33 @@ void main() {
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
     expect(position.pixels, 50.0);
-    expect(await tester.pumpAndSettle(), 1); // Nothing to animate
+    expect(await tester.pumpAndSettle(), 2); // Nothing to animate, only one semantics update
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, 100.0);
     expect(position.pixels, 50.0);
   });
 
   testWidgets('shrink listview while ballistic', (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: GestureDetector(
-        onTap: () { assert(false); },
-        child: ListView.builder(
-          physics: const RangeMaintainingScrollPhysics(parent: BouncingScrollPhysics()),
-          itemBuilder: (BuildContext context, int index) => index == 0
+    await tester.pumpWidget(
+      TestWidgetsApp(
+        home: GestureDetector(
+          onTap: () {
+            assert(false);
+          },
+          child: ListView.builder(
+            physics: const RangeMaintainingScrollPhysics(parent: BouncingScrollPhysics()),
+            itemBuilder: (BuildContext context, int index) => index == 0
                 ? const ExpandingBox(collapsedSize: 400, expandedSize: 1200)
-                : Container(height: 300, color: Colors.red),
-          itemCount: 2,
+                : Container(height: 300, color: _red),
+            itemCount: 2,
+          ),
         ),
       ),
-    ));
+    );
 
-    final _ExpandingBoxState expandingBoxState = tester.state<_ExpandingBoxState>(find.byType(ExpandingBox));
+    final _ExpandingBoxState expandingBoxState = tester.state<_ExpandingBoxState>(
+      find.byType(ExpandingBox),
+    );
     expandingBoxState.toggleSize();
 
     final ScrollPosition position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
@@ -222,17 +236,19 @@ void main() {
   });
 
   testWidgets('expanding page views', (WidgetTester tester) async {
-    await tester.pumpWidget(Padding(padding: const EdgeInsets.only(right: 200.0), child: TabBarDemo()));
+    await tester.pumpWidget(
+      const Padding(padding: EdgeInsets.only(right: 200.0), child: _PageViewDemo()),
+    );
     await tester.tap(find.text('bike'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
-    final Rect bike1 = tester.getRect(find.byIcon(Icons.directions_bike));
-    await tester.pumpWidget(Padding(padding: EdgeInsets.zero, child: TabBarDemo()));
-    final Rect bike2 = tester.getRect(find.byIcon(Icons.directions_bike));
+    final Rect bike1 = tester.getRect(find.text('bike-icon'));
+    await tester.pumpWidget(const Padding(padding: EdgeInsets.zero, child: _PageViewDemo()));
+    final Rect bike2 = tester.getRect(find.text('bike-icon'));
     expect(bike2.center, bike1.shift(const Offset(100.0, 0.0)).center);
   });
 
-  testWidgets('Changing the size of the viewport while you are overdragged', (WidgetTester tester) async {
+  testWidgets('changing the size of the viewport when overscrolled', (WidgetTester tester) async {
     Widget build(double height) {
       return Directionality(
         textDirection: TextDirection.rtl,
@@ -251,6 +267,7 @@ void main() {
         ),
       );
     }
+
     await tester.pumpWidget(build(200.0));
     // to verify that changing the size of the viewport while you are overdragged does not change the
     // scroll position, we must ensure that:
@@ -258,40 +275,147 @@ void main() {
     // - scroll extents have changed
     // - position does not change at the same time
     // - old position is out of old range AND new range
-    await tester.drag(find.byType(Placeholder), const Offset(0.0, 100.0), touchSlopY: 0.0);
+    await tester.drag(
+      find.byType(Placeholder),
+      const Offset(0.0, 100.0),
+      touchSlopY: 0.0,
+      warnIfMissed: false,
+    ); // it'll hit the scrollable
     await tester.pump();
     final Rect oldPosition = tester.getRect(find.byType(Placeholder));
     await tester.pumpWidget(build(220.0));
     final Rect newPosition = tester.getRect(find.byType(Placeholder));
     expect(oldPosition, newPosition);
   });
-}
 
-class TabBarDemo extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: DefaultTabController(
-        length: 3,
-        child: Scaffold(
-          appBar: AppBar(
-            bottom: const TabBar(
-              tabs: <Widget>[
-                Tab(text: 'car'),
-                Tab(text: 'transit'),
-                Tab(text: 'bike'),
-              ],
+  testWidgets('inserting and removing an item when overscrolled', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/issues/62890
+
+    const itemExtent = 100.0;
+    final key = UniqueKey();
+    final Finder finder = find.byKey(key);
+    Widget build({required bool twoItems}) {
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: ScrollConfiguration(
+          behavior: const RangeMaintainingTestScrollBehavior(),
+          child: Align(
+            child: SizedBox.square(
+              dimension: 100.0,
+              child: ListView(
+                children: <Widget>[
+                  SizedBox(
+                    height: itemExtent,
+                    child: Placeholder(key: key),
+                  ),
+                  if (twoItems) const SizedBox(height: itemExtent, child: Placeholder()),
+                ],
+              ),
             ),
-            title: const Text('Tabs Demo'),
-          ),
-          body: const TabBarView(
-            children: <Widget>[
-              Icon(Icons.directions_car),
-              Icon(Icons.directions_transit),
-              Icon(Icons.directions_bike),
-            ],
           ),
         ),
+      );
+    }
+
+    await tester.pumpWidget(build(twoItems: false));
+    final ScrollPosition position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
+
+    // overscroll bottom
+    final TestGesture drag1 = await tester.startGesture(tester.getCenter(finder));
+    await tester.pump();
+    await drag1.moveBy(const Offset(0.0, -50.0));
+    await tester.pump();
+
+    final double oldOverscroll1 = position.pixels - position.maxScrollExtent;
+    final Rect oldPosition1 = tester.getRect(finder);
+    await tester.pumpWidget(build(twoItems: true));
+    // verify inserting new item didn't change the position of the first one
+    expect(oldPosition1, tester.getRect(finder));
+    // verify the overscroll changed by the size of the added item
+    final double newOverscroll1 = position.pixels - position.maxScrollExtent;
+    expect(oldOverscroll1, isPositive);
+    expect(newOverscroll1, isNegative);
+    expect(newOverscroll1, oldOverscroll1 - itemExtent);
+
+    await drag1.up();
+
+    // verify there's no ballistic animation, because we weren't overscrolled
+    expect(await tester.pumpAndSettle(), 1);
+
+    // overscroll bottom
+    final TestGesture drag2 = await tester.startGesture(tester.getCenter(finder));
+    await tester.pump();
+    await drag2.moveBy(const Offset(0.0, -100.0));
+    await tester.pump();
+
+    final double oldOverscroll2 = position.pixels - position.maxScrollExtent;
+    // should find nothing because item is not visible
+    expect(finder, findsNothing);
+    await tester.pumpWidget(build(twoItems: false));
+    // verify removing an item changed the position of the first one, because prior it was not visible
+    expect(oldPosition1, tester.getRect(finder));
+    // verify the overscroll was maintained
+    final double newOverscroll2 = position.pixels - position.maxScrollExtent;
+    expect(oldOverscroll2, isPositive);
+    expect(oldOverscroll2, newOverscroll2);
+
+    await drag2.up();
+
+    // verify there's a ballistic animation from overscroll
+    // With the introduction of the new `rubberBandSpring` (exponential decay model),
+    // the overscroll settle animation converges faster and takes 8 frames instead of 9.
+    expect(await tester.pumpAndSettle(), 8);
+  });
+}
+
+class _PageViewDemo extends StatefulWidget {
+  const _PageViewDemo();
+
+  @override
+  State<_PageViewDemo> createState() => _PageViewDemoState();
+}
+
+class _PageViewDemoState extends State<_PageViewDemo> {
+  final PageController _controller = PageController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _goToPage(int page) {
+    _controller.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.ease,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              GestureDetector(onTap: () => _goToPage(0), child: const Text('car')),
+              GestureDetector(onTap: () => _goToPage(1), child: const Text('transit')),
+              GestureDetector(onTap: () => _goToPage(2), child: const Text('bike')),
+            ],
+          ),
+          Expanded(
+            child: PageView(
+              controller: _controller,
+              children: const <Widget>[
+                Center(child: Text('car-icon')),
+                Center(child: Text('transit-icon')),
+                Center(child: Text('bike-icon')),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,10 +425,15 @@ class RangeMaintainingTestScrollBehavior extends ScrollBehavior {
   const RangeMaintainingTestScrollBehavior();
 
   @override
-  TargetPlatform getPlatform(BuildContext context) => throw 'should not be called';
+  TargetPlatform getPlatform(BuildContext context) => defaultTargetPlatform;
 
   @override
-  Widget buildViewportChrome(BuildContext context, Widget child, AxisDirection axisDirection) {
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
+  }
+
+  @override
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
     return child;
   }
 

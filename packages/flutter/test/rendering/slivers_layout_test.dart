@@ -2,17 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/rendering.dart';
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tester.dart';
 
 int layouts = 0;
 
 class RenderLayoutWatcher extends RenderProxyBox {
-  RenderLayoutWatcher(RenderBox child) : super(child);
+  RenderLayoutWatcher(RenderBox super.child);
   @override
   void performLayout() {
     layouts += 1;
@@ -21,11 +19,13 @@ class RenderLayoutWatcher extends RenderProxyBox {
 }
 
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   test('RenderViewport basic test - impact of layout', () {
     RenderSliverToBoxAdapter sliver;
     RenderViewport viewport;
     RenderBox box;
-    final RenderLayoutWatcher root = RenderLayoutWatcher(
+    final root = RenderLayoutWatcher(
       viewport = RenderViewport(
         crossAxisDirection: AxisDirection.right,
         offset: ViewportOffset.zero(),
@@ -69,5 +69,4 @@ void main() {
     expect(layouts, 1);
     expect(box.localToGlobal(box.size.center(Offset.zero)), const Offset(400.0, 600.0 - 190.0));
   });
-
 }

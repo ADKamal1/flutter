@@ -2,105 +2,79 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MaterialApp(
-    title: 'Hover Demo',
-    home: HoverDemo(),
-  ));
-}
-
-class DemoButton extends StatelessWidget {
-  const DemoButton({this.name});
-
-  final String name;
-
-  void _handleOnPressed() {
-    print('Button $name pressed.');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: () => _handleOnPressed(),
-      child: Text(name),
-    );
-  }
+  runApp(const MaterialApp(title: 'Hover Demo', home: HoverDemo()));
 }
 
 class HoverDemo extends StatefulWidget {
-  const HoverDemo({Key key}) : super(key: key);
+  const HoverDemo({super.key});
 
   @override
-  _HoverDemoState createState() => _HoverDemoState();
+  State<HoverDemo> createState() => _HoverDemoState();
 }
 
 class _HoverDemoState extends State<HoverDemo> {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final ButtonStyle overrideFocusColor = ButtonStyle(
-      overlayColor: MaterialStateProperty.resolveWith<Color>((Set<MaterialState> states) {
-        return states.contains(MaterialState.focused) ? Colors.deepOrangeAccent : null;
-      })
+    final overrideFocusColor = ButtonStyle(
+      overlayColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+        return states.contains(WidgetState.focused) ? Colors.deepOrangeAccent : Colors.transparent;
+      }),
     );
 
     return DefaultTextStyle(
-      style: textTheme.headline4,
+      style: textTheme.headlineMedium!,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Hover Demo'),
-        ),
-        floatingActionButton: FloatingActionButton(
-          child: const Text('+'),
-          onPressed: () {},
-        ),
+        appBar: AppBar(title: const Text('Hover Demo')),
+        floatingActionButton: FloatingActionButton(child: const Text('+'), onPressed: () {}),
         body: Center(
-          child: Builder(builder: (BuildContext context) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    ElevatedButton(
-                      onPressed: () => print('Button pressed.'),
-                      child: const Text('Button'),
-                      style: overrideFocusColor,
-                    ),
-                    TextButton(
-                      onPressed: () => print('Button pressed.'),
-                      child: const Text('Button'),
-                      style: overrideFocusColor,
-                    ),
-                    IconButton(
-                      onPressed: () => print('Button pressed'),
-                      icon: const Icon(Icons.access_alarm),
-                      focusColor: Colors.deepOrangeAccent,
-                    ),
-                  ],
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: TextField(
-                    decoration: InputDecoration(labelText: 'Enter Text', filled: true),
+          child: Builder(
+            builder: (BuildContext context) {
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      ElevatedButton(
+                        onPressed: () => print('Button pressed.'),
+                        style: overrideFocusColor,
+                        child: const Text('Button'),
+                      ),
+                      TextButton(
+                        onPressed: () => print('Button pressed.'),
+                        style: overrideFocusColor,
+                        child: const Text('Button'),
+                      ),
+                      IconButton(
+                        onPressed: () => print('Button pressed'),
+                        icon: const Icon(Icons.access_alarm),
+                        focusColor: Colors.deepOrangeAccent,
+                      ),
+                    ],
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: TextField(
-                    autofocus: false,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Enter Text',
-                      filled: false,
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: TextField(
+                      decoration: InputDecoration(labelText: 'Enter Text', filled: true),
                     ),
                   ),
-                ),
-              ],
-            );
-          }),
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Enter Text',
+                        filled: false,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

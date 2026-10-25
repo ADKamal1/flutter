@@ -2,19 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const List<int> items = <int>[0, 1, 2, 3, 4, 5];
 
-Widget buildFrame({ bool reverse = false, @required TextDirection textDirection }) {
+Widget buildFrame({bool reverse = false, required TextDirection textDirection}) {
   return Directionality(
     textDirection: textDirection,
     child: Center(
-      child: Container(
+      child: SizedBox(
         height: 50.0,
         child: ListView(
           itemExtent: 290.0,
@@ -22,9 +19,7 @@ Widget buildFrame({ bool reverse = false, @required TextDirection textDirection 
           reverse: reverse,
           physics: const BouncingScrollPhysics(),
           children: items.map<Widget>((int item) {
-            return Container(
-              child: Text('$item'),
-            );
+            return Text('$item');
           }).toList(),
         ),
       ),
@@ -122,7 +117,10 @@ void main() {
     expect(find.text('5'), findsOneWidget);
 
     await tester.pumpWidget(Container());
-    await tester.pumpWidget(buildFrame(textDirection: TextDirection.ltr), const Duration(seconds: 1));
+    await tester.pumpWidget(
+      buildFrame(textDirection: TextDirection.ltr),
+      duration: const Duration(seconds: 1),
+    );
     await tester.drag(find.text('2'), const Offset(-280.0, 0.0), touchSlopX: 0.0);
     await tester.pump(const Duration(seconds: 1));
     // screen is 800px wide, and has the following items:
@@ -441,7 +439,10 @@ void main() {
     expect(find.text('5'), findsOneWidget);
 
     await tester.pumpWidget(Container());
-    await tester.pumpWidget(buildFrame(reverse: true, textDirection: TextDirection.rtl), const Duration(seconds: 1));
+    await tester.pumpWidget(
+      buildFrame(reverse: true, textDirection: TextDirection.rtl),
+      duration: const Duration(seconds: 1),
+    );
     await tester.drag(find.text('2'), const Offset(-280.0, 0.0), touchSlopX: 0.0);
     await tester.pump(const Duration(seconds: 1));
     // screen is 800px wide, and has the following items:

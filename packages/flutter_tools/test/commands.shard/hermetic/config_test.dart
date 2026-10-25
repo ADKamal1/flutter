@@ -4,175 +4,268 @@
 
 import 'dart:convert';
 
+import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'package:file/memory.dart';
 import 'package:flutter_tools/src/android/android_sdk.dart';
 import 'package:flutter_tools/src/android/android_studio.dart';
-import 'package:flutter_tools/src/base/context.dart';
-import 'package:flutter_tools/src/build_info.dart';
+import 'package:flutter_tools/src/android/java.dart';
+import 'package:flutter_tools/src/base/config.dart';
+import 'package:flutter_tools/src/base/file_system.dart';
+import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/base/platform.dart';
+import 'package:flutter_tools/src/base/process.dart';
+import 'package:flutter_tools/src/base/terminal.dart';
 import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/commands/config.dart';
-import 'package:flutter_tools/src/globals.dart' as globals;
-import 'package:flutter_tools/src/reporting/reporting.dart';
+import 'package:flutter_tools/src/experimental/extension_manager.dart';
+import 'package:flutter_tools/src/features.dart';
 import 'package:flutter_tools/src/version.dart';
-import 'package:mockito/mockito.dart';
+import 'package:flutter_tools_core/flutter_tools_core.dart';
+import 'package:flutter_tools_extension/flutter_tools_extension.dart';
+import 'package:test/fake.dart';
+import 'package:unified_analytics/unified_analytics.dart';
 
 import '../../src/common.dart';
-import '../../src/context.dart';
+import '../../src/fake_process_manager.dart';
+import '../../src/fakes.dart';
+import '../../src/fakes.dart' as fakes;
+import '../../src/test_flutter_command_runner.dart';
 
 void main() {
-  MockAndroidStudio mockAndroidStudio;
-  MockAndroidSdk mockAndroidSdk;
-  MockFlutterVersion mockFlutterVersion;
-  MockUsage mockUsage;
+  late Java fakeJava;
+  late FakeAndroidStudio fakeAndroidStudio;
+  late FakeAndroidSdk fakeAndroidSdk;
+  late FakeFlutterVersion fakeFlutterVersion;
+  late FakeAnalytics fakeAnalytics;
+  late MemoryFileSystem fs;
+  late Config defaultConfig;
+  late BufferLogger testLogger;
 
   setUpAll(() {
     Cache.disableLocking();
   });
 
   setUp(() {
-    mockAndroidStudio = MockAndroidStudio();
-    mockAndroidSdk = MockAndroidSdk();
-    mockFlutterVersion = MockFlutterVersion();
-    mockUsage = MockUsage();
-
-    when(mockUsage.isFirstRun).thenReturn(false);
+    fs = MemoryFileSystem.test();
+    defaultConfig = Config.test(directory: fs.directory('/'));
+    testLogger = BufferLogger.test();
+    fakeJava = fakes.FakeJava(javaHome: 'path/to/jdk');
+    fakeAndroidStudio = FakeAndroidStudio();
+    fakeAndroidSdk = FakeAndroidSdk(fileSystem: fs);
+    fakeFlutterVersion = FakeFlutterVersion();
+    fakeAnalytics = getInitializedFakeAnalyticsInstance(
+      fs: fs,
+      fakeFlutterVersion: fakes.FakeFlutterVersion(),
+    );
   });
 
-  void verifyNoAnalytics() {
-    verifyNever(mockUsage.sendCommand(
-      any,
-      parameters: anyNamed('parameters'),
-    ));
-    verifyNever(mockUsage.sendEvent(
-      any,
-      any,
-      label: anyNamed('label'),
-      value: anyNamed('value'),
-      parameters: anyNamed('parameters'),
-    ));
-    verifyNever(mockUsage.sendTiming(
-      any,
-      any,
-      any,
-      label: anyNamed('label'),
-    ));
+  ConfigCommand createConfigCommand({
+    Config? config,
+    Logger? logger,
+    Platform? platform,
+    FileSystem? fileSystem,
+    ProcessManager? processManager,
+    ProcessUtils? processUtils,
+    AnsiTerminal? terminal,
+    FlutterVersion? flutterVersion,
+    AndroidSdk? androidSdk,
+    AndroidStudio? androidStudio,
+    Java? java,
+    FeatureFlags? featureFlags,
+    bool verboseHelp = false,
+    ExtensionManager? extensionManager,
+  }) {
+    final FileSystem resolvedFs = fileSystem ?? fs;
+    final Logger resolvedLogger = logger ?? testLogger;
+    final Platform resolvedPlatform = platform ?? FakePlatform();
+    final ProcessManager resolvedProcessManager = processManager ?? FakeProcessManager.any();
+    return ConfigCommand(
+      verboseHelp: verboseHelp,
+      featureFlags: featureFlags ?? TestFeatureFlags(),
+      extensionManager: extensionManager,
+      androidContext: FakeAndroidContext(
+        androidSdk: androidSdk,
+        androidStudio: androidStudio,
+        java: java,
+      ),
+      toolContext: FakeToolContext(
+        config:
+            config ??
+            (fileSystem != null
+                ? Config.test(directory: resolvedFs.directory('/'))
+                : defaultConfig),
+        logger: resolvedLogger,
+        flutterVersion: flutterVersion ?? fakeFlutterVersion,
+        platform: resolvedPlatform,
+        fs: resolvedFs,
+        processManager: resolvedProcessManager,
+        processUtils:
+            processUtils ??
+            ProcessUtils(logger: resolvedLogger, processManager: resolvedProcessManager),
+        terminal: terminal ?? AnsiTerminal(stdio: FakeStdio(), platform: resolvedPlatform),
+      ),
+    );
+  }
+
+  CommandRunner<void> createRunner(ConfigCommand command, [Analytics? analytics]) {
+    return createTestCommandRunner(command, analytics ?? fakeAnalytics);
   }
 
   group('config', () {
-    testUsingContext('machine flag', () async {
-      final ConfigCommand command = ConfigCommand();
-      await command.handleMachine();
+    testWithoutContext('machine flag displays values in json format', () async {
+      final ConfigCommand configCommand = createConfigCommand(
+        androidStudio: fakeAndroidStudio,
+        androidSdk: fakeAndroidSdk,
+        java: fakeJava,
+      );
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
 
-      expect(testLogger.statusText, isNotEmpty);
-      final dynamic jsonObject = json.decode(testLogger.statusText);
-      expect(jsonObject, isMap);
+      await commandRunner.run(<String>['config', '--machine']);
 
-      expect(jsonObject.containsKey('android-studio-dir'), true);
-      expect(jsonObject['android-studio-dir'], isNotNull);
-
-      expect(jsonObject.containsKey('android-sdk'), true);
-      expect(jsonObject['android-sdk'], isNotNull);
-      verifyNoAnalytics();
-    }, overrides: <Type, Generator>{
-      AndroidStudio: () => mockAndroidStudio,
-      AndroidSdk: () => mockAndroidSdk,
-      Usage: () => mockUsage,
+      expect(
+        json.decode(testLogger.statusText),
+        equals(<String, Object?>{
+          'android-studio-dir': 'path/to/android/studio',
+          'android-sdk': 'path/to/android/sdk',
+          'jdk-dir': 'path/to/jdk',
+        }),
+      );
+      expect(fakeAnalytics.sentEvents, isEmpty);
     });
 
-    testUsingContext('Can set build-dir', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
+    testWithoutContext('machine flag outputs empty json when tools are not found', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+      await commandRunner.run(<String>['config', '--machine']);
+
+      expect(json.decode(testLogger.statusText), equals(<String, Object?>{}));
+      expect(fakeAnalytics.sentEvents, isEmpty);
+    });
+
+    testWithoutContext('machine flag includes custom values in output', () async {
+      final ConfigCommand configCommand = createConfigCommand(
+        androidStudio: fakeAndroidStudio,
+        androidSdk: fakeAndroidSdk,
+        java: fakeJava,
+      );
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+      defaultConfig.setValue('android-studio-dir', 'dummy/dir/to/android/studio');
+      defaultConfig.setValue('android-sdk', 'dummy/dir/to/android/sdk');
+      defaultConfig.setValue('jdk-dir', 'dummy/dir/to/jdk');
+
+      await commandRunner.run(<String>['config', '--machine']);
+
+      expect(
+        json.decode(testLogger.statusText),
+        equals(<String, Object?>{
+          'android-studio-dir': 'dummy/dir/to/android/studio',
+          'android-sdk': 'dummy/dir/to/android/sdk',
+          'jdk-dir': 'dummy/dir/to/jdk',
+        }),
+      );
+      expect(fakeAnalytics.sentEvents, isEmpty);
+    });
+
+    testWithoutContext('Can set build-dir', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+      await commandRunner.run(<String>['config', '--build-dir=foo']);
+
+      expect(defaultConfig.getValue('build-dir'), 'foo');
+      expect(fakeAnalytics.sentEvents, isEmpty);
+    });
+
+    testWithoutContext('throws error on absolute path to build-dir', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+      expect(() => commandRunner.run(<String>['config', '--build-dir=/foo']), throwsToolExit());
+      expect(fakeAnalytics.sentEvents, isEmpty);
+    });
+
+    testWithoutContext('allows setting and removing feature flags', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
 
       await commandRunner.run(<String>[
         'config',
-        '--build-dir=foo',
-      ]);
-
-      expect(getBuildDirectory(), 'foo');
-      verifyNoAnalytics();
-    }, overrides: <Type, Generator>{
-      Usage: () => mockUsage,
-    });
-
-    testUsingContext('throws error on absolute path to build-dir', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
-
-      expect(() => commandRunner.run(<String>[
-        'config',
-        '--build-dir=/foo',
-      ]), throwsToolExit());
-      verifyNoAnalytics();
-    }, overrides: <Type, Generator>{
-      Usage: () => mockUsage,
-    });
-
-    testUsingContext('allows setting and removing feature flags', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
-
-      await commandRunner.run(<String>[
-        'config',
+        '--enable-android',
+        '--enable-ios',
         '--enable-web',
         '--enable-linux-desktop',
         '--enable-windows-desktop',
         '--enable-macos-desktop',
       ]);
 
-      expect(globals.config.getValue('enable-web'), true);
-      expect(globals.config.getValue('enable-linux-desktop'), true);
-      expect(globals.config.getValue('enable-windows-desktop'), true);
-      expect(globals.config.getValue('enable-macos-desktop'), true);
-
-      await commandRunner.run(<String>[
-        'config', '--clear-features',
-      ]);
-
-      expect(globals.config.getValue('enable-web'), null);
-      expect(globals.config.getValue('enable-linux-desktop'), null);
-      expect(globals.config.getValue('enable-windows-desktop'), null);
-      expect(globals.config.getValue('enable-macos-desktop'), null);
+      expect(defaultConfig.getValue('enable-android'), true);
+      expect(defaultConfig.getValue('enable-ios'), true);
+      expect(defaultConfig.getValue('enable-web'), true);
+      expect(defaultConfig.getValue('enable-linux-desktop'), true);
+      expect(defaultConfig.getValue('enable-windows-desktop'), true);
+      expect(defaultConfig.getValue('enable-macos-desktop'), true);
 
       await commandRunner.run(<String>[
         'config',
+        '--no-enable-android',
+        '--no-enable-ios',
         '--no-enable-web',
         '--no-enable-linux-desktop',
         '--no-enable-windows-desktop',
         '--no-enable-macos-desktop',
       ]);
 
-      expect(globals.config.getValue('enable-web'), false);
-      expect(globals.config.getValue('enable-linux-desktop'), false);
-      expect(globals.config.getValue('enable-windows-desktop'), false);
-      expect(globals.config.getValue('enable-macos-desktop'), false);
-      verifyNoAnalytics();
-    }, overrides: <Type, Generator>{
-      AndroidStudio: () => mockAndroidStudio,
-      AndroidSdk: () => mockAndroidSdk,
-      Usage: () => mockUsage,
+      expect(defaultConfig.getValue('enable-android'), false);
+      expect(defaultConfig.getValue('enable-ios'), false);
+      expect(defaultConfig.getValue('enable-web'), false);
+      expect(defaultConfig.getValue('enable-linux-desktop'), false);
+      expect(defaultConfig.getValue('enable-windows-desktop'), false);
+      expect(defaultConfig.getValue('enable-macos-desktop'), false);
+
+      await commandRunner.run(<String>['config', '--clear-features']);
+
+      expect(defaultConfig.getValue('enable-android'), null);
+      expect(defaultConfig.getValue('enable-ios'), null);
+      expect(defaultConfig.getValue('enable-web'), null);
+      expect(defaultConfig.getValue('enable-linux-desktop'), null);
+      expect(defaultConfig.getValue('enable-windows-desktop'), null);
+      expect(defaultConfig.getValue('enable-macos-desktop'), null);
+
+      expect(
+        testLogger.statusText,
+        contains('You may need to restart any open editors for them to read new settings.'),
+      );
+      expect(fakeAnalytics.sentEvents, isEmpty);
     });
 
-    testUsingContext('warns the user to reload IDE', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
+    testWithoutContext('displays notice when setting is changed', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
 
-      await commandRunner.run(<String>[
-        'config',
-        '--enable-web'
-      ]);
+      await commandRunner.run(<String>['config', '--enable-web']);
 
       expect(
         testLogger.statusText,
         containsIgnoringWhitespace('You may need to restart any open editors'),
       );
-    }, overrides: <Type, Generator>{
-      Usage: () => mockUsage,
     });
 
-    testUsingContext('displays which config settings are available on stable', () async {
-      when(mockFlutterVersion.channel).thenReturn('stable');
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
+    testWithoutContext('warns when Swift Package Manager is disabled', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+      await commandRunner.run(<String>['config', '--no-enable-swift-package-manager']);
+
+      expect(testLogger.warningText, contains(kSwiftPackageManagerDisabledWarning));
+    });
+
+    testWithoutContext('displays which config settings are available on stable', () async {
+      fakeFlutterVersion.channel = 'stable';
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
 
       await commandRunner.run(<String>[
         'config',
@@ -182,128 +275,262 @@ void main() {
         '--enable-macos-desktop',
       ]);
 
-      await commandRunner.run(<String>[
-        'config',
-      ]);
+      await commandRunner.run(<String>['config', '--list']);
 
-      expect(
-        testLogger.statusText,
-        containsIgnoringWhitespace('enable-web: true (Unavailable)'),
-      );
-      expect(
-        testLogger.statusText,
-        containsIgnoringWhitespace('enable-linux-desktop: true (Unavailable)'),
-      );
-      expect(
-        testLogger.statusText,
-        containsIgnoringWhitespace('enable-windows-desktop: true (Unavailable)'),
-      );
-      expect(
-        testLogger.statusText,
-        containsIgnoringWhitespace('enable-macos-desktop: true (Unavailable)'),
-      );
-      verifyNoAnalytics();
-    }, overrides: <Type, Generator>{
-      AndroidStudio: () => mockAndroidStudio,
-      AndroidSdk: () => mockAndroidSdk,
-      FlutterVersion: () => mockFlutterVersion,
-      Usage: () => mockUsage,
+      expect(testLogger.statusText, containsIgnoringWhitespace('enable-web: true'));
+      expect(testLogger.statusText, containsIgnoringWhitespace('enable-linux-desktop: true'));
+      expect(testLogger.statusText, containsIgnoringWhitespace('enable-windows-desktop: true'));
+      expect(testLogger.statusText, containsIgnoringWhitespace('enable-macos-desktop: true'));
+      expect(fakeAnalytics.sentEvents, isEmpty);
     });
 
-    testUsingContext('no-analytics flag flips usage flag and sends event', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
+    testWithoutContext('analytics flag enables/disables analytics', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
 
-      when(mockUsage.sendEvent(
-        captureAny,
-        captureAny,
-        label: captureAnyNamed('label'),
-        value: anyNamed('value'),
-        parameters: anyNamed('parameters'),
-      )).thenAnswer((Invocation invocation) async {
-        expect(mockUsage.enabled, true);
-        expect(invocation.positionalArguments, <String>['analytics', 'enabled']);
-        expect(invocation.namedArguments[#label], 'false');
-      });
+      expect(fakeAnalytics.telemetryEnabled, true);
 
-      await commandRunner.run(<String>[
-        'config',
-        '--no-analytics',
-      ]);
+      await commandRunner.run(<String>['config', '--no-analytics']);
+      expect(fakeAnalytics.telemetryEnabled, false);
 
-      expect(mockUsage.enabled, false);
-
-      // Verify that we flushed the analytics queue.
-      verify(mockUsage.ensureAnalyticsSent());
-
-      // Verify that we only send the analytics disable event, and no other
-      // info.
-      verifyNever(mockUsage.sendCommand(
-        any,
-        parameters: anyNamed('parameters'),
-      ));
-      verifyNever(mockUsage.sendTiming(
-        any,
-        any,
-        any,
-        label: anyNamed('label'),
-      ));
-    }, overrides: <Type, Generator>{
-      Usage: () => mockUsage,
+      await commandRunner.run(<String>['config', '--analytics']);
+      expect(fakeAnalytics.telemetryEnabled, true);
     });
 
-    testUsingContext('analytics flag flips usage flag and sends event', () async {
-      final ConfigCommand configCommand = ConfigCommand();
-      final CommandRunner<void> commandRunner = createTestCommandRunner(configCommand);
+    testWithoutContext('analytics reported with help usages', () async {
+      final ConfigCommand configCommand = createConfigCommand();
+      createRunner(configCommand);
 
-      await commandRunner.run(<String>[
-        'config',
-        '--analytics',
-      ]);
-
-      expect(mockUsage.enabled, true);
-
-      // Verify that we only send the analytics disable event, and no other
-      // info.
-      verifyNever(mockUsage.sendCommand(
-        any,
-        parameters: anyNamed('parameters'),
-      ));
-      verifyNever(mockUsage.sendTiming(
-        any,
-        any,
-        any,
-        label: anyNamed('label'),
-      ));
-
-      expect(verify(mockUsage.sendEvent(
-        captureAny,
-        captureAny,
-        label: captureAnyNamed('label'),
-        value: anyNamed('value'),
-        parameters: anyNamed('parameters'),
-      )).captured,
-        <dynamic>['analytics', 'enabled', 'true'],
+      await fakeAnalytics.setTelemetry(false);
+      expect(
+        configCommand.usage,
+        containsIgnoringWhitespace('Analytics reporting is currently disabled'),
       );
-    }, overrides: <Type, Generator>{
-      Usage: () => mockUsage,
+
+      await fakeAnalytics.setTelemetry(true);
+      expect(
+        configCommand.usage,
+        containsIgnoringWhitespace('Analytics reporting is currently enabled'),
+      );
     });
+
+    testWithoutContext('resolves dependencies from injected ToolContext on write', () async {
+      final fakeInjectedConfig = Config.test(name: 'injected', directory: fs.directory('/'));
+      final fakeInjectedLogger = BufferLogger.test();
+
+      final ConfigCommand configCommand = createConfigCommand(
+        config: fakeInjectedConfig,
+        logger: fakeInjectedLogger,
+      );
+
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+      await commandRunner.run(<String>['config', '--enable-web']);
+
+      expect(fakeInjectedConfig.getValue('enable-web'), true);
+      expect(defaultConfig.getValue('enable-web'), isNull);
+
+      expect(fakeInjectedLogger.statusText, contains('Setting "enable-web" value to "true"'));
+      expect(testLogger.statusText, isNot(contains('Setting "enable-web" value to "true"')));
+    });
+
+    testWithoutContext('resolves dependencies from injected ToolContext on read', () async {
+      final fakeLocalConfig = FakeConfig();
+      final fakeLocalLogger = BufferLogger.test();
+      final ConfigCommand configCommand = createConfigCommand(
+        config: fakeLocalConfig,
+        logger: fakeLocalLogger,
+      );
+      final CommandRunner<void> commandRunner = createRunner(configCommand);
+      await commandRunner.run(<String>['config', '--list']);
+
+      expect(fakeLocalLogger.statusText, contains('All Settings:'));
+      expect(fakeLocalConfig.keysQueried, isTrue);
+    });
+
+    testWithoutContext(
+      'custom configuration options and feature flags are registered in parser',
+      () async {
+        final mockExtension = FakeConfigurationExtension(
+          title: 'My Extension',
+          featureFlags: <FeatureFlag>[
+            const FeatureFlag(
+              name: 'my-ext-feature',
+              help: 'My extension feature help',
+              enabledByDefault: true,
+            ),
+          ],
+          configOptions: <ConfigOption>[
+            const ConfigOption(
+              name: 'my-ext-option',
+              help: 'My extension option help',
+              value: 'default-value',
+            ),
+          ],
+        );
+        final fakeExtensionManager = FakeExtensionManager(
+          extensions: <ConfigurationExtension>[mockExtension],
+        );
+
+        final ConfigCommand configCommand = createConfigCommand(
+          extensionManager: fakeExtensionManager,
+          featureFlags: fakes.TestFeatureFlags(isToolExtensionsEnabled: true),
+        );
+        createRunner(configCommand);
+
+        await configCommand.initializeDynamicOptions();
+        final ArgParser parser = configCommand.argParser;
+
+        expect(parser.options, contains('my-ext-feature'));
+        expect(parser.options, contains('my-ext-option'));
+
+        expect(parser.options['my-ext-feature']!.isFlag, true);
+        expect(parser.options['my-ext-feature']!.help, 'My extension feature help');
+        expect(parser.options['my-ext-feature']!.defaultsTo, true);
+
+        expect(parser.options['my-ext-option']!.isFlag, false);
+        expect(parser.options['my-ext-option']!.help, 'My extension option help');
+        expect(parser.options['my-ext-option']!.defaultsTo, 'default-value');
+      },
+    );
+
+    testWithoutContext(
+      'custom configuration options and feature flags can be set/cleared via runCommand',
+      () async {
+        final mockExtension = FakeConfigurationExtension(
+          title: 'My Extension',
+          featureFlags: <FeatureFlag>[
+            const FeatureFlag(name: 'my-ext-feature', help: 'My extension feature help'),
+          ],
+          configOptions: <ConfigOption>[
+            const ConfigOption(name: 'my-ext-option', help: 'My extension option help'),
+          ],
+        );
+        final fakeExtensionManager = FakeExtensionManager(
+          extensions: <ConfigurationExtension>[mockExtension],
+        );
+
+        final ConfigCommand configCommand = createConfigCommand(
+          extensionManager: fakeExtensionManager,
+          featureFlags: fakes.TestFeatureFlags(isToolExtensionsEnabled: true),
+        );
+        await configCommand.initializeDynamicOptions();
+        final CommandRunner<void> commandRunner = createRunner(configCommand);
+
+        await commandRunner.run(<String>['config', '--my-ext-feature', '--my-ext-option=my-value']);
+
+        expect(defaultConfig.getValue('my-ext-feature'), true);
+        expect(defaultConfig.getValue('my-ext-option'), 'my-value');
+
+        // Test disabling flag
+        await commandRunner.run(<String>['config', '--no-my-ext-feature']);
+        expect(defaultConfig.getValue('my-ext-feature'), false);
+
+        await commandRunner.run(<String>['config', '--clear-features']);
+        expect(defaultConfig.getValue('my-ext-feature'), null);
+
+        await commandRunner.run(<String>['config', '--my-ext-option=']);
+        expect(defaultConfig.getValue('my-ext-option'), null);
+      },
+    );
+
+    testWithoutContext(
+      'conflicting extension options and feature flags are skipped without throwing',
+      () async {
+        final mockExtension = FakeConfigurationExtension(
+          title: 'Conflicting Extension',
+          featureFlags: <FeatureFlag>[
+            const FeatureFlag(name: 'analytics', help: 'Conflicting analytics flag'),
+          ],
+          configOptions: <ConfigOption>[
+            const ConfigOption(name: 'android-sdk', help: 'Conflicting android-sdk option'),
+          ],
+        );
+        final fakeExtensionManager = FakeExtensionManager(
+          extensions: <ConfigurationExtension>[mockExtension],
+        );
+
+        final ConfigCommand configCommand = createConfigCommand(
+          extensionManager: fakeExtensionManager,
+          featureFlags: fakes.TestFeatureFlags(isToolExtensionsEnabled: true),
+        );
+        await configCommand.initializeDynamicOptions();
+        final ArgParser parser = configCommand.argParser;
+
+        expect(parser.options.containsKey('analytics'), isTrue);
+        expect(parser.options.containsKey('android-sdk'), isTrue);
+      },
+    );
   });
 }
 
-class MockAndroidStudio extends Mock implements AndroidStudio, Comparable<AndroidStudio> {
+class FakeAndroidStudio extends Fake implements AndroidStudio, Comparable<AndroidStudio> {
   @override
-  String get directory => 'path/to/android/stdio';
+  String get directory => 'path/to/android/studio';
+
+  @override
+  String? get javaPath => 'path/to/android/studio/jbr';
 }
 
-class MockAndroidSdk extends Mock implements AndroidSdk {
+class FakeAndroidSdk extends Fake implements AndroidSdk {
+  FakeAndroidSdk({required this.fileSystem});
+
+  final FileSystem fileSystem;
+
   @override
-  String get directory => 'path/to/android/sdk';
+  Directory get directory => fileSystem.directory('path/to/android/sdk');
 }
 
-class MockFlutterVersion extends Mock implements FlutterVersion {}
-
-class MockUsage extends Mock implements Usage {
+class FakeFlutterVersion extends Fake implements FlutterVersion {
   @override
-  bool enabled = true;
+  String channel = 'stable';
+
+  @override
+  void ensureVersionFile() {}
+
+  @override
+  Future<void> checkFlutterVersionFreshness() async {}
+}
+
+class FakeConfig extends Fake implements Config {
+  bool keysQueried = false;
+
+  @override
+  Iterable<String> get keys {
+    keysQueried = true;
+    return const <String>[];
+  }
+
+  @override
+  Object? getValue(String key) => null;
+}
+
+class FakeExtensionManager extends Fake implements ExtensionManager {
+  FakeExtensionManager({this.extensions = const <ConfigurationExtension>[]});
+
+  final List<ConfigurationExtension> extensions;
+
+  @override
+  List<ConfigurationExtension> get configurationExtensions => extensions;
+
+  @override
+  Future<void> ensureInitialized() async {}
+}
+
+class FakeConfigurationExtension extends Fake implements ConfigurationExtension {
+  FakeConfigurationExtension({
+    required this.title,
+    required this.featureFlags,
+    required this.configOptions,
+  });
+
+  @override
+  final String title;
+  final List<FeatureFlag> featureFlags;
+  final List<ConfigOption> configOptions;
+
+  @override
+  Future<List<FeatureFlag>> getFeatureFlags() async => featureFlags;
+
+  @override
+  Future<List<ConfigOption>> getConfigurations() async => configOptions;
 }

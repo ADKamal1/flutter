@@ -2,19 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-import '../flutter_test_alternative.dart';
 import '../image_data.dart';
 import 'painting_utils.dart';
 
 void main() {
-  final PaintingBindingSpy binding = PaintingBindingSpy();
+  final binding = PaintingBindingSpy();
   test('Image decoder control test', () async {
     expect(binding.instantiateImageCodecCalledCount, 0);
     final ui.Image image = await decodeImageFromList(Uint8List.fromList(kTransparentImage));

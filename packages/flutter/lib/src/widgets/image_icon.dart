@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/material.dart';
+library;
+
 import 'package:flutter/rendering.dart';
 
 import 'basic.dart';
@@ -18,18 +21,23 @@ import 'image.dart';
 ///  * [IconButton], for interactive icons.
 ///  * [IconTheme], which provides ambient configuration for icons.
 ///  * [Icon], for icons based on glyphs from fonts instead of images.
-///  * [Icons], a predefined font based set of icons from the material design library.
+///  * [Icons], the library of Material Icons.
 class ImageIcon extends StatelessWidget {
   /// Creates an image icon.
   ///
   /// The [size] and [color] default to the value given by the current [IconTheme].
   const ImageIcon(
     this.image, {
-    Key? key,
+    super.key,
     this.size,
     this.color,
     this.semanticLabel,
-  }) : super(key: key);
+    this.useOriginalColors = false,
+  }) : assert(
+         !(useOriginalColors && color != null),
+         'Cannot provide a color while useOriginalColors is true. '
+         'To use a specific color, set useOriginalColors to false or omit it.',
+       );
 
   /// The image to display as the icon.
   ///
@@ -51,35 +59,52 @@ class ImageIcon extends StatelessWidget {
   /// Defaults to the current [IconTheme] color, if any. If there is
   /// no [IconTheme], then it defaults to not recolorizing the image.
   ///
-  /// The image will additionally be adjusted by the opacity of the current
+  /// The image will be additionally adjusted by the opacity of the current
   /// [IconTheme], if any.
   final Color? color;
 
   /// Semantic label for the icon.
   ///
-  /// Announced in accessibility modes (e.g TalkBack/VoiceOver).
+  /// Announced by assistive technologies (e.g TalkBack/VoiceOver).
   /// This label does not show in the UI.
   ///
   ///  * [SemanticsProperties.label], which is set to [semanticLabel] in the
   ///    underlying	 [Semantics] widget.
   final String? semanticLabel;
 
+  /// Whether to render the image using its original colors.
+  ///
+  /// If this is false (the default), the image is colorized by merging the
+  /// [color] (or, if that is null, the [IconTheme] color) with the image
+  /// using [BlendMode.srcIn]. This is the standard behavior for icons.
+  ///
+  /// If this is true, the color-blend filter is disabled, and the image is
+  /// rendered with its original colors. This allows multi-colored images,
+  /// such as brand logos, to be displayed accurately.
+  ///
+  /// If this is true, [color] must be null.
+  ///
+  /// Defaults to false.
+  final bool useOriginalColors;
+
   @override
   Widget build(BuildContext context) {
     final IconThemeData iconTheme = IconTheme.of(context);
     final double? iconSize = size ?? iconTheme.size;
 
-    if (image == null)
+    if (image == null) {
       return Semantics(
         label: semanticLabel,
         child: SizedBox(width: iconSize, height: iconSize),
       );
+    }
 
     final double? iconOpacity = iconTheme.opacity;
     Color iconColor = color ?? iconTheme.color!;
 
-    if (iconOpacity != null && iconOpacity != 1.0)
+    if (iconOpacity != null && iconOpacity != 1.0) {
       iconColor = iconColor.withOpacity(iconColor.opacity * iconOpacity);
+    }
 
     return Semantics(
       label: semanticLabel,
@@ -87,9 +112,8 @@ class ImageIcon extends StatelessWidget {
         image: image!,
         width: iconSize,
         height: iconSize,
-        color: iconColor,
+        color: useOriginalColors ? null : iconColor,
         fit: BoxFit.scaleDown,
-        alignment: Alignment.center,
         excludeFromSemantics: true,
       ),
     );
@@ -98,7 +122,9 @@ class ImageIcon extends StatelessWidget {
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<ImageProvider>('image', image, ifNull: '<empty>', showName: false));
+    properties.add(
+      DiagnosticsProperty<ImageProvider>('image', image, ifNull: '<empty>', showName: false),
+    );
     properties.add(DoubleProperty('size', size, defaultValue: null));
     properties.add(ColorProperty('color', color, defaultValue: null));
   }

@@ -20,8 +20,12 @@
 ///
 ///     main() {
 ///       enableFlutterDriverExtension();
-///       runApp(new ExampleApp());
+///       runApp(ExampleApp());
 ///     }
+///
+/// @docImport 'src/extension/extension.dart';
 library flutter_driver_extension;
 
+export 'src/common/deserialization_factory.dart';
+export 'src/common/handler_factory.dart';
 export 'src/extension/extension.dart';

@@ -24,8 +24,8 @@ void _expectPlatformsEqual(Platform actual, Platform expected) {
 
 void main() {
   group('FakePlatform.fromPlatform', () {
-    FakePlatform fake;
-    LocalPlatform local;
+    late FakePlatform fake;
+    late LocalPlatform local;
 
     setUp(() {
       local = const LocalPlatform();
@@ -43,10 +43,7 @@ void main() {
       fake.environment[key] = 'FAKE';
       expect(fake.environment[key], 'FAKE');
 
-      expect(
-        fake.executableArguments.length,
-        local.executableArguments.length,
-      );
+      expect(fake.executableArguments.length, local.executableArguments.length);
       fake.executableArguments.add('ARG');
       expect(fake.executableArguments.last, 'ARG');
     });

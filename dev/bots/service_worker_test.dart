@@ -2,142 +2,198 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
+import 'dart:core' hide print;
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
-import 'package:flutter_devicelab/framework/browser.dart';
-import 'package:meta/meta.dart';
 import 'package:shelf/shelf.dart';
-import 'package:shelf_static/shelf_static.dart';
-import 'package:shelf/shelf_io.dart' as shelf_io;
 
-final String bat = Platform.isWindows ? '.bat' : '';
-final String flutterRoot = path.dirname(path.dirname(path.dirname(path.fromUri(Platform.script))));
-final String flutter = path.join(flutterRoot, 'bin', 'flutter$bat');
+import 'browser.dart';
+import 'run_command.dart';
+import 'test/common.dart';
+import 'utils.dart';
 
+final String _bat = Platform.isWindows ? '.bat' : '';
+final String _flutterRoot = path.dirname(path.dirname(path.dirname(path.fromUri(Platform.script))));
+final String _flutter = path.join(_flutterRoot, 'bin', 'flutter$_bat');
+final String _testAppDirectory = path.join(_flutterRoot, 'dev', 'integration_tests', 'web');
+final String _appBuildDirectory = path.join(_testAppDirectory, 'build', 'web');
+final String _target = path.join('lib', 'service_worker_test.dart');
+final Set<String> _requestedPaths = <String>{};
 
-// Run a web service worker test. The expectations are currently stored here
-// instead of in the application. This is not run on CI due to the requirement
-// of having a headful chrome instance.
 Future<void> main() async {
-  await _runWebServiceWorkerTest('lib/service_worker_test.dart');
+  await runServiceWorkerCleanupTest(headless: false);
+
+  if (hasError) {
+    reportErrorsAndExit('${bold}Cleanup test FAILED.$reset');
+  }
+  reportSuccessAndExit('${bold}Cleanup test PASSED successfully.$reset');
 }
 
-Future<void> _runWebServiceWorkerTest(String target, {
-  List<String> additionalArguments = const<String>[],
-}) async {
-  final String testAppDirectory = path.join(flutterRoot, 'dev', 'integration_tests', 'web');
-  final String appBuildDirectory = path.join(testAppDirectory, 'build', 'web');
+Future<void> runServiceWorkerCleanupTest({required bool headless}) async {
+  print('${bold}BEGIN: Service Worker Cleanup Verification Test$reset');
 
-  // Build the app.
-  await Process.run(
-    flutter,
-    <String>[ 'clean' ],
-    workingDirectory: testAppDirectory,
-  );
-  await Process.run(
-    flutter,
-    <String>[
-      'build',
-      'web',
-      '--release',
-      ...additionalArguments,
-      '-t',
-      target,
-    ],
-    workingDirectory: testAppDirectory,
-    environment: <String, String>{
-      'FLUTTER_WEB': 'true',
-    },
-  );
-  final List<Uri> requests = <Uri>[];
-  final List<Map<String, String>> headers = <Map<String, String>>[];
-  await runRecordingServer(
-    appUrl: 'http://localhost:8080/',
-    appDirectory: appBuildDirectory,
-    requests: requests,
-    headers: headers,
-    browserDebugPort: null,
-  );
+  AppServer? server;
 
-  final List<String> requestedPaths = requests.map((Uri uri) => uri.toString()).toList();
-  final List<String> expectedPaths = <String>[
-    // Initial page load
-    '',
-    'main.dart.js',
-    'assets/FontManifest.json',
-    'flutter_service_worker.js',
-    'manifest.json',
-    'favicon.ico',
-    // Service worker install.
-    'main.dart.js',
-    'index.html',
-    'assets/LICENSE',
-    'assets/AssetManifest.json',
-    'assets/FontManifest.json',
-    '',
-    // Second page load all cached.
-  ];
-  print('requests: $requestedPaths');
-  // The exact order isn't important or deterministic.
-  for (final String path in requestedPaths) {
-    if (!expectedPaths.remove(path)) {
-      print('unexpected service worker request: $path');
-      exit(1);
-    }
-  }
-  if (expectedPaths.isNotEmpty) {
-    print('Missing service worker requests from expected paths: $expectedPaths');
-    exit(1);
-  }
-}
-
-/// This server runs a release web application and verifies that the service worker
-/// caches files correctly, by checking the request resources over HTTP.
-///
-/// When it receives a request for `CLOSE` the server will be torn down.
-///
-/// Expects a path to the `build/web` directory produced from `flutter build web`.
-Future<void> runRecordingServer({
-  @required String appUrl,
-  @required String appDirectory,
-  @required List<Uri> requests,
-  @required List<Map<String, String>> headers,
-  int serverPort = 8080,
-  int browserDebugPort = 8081,
-}) async {
-  Chrome chrome;
-  HttpServer server;
-  final Completer<void> completer = Completer<void>();
-  Directory userDataDirectory;
-  try {
-    server = await HttpServer.bind('localhost', serverPort);
-    final Cascade cascade = Cascade()
-      .add((Request request) async {
-        if (request.url.toString().contains('CLOSE')) {
-          completer.complete();
-          return Response.notFound('');
-        }
-        requests.add(request.url);
-        headers.add(request.headers);
-        return Response.notFound('');
+  const oldCachingWorkerContent = '''
+'use strict';
+const CACHE_NAME = 'flutter-app-cache';
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(['/', 'index.html', 'main.dart.js']);
+    }).then(() => self.skipWaiting())
+  );
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(event.request).then((response) => {
+        return response || fetch(event.request).then((response) => {
+          if (response && Boolean(response.ok)) {
+            cache.put(event.request, response.clone());
+          }
+          return response;
+        });
       })
-      .add(createStaticHandler(appDirectory, defaultDocument: 'index.html'));
-    shelf_io.serveRequests(server, cascade.handler);
-    userDataDirectory = Directory.systemTemp.createTempSync('chrome_user_data_');
-    chrome = await Chrome.launch(ChromeOptions(
-      headless: false,
-      debugPort: browserDebugPort,
-      url: appUrl,
-      userDataDirectory: userDataDirectory.path,
-      windowHeight: 500,
-      windowWidth: 500,
-    ), onError: completer.completeError);
-    await completer.future;
+    })
+  );
+});
+  ''';
+
+  final serviceWorkerBuildFile = File(path.join(_appBuildDirectory, 'flutter_service_worker.js'));
+
+  try {
+    await runCommand(_flutter, <String>['clean'], workingDirectory: _testAppDirectory);
+    await runCommand(
+      _flutter,
+      <String>['build', 'web', '--no-web-resources-cdn', '--profile', '-t', _target],
+      workingDirectory: _testAppDirectory,
+      environment: <String, String>{'FLUTTER_WEB': 'true'},
+    );
+    print('\n${yellow}Phase 1: Installing dummy caching worker and verifying it caches...$reset');
+    final String cleanupWorkerContent = serviceWorkerBuildFile.readAsStringSync();
+    serviceWorkerBuildFile.writeAsStringSync(oldCachingWorkerContent);
+
+    server = await _startServer(headless: headless);
+    await _waitForAppToRequest(server, 'flutter_service_worker.js');
+    await _waitForAppToRequest(server, 'main.dart.js');
+    _requestedPaths.clear();
+    print('== RELOADING PAGE ==');
+    await server.chrome.reloadPage();
+    await _waitForAppToRequest(server, 'CLOSE');
+
+    expect(
+      _requestedPaths,
+      isNot(contains('main.dart.js')),
+      reason: 'On a simple reload, main.dart.js should have been served from the cache, so no network request was expected.',
+    );
+    print('${green}Verification successful: Old caching worker is active.$reset');
+    await server.stop();
+
+    print('\n${yellow}Phase 2: Deploying cleanup worker and verifying cache is removed...$reset');
+    serviceWorkerBuildFile.writeAsStringSync(cleanupWorkerContent);
+
+    _requestedPaths.clear();
+    server = await _startServer(headless: headless);
+    await _waitForAppToRequest(server, 'flutter_service_worker.js');
+    await _waitForAppToRequest(server, 'main.dart.js');
+    _requestedPaths.clear();
+    print('== RELOADING PAGE ==');
+    await server.chrome.reloadPage();
+    await _waitForAppToRequest(server, 'main.dart.js');
+
+    expect(
+      _requestedPaths,
+      contains('main.dart.js'),
+      reason: 'After cleanup, main.dart.js should be requested from the network because the caching worker is gone.',
+    );
+    print(
+      '${green}Verification successful: Cleanup worker has removed the old caching behavior.$reset',
+    );
   } finally {
-    chrome?.stop();
-    await server?.close();
-    userDataDirectory.deleteSync(recursive: true);
+    await server?.stop();
+    print('\n${bold}END: Service Worker Cleanup Verification Test$reset');
   }
+}
+
+Future<AppServer> _startServer({required bool headless}) async {
+  return AppServer.start(
+    headless: headless,
+    appDirectory: _appBuildDirectory,
+    cacheControl: 'max-age=0',
+    additionalRequestHandlers: <Handler>[
+      (Request request) {
+        final String path = request.url.path.split('/').last;
+        print('(requested path: $path)');
+        _requestedPaths.add(path);
+        return Response.notFound('');
+      },
+    ],
+  );
+}
+
+Future<void> _waitForAppToRequest(AppServer server, String file) async {
+  print('Waiting for app to request "$file"');
+  await Future.any(<Future<Object?>>[
+    () async {
+      var tries = 1;
+      while (!_requestedPaths.contains(file)) {
+        if (tries++ % 40 == 0) {
+          print('-- Still waiting for app to request "$file". Requested so far: $_requestedPaths');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      print('++ App has requested "$file"');
+    }(),
+    server.onChromeError.then((String error) {
+      throw Exception('Chrome error: $error');
+    }),
+  ]);
+}
+
+/// A drop-in replacement for `package:test`'s `expect` that can run
+/// outside the standard test runner environment.
+void expect(Object? actual, Object? expected, {String? reason}) {
+  final Matcher matcher = wrapMatcher(expected);
+  final matchState = <Object?, Object?>{};
+  if (matcher.matches(actual, matchState)) {
+    return;
+  }
+  final mismatchDescription = StringDescription();
+  matcher.describeMismatch(actual, mismatchDescription, matchState, true);
+
+  final which = mismatchDescription.toString();
+  final buffer = StringBuffer();
+  buffer.writeln(_indent(_prettyPrint(expected), first: 'Expected: '));
+  buffer.writeln(_indent(_prettyPrint(actual), first: '  Actual: '));
+  if (which.isNotEmpty) {
+    buffer.writeln(_indent(which, first: '   Which: '));
+  }
+  if (reason != null) {
+    buffer.writeln(_indent(reason, first: '  Reason: '));
+  }
+  foundError(<String>[buffer.toString(), StackTrace.current.toString()]);
+}
+
+/// Returns a pretty-printed representation of [value].
+String _prettyPrint(Object? value) => StringDescription().addDescriptionOf(value).toString();
+
+/// Indents each line of a [text] string.
+String _indent(String text, {required String first}) {
+  final String prefix = ' ' * first.length;
+  final List<String> lines = text.split('\n');
+  if (lines.length == 1) {
+    return '$first$text';
+  }
+  final buffer = StringBuffer('$first${lines.first}\n');
+  for (final String line in lines.skip(1).take(lines.length - 2)) {
+    buffer.writeln('$prefix$line');
+  }
+  buffer.write('$prefix${lines.last}');
+  return buffer.toString();
 }

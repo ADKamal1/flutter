@@ -2,26 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class TestRoute extends PageRouteBuilder<void> {
-  TestRoute(Widget child) : super(
-    pageBuilder: (BuildContext _, Animation<double> __, Animation<double> ___) => child,
-  );
+  TestRoute(Widget child)
+    : super(pageBuilder: (BuildContext _, Animation<double> _, Animation<double> _) => child);
 }
 
 class IconTextBox extends StatelessWidget {
-  const IconTextBox(this.text, { Key key }) : super(key: key);
+  const IconTextBox(this.text, {super.key});
   final String text;
   @override
   Widget build(BuildContext context) {
     return Container(
       alignment: Alignment.center,
       child: Row(
-        children: <Widget>[const Icon(IconData(0x41, fontFamily: 'Roboto')), Text(text)],
+        children: <Widget>[
+          const Icon(IconData(0x41, fontFamily: 'Roboto')),
+          Text(text),
+        ],
       ),
     );
   }
@@ -31,10 +31,10 @@ void main() {
   testWidgets('InheritedTheme.captureAll()', (WidgetTester tester) async {
     const double fontSize = 32;
     const double iconSize = 48;
-    const Color textColor = Color(0xFF00FF00);
-    const Color iconColor = Color(0xFF0000FF);
-    bool useCaptureAll = false;
-    BuildContext navigatorContext;
+    const textColor = Color(0xFF00FF00);
+    const iconColor = Color(0xFF0000FF);
+    var useCaptureAll = false;
+    late BuildContext navigatorContext;
 
     Widget buildFrame() {
       return WidgetsApp(
@@ -64,8 +64,8 @@ void main() {
                             Navigator.of(context).push(
                               TestRoute(
                                 useCaptureAll
-                                  ? InheritedTheme.captureAll(context, const IconTextBox('Hello'))
-                                  : const IconTextBox('Hello')
+                                    ? InheritedTheme.captureAll(context, const IconTextBox('Hello'))
+                                    : const IconTextBox('Hello'),
                               ),
                             );
                           },
@@ -83,21 +83,17 @@ void main() {
     }
 
     TextStyle getIconStyle() {
-      return tester.widget<RichText>(
-        find.descendant(
-          of: find.byType(Icon),
-          matching: find.byType(RichText),
-        ),
-      ).text.style;
+      return tester
+          .widget<RichText>(find.descendant(of: find.byType(Icon), matching: find.byType(RichText)))
+          .text
+          .style!;
     }
 
     TextStyle getTextStyle(String text) {
-      return tester.widget<RichText>(
-        find.descendant(
-          of: find.text(text),
-          matching: find.byType(RichText),
-        ),
-      ).text.style;
+      return tester
+          .widget<RichText>(find.descendant(of: find.text(text), matching: find.byType(RichText)))
+          .text
+          .style!;
     }
 
     useCaptureAll = false;
@@ -148,11 +144,13 @@ void main() {
     expect(getIconStyle().fontSize, iconSize);
   });
 
-  testWidgets('InheritedTheme.captureAll() multiple IconTheme ancestors', (WidgetTester tester) async {
+  testWidgets('InheritedTheme.captureAll() multiple IconTheme ancestors', (
+    WidgetTester tester,
+  ) async {
     // This is a regression test for https://github.com/flutter/flutter/issues/39087
 
-    const Color outerColor = Color(0xFF0000FF);
-    const Color innerColor = Color(0xFF00FF00);
+    const outerColor = Color(0xFF0000FF);
+    const innerColor = Color(0xFF00FF00);
     const double iconSize = 48;
     final Key icon1 = UniqueKey();
     final Key icon2 = UniqueKey();
@@ -194,12 +192,10 @@ void main() {
     );
 
     TextStyle getIconStyle(Key key) {
-      return tester.widget<RichText>(
-        find.descendant(
-          of: find.byKey(key),
-          matching: find.byType(RichText),
-        ),
-      ).text.style;
+      return tester
+          .widget<RichText>(find.descendant(of: find.byKey(key), matching: find.byType(RichText)))
+          .text
+          .style!;
     }
 
     expect(getIconStyle(icon1).color, innerColor);
@@ -208,10 +204,12 @@ void main() {
     expect(getIconStyle(icon2).fontSize, iconSize);
   });
 
-  testWidgets('InheritedTheme.captureAll() multiple DefaultTextStyle ancestors', (WidgetTester tester) async {
+  testWidgets('InheritedTheme.captureAll() multiple DefaultTextStyle ancestors', (
+    WidgetTester tester,
+  ) async {
     // This is a regression test for https://github.com/flutter/flutter/issues/39087
 
-    const Color textColor = Color(0xFF00FF00);
+    const textColor = Color(0xFF00FF00);
 
     await tester.pumpWidget(
       WidgetsApp(
@@ -240,12 +238,10 @@ void main() {
     );
 
     TextStyle getTextStyle(String text) {
-      return tester.widget<RichText>(
-        find.descendant(
-          of: find.text(text),
-          matching: find.byType(RichText),
-        ),
-      ).text.style;
+      return tester
+          .widget<RichText>(find.descendant(of: find.text(text), matching: find.byType(RichText)))
+          .text
+          .style!;
     }
 
     expect(getTextStyle('Hello').fontSize, null);

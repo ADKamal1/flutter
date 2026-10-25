@@ -3,19 +3,21 @@
 // found in the LICENSE file.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 
 import 'package:flutter_tools/src/asset.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
+import 'package:flutter_tools/src/build_info.dart';
 
-import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/globals.dart' as globals;
+import 'package:standard_message_codec/standard_message_codec.dart';
 
 import '../src/common.dart';
 import '../src/context.dart';
-import '../src/pubspec_schema.dart';
+import '../src/package_config.dart';
 
 void main() {
   String fixPath(String path) {
@@ -24,26 +26,44 @@ void main() {
     // fixed we fix them here.
     // TODO(dantup): Remove this function once the above issue is fixed and
     // rolls into Flutter.
-    return path?.replaceAll('/', globals.fs.path.separator);
+    return path.replaceAll('/', globals.fs.path.separator);
   }
-  void writePubspecFile(String path, String name, { List<String> assets }) {
+
+  void writePubspecFile(
+    String path,
+    String name, {
+    List<String>? assets,
+    Map<String, String>? dependencies,
+    List<(String path, String flavor)>? flavoredAssets,
+  }) {
     String assetsSection;
-    if (assets == null) {
+    if (assets == null && flavoredAssets == null) {
       assetsSection = '';
     } else {
-      final StringBuffer buffer = StringBuffer();
+      final buffer = StringBuffer();
       buffer.write('''
 flutter:
      assets:
 ''');
 
-      for (final String asset in assets) {
+      for (final String asset in (assets ?? <String>[])) {
         buffer.write('''
        - $asset
 ''');
       }
+
+      for (final (String path, String flavor) in flavoredAssets ?? <(String, String)>[]) {
+        buffer.write('''
+       - path: $path
+         flavors:
+           - $flavor
+''');
+      }
+
       assetsSection = buffer.toString();
     }
+
+    dependencies = dependencies ?? <String, String>{};
 
     globals.fs.file(fixPath(path))
       ..createSync(recursive: true)
@@ -52,53 +72,43 @@ name: $name
 dependencies:
   flutter:
     sdk: flutter
+${dependencies.entries.map((MapEntry<String, String> d) => '  ${d.key}: {path: ${d.value}}').join('\n')}
 $assetsSection
 ''');
-  }
-
-  void establishFlutterRoot() {
-    Cache.flutterRoot = getFlutterRoot();
-  }
-
-  void writePackagesFile(String packages) {
-    globals.fs.file('.packages')
-      ..createSync()
-      ..writeAsStringSync(packages);
   }
 
   Future<void> buildAndVerifyAssets(
     List<String> assets,
     List<String> packages,
-    String expectedAssetManifest, {
-    bool expectExists = true,
+    Map<Object, Object> expectedAssetManifest, {
+    String? flavor,
   }) async {
     final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
-    await bundle.build(manifestPath: 'pubspec.yaml', packagesPath: '.packages');
+    await bundle.build(
+      packageConfigPath: '.dart_tool/package_config.json',
+      flavor: flavor,
+      targetPlatform: TargetPlatform.tester,
+    );
 
-    for (final String packageName in packages) {
-      for (final String asset in assets) {
+    for (final packageName in packages) {
+      for (final asset in assets) {
         final String entryKey = Uri.encodeFull('packages/$packageName/$asset');
-        expect(bundle.entries.containsKey(entryKey), expectExists,
-          reason: 'Cannot find key on bundle: $entryKey');
-        if (expectExists) {
-          expect(
-            utf8.decode(await bundle.entries[entryKey].contentsAsBytes()),
-            asset,
-          );
-        }
+        expect(bundle.entries, contains(entryKey), reason: 'Cannot find key on bundle: $entryKey');
+        expect(utf8.decode(await bundle.entries[entryKey]!.contentsAsBytes()), asset);
       }
     }
 
-    if (expectExists) {
-      expect(
-        utf8.decode(await bundle.entries['AssetManifest.json'].contentsAsBytes()),
-        expectedAssetManifest,
-      );
-    }
+    final assetManifest = const StandardMessageCodec().decodeMessage(
+      ByteData.sublistView(
+        Uint8List.fromList(await bundle.entries['AssetManifest.bin']!.contentsAsBytes()),
+      ),
+    ) as Map<Object?, Object?>;
+
+    expect(assetManifest, expectedAssetManifest);
   }
 
   void writeAssets(String path, List<String> assets) {
-    for (final String asset in assets) {
+    for (final asset in assets) {
       final String fullPath = fixPath(globals.fs.path.join(path, asset));
 
       globals.fs.file(fullPath)
@@ -107,581 +117,791 @@ $assetsSection
     }
   }
 
-  FileSystem testFileSystem;
+  late FileSystem testFileSystem;
 
   setUp(() async {
     testFileSystem = MemoryFileSystem(
-      style: globals.platform.isWindows
-        ? FileSystemStyle.windows
-        : FileSystemStyle.posix,
+      style: globals.platform.isWindows ? FileSystemStyle.windows : FileSystemStyle.posix,
     );
-    testFileSystem.currentDirectory = testFileSystem.systemTempDirectory.createTempSync('flutter_asset_bundle_test.');
+    testFileSystem.currentDirectory = testFileSystem.systemTempDirectory.createTempSync(
+      'flutter_asset_bundle_test.',
+    );
   });
 
   group('AssetBundle assets from packages', () {
-    testUsingContext('No assets are bundled when the package has no assets', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+    testUsingContext(
+      'Package asset path that escapes the package directory is rejected',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        // The dependency declares an asset whose relative path escapes its own package directory.
+        // Without containment this would read a file outside the package on the build machine and
+        // bundle it into the consuming app, which never declared that path.
+        writePubspecFile(
+          'p/p/pubspec.yaml',
+          'test_package',
+          assets: <String>['../../../escaped_secret'],
+        );
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
-      writePubspecFile('p/p/pubspec.yaml', 'test_package');
-
-      final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
-      await bundle.build(manifestPath: 'pubspec.yaml', packagesPath: '.packages');
-      expect(bundle.entries.length, 3); // LICENSE, AssetManifest, FontManifest
-      const String expectedAssetManifest = '{}';
-      expect(
-        utf8.decode(await bundle.entries['AssetManifest.json'].contentsAsBytes()),
-        expectedAssetManifest,
-      );
-      expect(
-        utf8.decode(await bundle.entries['FontManifest.json'].contentsAsBytes()),
-        '[]',
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('No assets are bundled when the package has an asset that is not listed', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
-      writePubspecFile('p/p/pubspec.yaml', 'test_package');
-
-      final List<String> assets = <String>['a/foo'];
-      writeAssets('p/p/', assets);
-
-      final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
-      await bundle.build(manifestPath: 'pubspec.yaml', packagesPath: '.packages');
-      expect(bundle.entries.length, 3); // LICENSE, AssetManifest, FontManifest
-      const String expectedAssetManifest = '{}';
-      expect(
-        utf8.decode(await bundle.entries['AssetManifest.json'].contentsAsBytes()),
-        expectedAssetManifest,
-      );
-      expect(
-        utf8.decode(await bundle.entries['FontManifest.json'].contentsAsBytes()),
-        '[]',
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('One asset is bundled when the package has and lists one '
-      'asset its pubspec', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
-
-      final List<String> assets = <String>['a/foo'];
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assets,
-      );
-
-      writeAssets('p/p/', assets);
-
-      const String expectedAssetManifest = '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo"]}';
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('One asset is bundled when the package has one asset, '
-      "listed in the app's pubspec", () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      final List<String> assetEntries = <String>['packages/test_package/a/foo'];
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-        assets: assetEntries,
-      );
-      writePackagesFile('test_package:p/p/lib/');
-      writePubspecFile('p/p/pubspec.yaml', 'test_package');
-
-      final List<String> assets = <String>['a/foo'];
-      writeAssets('p/p/lib/', assets);
-
-      const String expectedAssetManifest = '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo"]}';
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('One asset and its variant are bundled when the package '
-      'has an asset and a variant, and lists the asset in its pubspec', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: <String>['a/foo'],
-      );
-
-      final List<String> assets = <String>['a/foo', 'a/v/foo'];
-      writeAssets('p/p/', assets);
-
-      const String expectedManifest = '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo","packages/test_package/a/v/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('One asset and its variant are bundled when the package '
-      'has an asset and a variant, and the app lists the asset in its pubspec', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-        assets: <String>['packages/test_package/a/foo'],
-      );
-      writePackagesFile('test_package:p/p/lib/');
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-      );
-
-      final List<String> assets = <String>['a/foo', 'a/v/foo'];
-      writeAssets('p/p/lib/', assets);
-
-      const String expectedManifest = '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo","packages/test_package/a/v/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('Two assets are bundled when the package has and lists '
-      'two assets in its pubspec', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
-
-      final List<String> assets = <String>['a/foo', 'a/bar'];
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assets,
-      );
-
-      writeAssets('p/p/', assets);
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/bar":["packages/test_package/a/bar"],'
-          '"packages/test_package/a/foo":["packages/test_package/a/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext("Two assets are bundled when the package has two assets, listed in the app's pubspec", () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      final List<String> assetEntries = <String>[
-        'packages/test_package/a/foo',
-        'packages/test_package/a/bar',
-      ];
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-         assets: assetEntries,
-      );
-      writePackagesFile('test_package:p/p/lib/');
-
-      final List<String> assets = <String>['a/foo', 'a/bar'];
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-      );
-
-      writeAssets('p/p/lib/', assets);
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/bar":["packages/test_package/a/bar"],'
-          '"packages/test_package/a/foo":["packages/test_package/a/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('Two assets are bundled when two packages each have and list an asset their pubspec', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-      );
-      writePackagesFile('test_package:p/p/lib/\ntest_package2:p2/p/lib/');
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: <String>['a/foo'],
-      );
-      writePubspecFile(
-        'p2/p/pubspec.yaml',
-        'test_package2',
-        assets: <String>['a/foo'],
-      );
-
-      final List<String> assets = <String>['a/foo', 'a/v/foo'];
-      writeAssets('p/p/', assets);
-      writeAssets('p2/p/', assets);
-
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo","packages/test_package/a/v/foo"],'
-          '"packages/test_package2/a/foo":'
-          '["packages/test_package2/a/foo","packages/test_package2/a/v/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package', 'test_package2'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext("Two assets are bundled when two packages each have an asset, listed in the app's pubspec", () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-
-      final List<String> assetEntries = <String>[
-        'packages/test_package/a/foo',
-        'packages/test_package2/a/foo',
-      ];
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-        assets: assetEntries,
-      );
-      writePackagesFile('test_package:p/p/lib/\ntest_package2:p2/p/lib/');
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-      );
-      writePubspecFile(
-        'p2/p/pubspec.yaml',
-        'test_package2',
-      );
-
-      final List<String> assets = <String>['a/foo', 'a/v/foo'];
-      writeAssets('p/p/lib/', assets);
-      writeAssets('p2/p/lib/', assets);
-
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/foo":'
-          '["packages/test_package/a/foo","packages/test_package/a/v/foo"],'
-          '"packages/test_package2/a/foo":'
-          '["packages/test_package2/a/foo","packages/test_package2/a/v/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package', 'test_package2'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-
-    testUsingContext('One asset is bundled when the app depends on a package, '
-      'listing in its pubspec an asset from another package', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
-      writePubspecFile(
-        'pubspec.yaml',
-        'test',
-      );
-      writePackagesFile('test_package:p/p/lib/\ntest_package2:p2/p/lib/');
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: <String>['packages/test_package2/a/foo'],
-      );
-      writePubspecFile(
-        'p2/p/pubspec.yaml',
-        'test_package2',
-      );
-
-      final List<String> assets = <String>['a/foo', 'a/v/foo'];
-      writeAssets('p2/p/lib/', assets);
-
-      const String expectedAssetManifest =
-          '{"packages/test_package2/a/foo":'
-          '["packages/test_package2/a/foo","packages/test_package2/a/v/foo"]}';
-
-      await buildAndVerifyAssets(
-        assets,
-        <String>['test_package2'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
-  });
-
-  testUsingContext('Asset paths can contain URL reserved characters', () async {
-    establishFlutterRoot();
-    writeEmptySchemaFile(globals.fs);
-
-    writePubspecFile('pubspec.yaml', 'test');
-    writePackagesFile('test_package:p/p/lib/');
-
-    final List<String> assets = <String>['a/foo', 'a/foo[x]'];
-    writePubspecFile(
-      'p/p/pubspec.yaml',
-      'test_package',
-      assets: assets,
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        expect(
+          () => bundle.build(
+            packageConfigPath: '.dart_tool/package_config.json',
+            targetPlatform: TargetPlatform.tester,
+          ),
+          throwsToolExit(message: 'resolves to a location outside the package directory'),
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
     );
 
-    writeAssets('p/p/', assets);
-    const String expectedAssetManifest =
-        '{"packages/test_package/a/foo":["packages/test_package/a/foo"],'
-        '"packages/test_package/a/foo%5Bx%5D":["packages/test_package/a/foo%5Bx%5D"]}';
+    testUsingContext(
+      'Package license path that escapes the package directory is rejected',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        // The dependency declares a license whose relative path escapes its own package
+        // directory. Without containment this would read a file outside the package on the
+        // build machine and bundle its contents into the consuming app's NOTICES, which the
+        // consuming app never declared.
+        globals.fs.file(fixPath('p/p/pubspec.yaml'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('''
+name: test_package
+flutter:
+  licenses:
+    - ../../../escaped_secret
+''');
 
-    await buildAndVerifyAssets(
-      assets,
-      <String>['test_package'],
-      expectedAssetManifest,
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        expect(
+          () => bundle.build(
+            packageConfigPath: '.dart_tool/package_config.json',
+            targetPlatform: TargetPlatform.tester,
+          ),
+          throwsToolExit(message: 'escapes its package directory'),
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
     );
-  }, overrides: <Type, Generator>{
-    FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
+
+    testUsingContext(
+      'No assets are bundled when the package has no assets',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        await bundle.build(
+          packageConfigPath: '.dart_tool/package_config.json',
+          targetPlatform: TargetPlatform.tester,
+        );
+        expect(
+          bundle.entries.keys,
+          unorderedEquals(<String>['NOTICES.Z', 'AssetManifest.bin', 'FontManifest.json']),
+        );
+        expect(utf8.decode(await bundle.entries['FontManifest.json']!.contentsAsBytes()), '[]');
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'No assets are bundled when the package has an asset that is not listed',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+
+        final assets = <String>['a/foo'];
+        writeAssets('p/p/', assets);
+
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        await bundle.build(
+          packageConfigPath: '.dart_tool/package_config.json',
+          targetPlatform: TargetPlatform.tester,
+        );
+        expect(
+          bundle.entries.keys,
+          unorderedEquals(<String>['NOTICES.Z', 'AssetManifest.bin', 'FontManifest.json']),
+        );
+        expect(utf8.decode(await bundle.entries['FontManifest.json']!.contentsAsBytes()), '[]');
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'One asset is bundled when the package has and lists one '
+      'asset its pubspec',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+
+        final assets = <String>['a/foo'];
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assets);
+
+        writeAssets('p/p/', assets);
+
+        final expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<Object, Object>>[
+            <Object, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'One asset is bundled when the package has one asset, '
+      "listed in the app's pubspec",
+      () async {
+        final assetEntries = <String>['packages/test_package/a/foo'];
+        writePubspecFile('pubspec.yaml', 'test', assets: assetEntries);
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+
+        final assets = <String>['a/foo'];
+        writeAssets('p/p/lib/', assets);
+
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'One asset and its variant are bundled when the package '
+      'has an asset and a variant, and lists the asset in its pubspec',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          packages: <String, String>{'test_package': 'p/p/'},
+          mainLibName: 'test',
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: <String>['a/foo', 'a/bar']);
+
+        final assets = <String>['a/foo', 'a/2x/foo', 'a/bar'];
+        writeAssets('p/p/', assets);
+
+        const expectedManifest = <Object, Object>{
+          'packages/test_package/a/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/bar'},
+          ],
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+            <String, Object>{'asset': 'packages/test_package/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'One asset and its variant are bundled when the package '
+      'has an asset and a variant, and the app lists the asset in its pubspec',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test', assets: <String>['packages/test_package/a/foo']);
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+
+        final assets = <String>['a/foo', 'a/2x/foo'];
+        writeAssets('p/p/lib/', assets);
+
+        const expectedManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+            <String, Object>{'asset': 'packages/test_package/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'Two assets are bundled when the package has and lists '
+      'two assets in its pubspec',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
+
+        final assets = <String>['a/foo', 'a/bar'];
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assets);
+
+        writeAssets('p/p/', assets);
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/bar'},
+          ],
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      "Two assets are bundled when the package has two assets, listed in the app's pubspec",
+      () async {
+        final assetEntries = <String>['packages/test_package/a/foo', 'packages/test_package/a/bar'];
+        writePubspecFile('pubspec.yaml', 'test', assets: assetEntries);
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
+
+        final assets = <String>['a/foo', 'a/bar'];
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+
+        writeAssets('p/p/lib/', assets);
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/bar'},
+          ],
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'Two assets are bundled when two packages each have and list an asset their pubspec',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/', 'test_package2': 'p2/p/'},
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: <String>['a/foo']);
+        writePubspecFile('p2/p/pubspec.yaml', 'test_package2', assets: <String>['a/foo']);
+
+        final assets = <String>['a/foo', 'a/2x/foo'];
+        writeAssets('p/p/', assets);
+        writeAssets('p2/p/', assets);
+
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+            <String, Object>{'asset': 'packages/test_package/a/2x/foo', 'dpr': 2.0},
+          ],
+          'packages/test_package2/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package2/a/foo'},
+            <String, Object>{'asset': 'packages/test_package2/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>[
+          'test_package',
+          'test_package2',
+        ], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      "Two assets are bundled when two packages each have an asset, listed in the app's pubspec",
+      () async {
+        final assetEntries = <String>[
+          'packages/test_package/a/foo',
+          'packages/test_package2/a/foo',
+        ];
+        writePubspecFile('pubspec.yaml', 'test', assets: assetEntries);
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/', 'test_package2': 'p2/p/'},
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
+        writePubspecFile('p2/p/pubspec.yaml', 'test_package2');
+
+        final assets = <String>['a/foo', 'a/2x/foo'];
+        writeAssets('p/p/lib/', assets);
+        writeAssets('p2/p/lib/', assets);
+
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+            <String, Object>{'asset': 'packages/test_package/a/2x/foo', 'dpr': 2.0},
+          ],
+          'packages/test_package2/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package2/a/foo'},
+            <String, Object>{'asset': 'packages/test_package2/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>[
+          'test_package',
+          'test_package2',
+        ], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'One asset is bundled when the app depends on a package, '
+      'listing in its pubspec an asset from another package',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/', 'test_package2': 'p2/p/'},
+        );
+        writePubspecFile(
+          'p/p/pubspec.yaml',
+          'test_package',
+          assets: <String>['packages/test_package2/a/foo'],
+        );
+        writePubspecFile('p2/p/pubspec.yaml', 'test_package2');
+
+        final assets = <String>['a/foo', 'a/2x/foo'];
+        writeAssets('p2/p/lib/', assets);
+
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package2/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package2/a/foo'},
+            <String, Object>{'asset': 'packages/test_package2/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+
+        await buildAndVerifyAssets(assets, <String>['test_package2'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'Flavored assets are bundled when the app depends on a package',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
+        writePubspecFile(
+          'p/p/pubspec.yaml',
+          'test_package',
+          flavoredAssets: <(String, String)>[('assets/vanilla.txt', 'vanilla')],
+        );
+
+        final assets = <String>['assets/vanilla.txt'];
+        writeAssets('p/p', assets);
+
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/assets/vanilla.txt': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/assets/vanilla.txt'},
+          ],
+        };
+
+        await buildAndVerifyAssets(
+          assets,
+          <String>['test_package'],
+          expectedAssetManifest,
+          flavor: 'vanilla',
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
   });
+
+  testUsingContext(
+    'Asset paths can contain URL reserved characters',
+    () async {
+      writePubspecFile('pubspec.yaml', 'test');
+      writePackageConfigFiles(
+        directory: globals.fs.currentDirectory,
+        mainLibName: 'test',
+        packages: <String, String>{'test_package': 'p/p/'},
+      );
+
+      final assets = <String>['a/foo', 'a/foo [x]'];
+      writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assets);
+
+      writeAssets('p/p/', assets);
+      const expectedAssetManifest = <Object, Object>{
+        'packages/test_package/a/foo': <Map<String, Object>>[
+          <String, Object>{'asset': 'packages/test_package/a/foo'},
+        ],
+        'packages/test_package/a/foo [x]': <Map<String, Object>>[
+          <String, Object>{'asset': 'packages/test_package/a/foo [x]'},
+        ],
+      };
+
+      await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+    },
+    overrides: <Type, Generator>{
+      FileSystem: () => testFileSystem,
+      ProcessManager: () => FakeProcessManager.any(),
+    },
+  );
+
+  testUsingContext(
+    'Asset paths can contain URL reserved characters',
+    () async {
+      writePubspecFile('pubspec.yaml', 'test');
+      writePackageConfigFiles(
+        directory: globals.fs.currentDirectory,
+        mainLibName: 'test',
+        packages: <String, String>{'test_package': 'p/p/'},
+      );
+
+      final assets = <String>['a/foo', 'a/foo [x]'];
+      writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assets);
+
+      writeAssets('p/p/', assets);
+      const expectedAssetManifest = <Object, Object>{
+        'packages/test_package/a/foo': <Map<String, Object>>[
+          <String, Object>{'asset': 'packages/test_package/a/foo'},
+        ],
+        'packages/test_package/a/foo [x]': <Map<String, Object>>[
+          <String, Object>{'asset': 'packages/test_package/a/foo [x]'},
+        ],
+      };
+
+      await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+    },
+    overrides: <Type, Generator>{
+      FileSystem: () => testFileSystem,
+      ProcessManager: () => FakeProcessManager.any(),
+    },
+  );
 
   group('AssetBundle assets from scanned paths', () {
-    testUsingContext('Two assets are bundled when scanning their directory', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+    testUsingContext(
+      'Two assets are bundled when scanning their directory',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+        final assetsOnDisk = <String>['a/foo', 'a/bar'];
+        final assetsOnManifest = <String>['a/'];
 
-      final List<String> assetsOnDisk = <String>['a/foo', 'a/bar'];
-      final List<String> assetsOnManifest = <String>['a/'];
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetsOnManifest);
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetsOnManifest,
-      );
+        writeAssets('p/p/', assetsOnDisk);
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/bar'},
+          ],
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
 
-      writeAssets('p/p/', assetsOnDisk);
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/bar":["packages/test_package/a/bar"],'
-          '"packages/test_package/a/foo":["packages/test_package/a/foo"]}';
+        await buildAndVerifyAssets(assetsOnDisk, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
 
-      await buildAndVerifyAssets(
-        assetsOnDisk,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+    testUsingContext(
+      'Two assets are bundled when listing one and scanning second directory',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-    testUsingContext('Two assets are bundled when listing one and scanning second directory', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+        final assetsOnDisk = <String>['a/foo', 'abc/bar'];
+        final assetOnManifest = <String>['a/foo', 'abc/'];
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetOnManifest);
 
-      final List<String> assetsOnDisk = <String>['a/foo', 'abc/bar'];
-      final List<String> assetOnManifest = <String>['a/foo', 'abc/'];
+        writeAssets('p/p/', assetsOnDisk);
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+          'packages/test_package/abc/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/abc/bar'},
+          ],
+        };
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetOnManifest,
-      );
+        await buildAndVerifyAssets(assetsOnDisk, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
 
-      writeAssets('p/p/', assetsOnDisk);
-      const String expectedAssetManifest =
-          '{"packages/test_package/abc/bar":["packages/test_package/abc/bar"],'
-          '"packages/test_package/a/foo":["packages/test_package/a/foo"]}';
+    testUsingContext(
+      'One asset is bundled with variant, scanning wrong directory',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-      await buildAndVerifyAssets(
-        assetsOnDisk,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+        final assetsOnDisk = <String>['a/foo', 'a/b/foo', 'a/bar'];
+        final assetOnManifest = <String>['a', 'a/bar']; // can't list 'a' as asset, should be 'a/'
 
-    testUsingContext('One asset is bundled with variant, scanning wrong directory', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetOnManifest);
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+        writeAssets('p/p/', assetsOnDisk);
 
-      final List<String> assetsOnDisk = <String>['a/foo','a/b/foo','a/bar'];
-      final List<String> assetOnManifest = <String>['a','a/bar']; // can't list 'a' as asset, should be 'a/'
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        await bundle.build(
+          packageConfigPath: '.dart_tool/package_config.json',
+          targetPlatform: TargetPlatform.tester,
+        );
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetOnManifest,
-      );
-
-      writeAssets('p/p/', assetsOnDisk);
-
-      final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
-      await bundle.build(manifestPath: 'pubspec.yaml', packagesPath: '.packages');
-
-      expect(bundle.entries['AssetManifest.json'], isNull,
-        reason: 'Invalid pubspec.yaml should not generate AssetManifest.json'  );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+        expect(
+          bundle.entries['AssetManifest.bin'],
+          isNull,
+          reason: 'Invalid pubspec.yaml should not generate AssetManifest.bin',
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
   });
 
   group('AssetBundle assets from scanned paths with MemoryFileSystem', () {
-    testUsingContext('One asset is bundled with variant, scanning directory', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+    testUsingContext(
+      'One asset is bundled with variant, scanning directory',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+        final assetsOnDisk = <String>['a/foo', 'a/2x/foo'];
+        final assetOnManifest = <String>['a/'];
 
-      final List<String> assetsOnDisk = <String>['a/foo','a/b/foo'];
-      final List<String> assetOnManifest = <String>['a/',];
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetOnManifest);
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetOnManifest,
-      );
+        writeAssets('p/p/', assetsOnDisk);
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+            <String, Object>{'asset': 'packages/test_package/a/2x/foo', 'dpr': 2.0},
+          ],
+        };
+        await buildAndVerifyAssets(assetsOnDisk, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
 
-      writeAssets('p/p/', assetsOnDisk);
-      const String expectedAssetManifest =
-          '{"packages/test_package/a/foo":["packages/test_package/a/foo","packages/test_package/a/b/foo"]}';
+    testUsingContext(
+      'No asset is bundled with variant, no assets or directories are listed',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-      await buildAndVerifyAssets(
-        assetsOnDisk,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+        final assetsOnDisk = <String>['a/foo', 'a/2x/foo'];
+        final assetOnManifest = <String>[];
 
-    testUsingContext('No asset is bundled with variant, no assets or directories are listed', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetOnManifest);
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+        writeAssets('p/p/', assetsOnDisk);
+        const expectedAssetManifest = <Object, Object>{};
 
-      final List<String> assetsOnDisk = <String>['a/foo', 'a/b/foo'];
-      final List<String> assetOnManifest = <String>[];
+        await buildAndVerifyAssets(assetOnManifest, <String>[
+          'test_package',
+        ], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetOnManifest,
-      );
+    testUsingContext(
+      'Expect error generating manifest, wrong non-existing directory is listed',
+      () async {
+        writePubspecFile('pubspec.yaml', 'test');
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
 
-      writeAssets('p/p/', assetsOnDisk);
-      const String expectedAssetManifest = '{}';
+        final assetOnManifest = <String>['c/'];
 
-      await buildAndVerifyAssets(
-        assetOnManifest,
-        <String>['test_package'],
-        expectedAssetManifest,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+        writePubspecFile('p/p/pubspec.yaml', 'test_package', assets: assetOnManifest);
 
-    testUsingContext('Expect error generating manifest, wrong non-existing directory is listed', () async {
-      establishFlutterRoot();
-      writeEmptySchemaFile(globals.fs);
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        await bundle.build(
+          packageConfigPath: '.dart_tool/package_config.json',
+          targetPlatform: TargetPlatform.tester,
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
 
-      writePubspecFile('pubspec.yaml', 'test');
-      writePackagesFile('test_package:p/p/lib/');
+    testUsingContext(
+      'Assets from a package directory are bundled when the app lists the package directory in its pubspec',
+      () async {
+        final assetEntries = <String>['packages/test_package/a/'];
+        writePubspecFile('pubspec.yaml', 'test', assets: assetEntries);
+        writePackageConfigFiles(
+          directory: globals.fs.currentDirectory,
+          mainLibName: 'test',
+          packages: <String, String>{'test_package': 'p/p/'},
+        );
+        writePubspecFile('p/p/pubspec.yaml', 'test_package');
 
-      final List<String> assetOnManifest = <String>['c/'];
+        final assets = <String>['a/foo', 'a/bar'];
+        writeAssets('p/p/lib/', assets);
 
-      writePubspecFile(
-        'p/p/pubspec.yaml',
-        'test_package',
-        assets: assetOnManifest,
-      );
+        const expectedAssetManifest = <Object, Object>{
+          'packages/test_package/a/bar': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/bar'},
+          ],
+          'packages/test_package/a/foo': <Map<String, Object>>[
+            <String, Object>{'asset': 'packages/test_package/a/foo'},
+          ],
+        };
 
-      await buildAndVerifyAssets(
-        assetOnManifest,
-        <String>['test_package'],
-        null,
-        expectExists: false,
-      );
-    }, overrides: <Type, Generator>{
-      FileSystem: () => testFileSystem,
-      ProcessManager: () => FakeProcessManager.any(),
-    });
+        await buildAndVerifyAssets(assets, <String>['test_package'], expectedAssetManifest);
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
+
+    testUsingContext(
+      'Directory asset path consisting only of packages/ does not crash when directory does not exist',
+      () async {
+        final assetEntries = <String>['packages/'];
+        writePubspecFile('pubspec.yaml', 'test', assets: assetEntries);
+        writePackageConfigFiles(directory: globals.fs.currentDirectory, mainLibName: 'test');
+
+        final AssetBundle bundle = AssetBundleFactory.instance.createBundle();
+        await bundle.build(
+          packageConfigPath: '.dart_tool/package_config.json',
+          targetPlatform: TargetPlatform.tester,
+        );
+
+        expect(
+          testLogger.errorText,
+          contains('Error: unable to find directory entry in pubspec.yaml:'),
+        );
+        expect(testLogger.errorText, isNot(contains('Could not resolve package for asset')));
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => testFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+      },
+    );
   });
 }

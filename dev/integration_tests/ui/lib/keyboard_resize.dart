@@ -8,27 +8,34 @@ import 'package:flutter_driver/driver_extension.dart';
 import 'keys.dart' as keys;
 
 void main() {
-  enableFlutterDriverExtension(handler: (String message) async {
-    // TODO(cbernaschina): remove when test flakiness is resolved
-    return 'keyboard_resize';
-  });
-  runApp(MyApp());
+  enableFlutterDriverExtension(
+    enableTextEntryEmulation: false,
+    handler: (String? message) async {
+      // TODO(cbernaschina): remove when test flakiness is resolved
+      return 'keyboard_resize';
+    },
+  );
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Text Editing',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: MyHomePage(),
+      home: const MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
@@ -36,27 +43,34 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final TextField textField = TextField(
+    final textField = TextField(
       key: const Key(keys.kDefaultTextField),
       controller: _controller,
       focusNode: FocusNode(),
+      decoration: const InputDecoration(border: OutlineInputBorder()),
     );
     return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        alignment: Alignment.bottomCenter,
-        children: <Widget>[
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              return Center(child: Text('${constraints.biggest.height}', key: const Key(keys.kHeightText)));
-            }
-          ),
-          textField,
-        ],
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.bottomCenter,
+          children: <Widget>[
+            LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                return Center(
+                  child: Text('${constraints.biggest.height}', key: const Key(keys.kHeightText)),
+                );
+              },
+            ),
+            textField,
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         key: const Key(keys.kUnfocusButton),
-        onPressed: () { textField.focusNode.unfocus(); },
+        onPressed: () {
+          textField.focusNode!.unfocus();
+        },
         tooltip: 'Unfocus',
         child: const Icon(Icons.done),
       ),

@@ -1,4 +1,5 @@
 {
+  "searchTextFieldPlaceholderLabel": "Search",
   "tabSemanticsLabel": "Tab $tabIndex of $tabCount",
   "datePickerHourSemanticsLabelOne": "$hour o'clock",
   "datePickerHourSemanticsLabelOther": "$hour o'clock",
@@ -19,6 +20,7 @@
   "cutButtonLabel": "Cut",
   "copyButtonLabel": "Copy",
   "pasteButtonLabel": "Paste",
+  "clearButtonLabel": "Clear",
   "selectAllButtonLabel": "Select all",
   "modalBarrierDismissLabel": "Dismiss"
 }

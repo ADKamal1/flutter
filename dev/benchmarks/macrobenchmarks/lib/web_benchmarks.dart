@@ -2,98 +2,113 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'dart:html';
+library;
+
 import 'dart:async';
 import 'dart:convert' show json;
-import 'dart:html' as html;
+import 'dart:js_interop';
 import 'dart:math' as math;
 
-import 'package:macrobenchmarks/src/web/bench_text_layout.dart';
-import 'package:macrobenchmarks/src/web/bench_text_out_of_picture_bounds.dart';
-
-import 'package:gallery/benchmarks/gallery_automator.dart' show DemoType, typeOfDemo;
+import 'package:args/args.dart';
+import 'package:web/web.dart' as web;
 
 import 'src/web/bench_build_image.dart';
 import 'src/web/bench_build_material_checkbox.dart';
 import 'src/web/bench_card_infinite_scroll.dart';
 import 'src/web/bench_child_layers.dart';
 import 'src/web/bench_clipped_out_pictures.dart';
+import 'src/web/bench_default_target_platform.dart';
 import 'src/web/bench_draw_rect.dart';
+import 'src/web/bench_draw_rrect_rsuperellipse.dart';
 import 'src/web/bench_dynamic_clip_on_static_picture.dart';
+import 'src/web/bench_harness.dart';
+import 'src/web/bench_image_decoding.dart';
+import 'src/web/bench_material_3.dart';
+import 'src/web/bench_material_3_semantics.dart';
 import 'src/web/bench_mouse_region_grid_hover.dart';
 import 'src/web/bench_mouse_region_grid_scroll.dart';
 import 'src/web/bench_mouse_region_mixed_grid_hover.dart';
+import 'src/web/bench_pageview_scroll_linethrough.dart';
 import 'src/web/bench_paths.dart';
 import 'src/web/bench_picture_recording.dart';
+import 'src/web/bench_platform_view_infinite_scroll.dart';
 import 'src/web/bench_simple_lazy_text_scroll.dart';
+import 'src/web/bench_text_layout.dart';
 import 'src/web/bench_text_out_of_picture_bounds.dart';
-import 'src/web/gallery/gallery_recorder.dart';
+import 'src/web/bench_wrapbox_scroll.dart';
 import 'src/web/recorder.dart';
 
 typedef RecorderFactory = Recorder Function();
-
-const bool isCanvasKit = bool.fromEnvironment('FLUTTER_WEB_USE_SKIA', defaultValue: false);
-
-const String _galleryBenchmarkPrefix = 'gallery_v2';
 
 /// List of all benchmarks that run in the devicelab.
 ///
 /// When adding a new benchmark, add it to this map. Make sure that the name
 /// of your benchmark is unique.
 final Map<String, RecorderFactory> benchmarks = <String, RecorderFactory>{
+  // Benchmarks the overhead of the benchmark harness itself.
+  BenchRawRecorder.benchmarkName: () => BenchRawRecorder(),
+  BenchWidgetRecorder.benchmarkName: () => BenchWidgetRecorder(),
+  BenchWidgetBuildRecorder.benchmarkName: () => BenchWidgetBuildRecorder(),
+  BenchSceneBuilderRecorder.benchmarkName: () => BenchSceneBuilderRecorder(),
+
+  // Benchmarks that run in all renderers.
+  BenchDefaultTargetPlatform.benchmarkName: () => BenchDefaultTargetPlatform(),
   BenchBuildImage.benchmarkName: () => BenchBuildImage(),
   BenchCardInfiniteScroll.benchmarkName: () => BenchCardInfiniteScroll.forward(),
   BenchCardInfiniteScroll.benchmarkNameBackward: () => BenchCardInfiniteScroll.backward(),
   BenchClippedOutPictures.benchmarkName: () => BenchClippedOutPictures(),
   BenchDrawRect.benchmarkName: () => BenchDrawRect.staticPaint(),
   BenchDrawRect.variablePaintBenchmarkName: () => BenchDrawRect.variablePaint(),
+  BenchDrawRRectRSuperellipse.drawRRectName: () => BenchDrawRRectRSuperellipse.drawRRect(),
+  BenchDrawRRectRSuperellipse.drawRSuperellipseName: () =>
+      BenchDrawRRectRSuperellipse.drawRSuperellipse(),
   BenchPathRecording.benchmarkName: () => BenchPathRecording(),
   BenchTextOutOfPictureBounds.benchmarkName: () => BenchTextOutOfPictureBounds(),
   BenchSimpleLazyTextScroll.benchmarkName: () => BenchSimpleLazyTextScroll(),
   BenchBuildMaterialCheckbox.benchmarkName: () => BenchBuildMaterialCheckbox(),
   BenchDynamicClipOnStaticPicture.benchmarkName: () => BenchDynamicClipOnStaticPicture(),
+  BenchPageViewScrollLineThrough.benchmarkName: () => BenchPageViewScrollLineThrough(),
   BenchPictureRecording.benchmarkName: () => BenchPictureRecording(),
   BenchUpdateManyChildLayers.benchmarkName: () => BenchUpdateManyChildLayers(),
   BenchMouseRegionGridScroll.benchmarkName: () => BenchMouseRegionGridScroll(),
   BenchMouseRegionGridHover.benchmarkName: () => BenchMouseRegionGridHover(),
   BenchMouseRegionMixedGridHover.benchmarkName: () => BenchMouseRegionMixedGridHover(),
-  if (isCanvasKit)
-    BenchBuildColorsGrid.canvasKitBenchmarkName: () => BenchBuildColorsGrid.canvasKit(),
+  BenchWrapBoxScroll.benchmarkName: () => BenchWrapBoxScroll(),
+  BenchPlatformViewInfiniteScroll.benchmarkName: () => BenchPlatformViewInfiniteScroll.forward(),
+  BenchPlatformViewInfiniteScroll.benchmarkNameBackward: () =>
+      BenchPlatformViewInfiniteScroll.backward(),
+  BenchMaterial3Components.benchmarkName: () => BenchMaterial3Components(),
+  BenchMaterial3Semantics.benchmarkName: () => BenchMaterial3Semantics(),
+  BenchMaterial3ScrollSemantics.benchmarkName: () => BenchMaterial3ScrollSemantics(),
 
-  // Benchmarks that we don't want to run using CanvasKit.
-  if (!isCanvasKit) ...<String, RecorderFactory>{
-    BenchTextLayout.domBenchmarkName: () => BenchTextLayout(useCanvas: false),
-    BenchTextLayout.canvasBenchmarkName: () => BenchTextLayout(useCanvas: true),
-    BenchTextCachedLayout.domBenchmarkName: () => BenchTextCachedLayout(useCanvas: false),
-    BenchTextCachedLayout.canvasBenchmarkName: () => BenchTextCachedLayout(useCanvas: true),
-    BenchBuildColorsGrid.domBenchmarkName: () => BenchBuildColorsGrid.dom(),
-    BenchBuildColorsGrid.canvasBenchmarkName: () => BenchBuildColorsGrid.canvas(),
+  BenchTextLayout.benchmarkName: () => BenchTextLayout(),
+  BenchBuildColorsGrid.benchmarkName: () => BenchBuildColorsGrid(),
+  BenchTextCachedLayout.benchmarkName: () => BenchTextCachedLayout(),
 
-    // The following benchmark is for the Flutter Gallery.
-    // This benchmark is failing when run with CanvasKit, so we skip it
-    // for now.
-    // TODO(yjbanov): https://github.com/flutter/flutter/issues/59082
-    '${_galleryBenchmarkPrefix}_studies_perf': () => GalleryRecorder(
-      benchmarkName: '${_galleryBenchmarkPrefix}_studies_perf',
-      shouldRunPredicate: (String demo) => typeOfDemo(demo) == DemoType.study,
-    ),
-    '${_galleryBenchmarkPrefix}_unanimated_perf': () => GalleryRecorder(
-      benchmarkName: '${_galleryBenchmarkPrefix}_unanimated_perf',
-      shouldRunPredicate: (String demo) => typeOfDemo(demo) == DemoType.unanimatedWidget,
-    ),
-    '${_galleryBenchmarkPrefix}_animated_perf': () => GalleryRecorder(
-      benchmarkName: '${_galleryBenchmarkPrefix}_animated_perf',
-      shouldRunPredicate: (String demo) => typeOfDemo(demo) == DemoType.animatedWidget,
-    ),
-    '${_galleryBenchmarkPrefix}_scroll_perf': () => GalleryRecorder(
-      benchmarkName: '${_galleryBenchmarkPrefix}_scroll_perf',
-      testScrollsOnly: true,
-    ),
-  },
+  BenchImageDecoding.benchmarkName: () => BenchImageDecoding(),
 };
 
-final LocalBenchmarkServerClient _client = LocalBenchmarkServerClient();
+late final LocalBenchmarkServerClient _client;
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  final parser = ArgParser()
+    ..addOption(
+      'port',
+      abbr: 'p',
+      help:
+          'The port of the local benchmark server used that implements the '
+          'API required for orchestrating macrobenchmarks.',
+    );
+  final ArgResults argResults = parser.parse(args);
+  const portEnv = String.fromEnvironment('BENCHMARK_SERVER_PORT');
+  final int? port = argResults.wasParsed('port')
+      ? int.tryParse(argResults['port'] as String)
+      : int.tryParse(portEnv);
+  final Uri serverOrigin = port != null ? Uri.http('localhost:$port') : Uri.base;
+
+  _client = LocalBenchmarkServerClient(serverOrigin);
+
   // Check if the benchmark server wants us to run a specific benchmark.
   final String nextBenchmark = await _client.requestNextBenchmark();
 
@@ -103,11 +118,11 @@ Future<void> main() async {
   }
 
   await _runBenchmark(nextBenchmark);
-  html.window.location.reload();
+  web.window.location.reload();
 }
 
 Future<void> _runBenchmark(String benchmarkName) async {
-  final RecorderFactory recorderFactory = benchmarks[benchmarkName];
+  final RecorderFactory? recorderFactory = benchmarks[benchmarkName];
 
   if (recorderFactory == null) {
     _fallbackToManual('Benchmark $benchmarkName not found.');
@@ -117,7 +132,7 @@ Future<void> _runBenchmark(String benchmarkName) async {
   await runZoned<Future<void>>(
     () async {
       final Recorder recorder = recorderFactory();
-      final Runner runner = recorder.isTracingEnabled && !_client.isInManualMode
+      final runner = recorder.isTracingEnabled && !_client.isInManualMode
           ? Runner(
               recorder: recorder,
               setUpAllDidRun: () => _client.startPerformanceTracing(benchmarkName),
@@ -141,25 +156,32 @@ Future<void> _runBenchmark(String benchmarkName) async {
           await _client.printToConsole(line);
         }
       },
-      handleUncaughtError: (
-        Zone self,
-        ZoneDelegate parent,
-        Zone zone, Object error,
-        StackTrace stackTrace,
-      ) async {
-        if (_client.isInManualMode) {
-          parent.print(zone, '[$benchmarkName] $error, $stackTrace');
-          parent.handleUncaughtError(zone, error, stackTrace);
-        } else {
-          await _client.reportError(error, stackTrace);
-        }
-      },
+      handleUncaughtError:
+          (Zone self, ZoneDelegate parent, Zone zone, Object error, StackTrace stackTrace) async {
+            if (_client.isInManualMode) {
+              parent.print(zone, '[$benchmarkName] $error, $stackTrace');
+              parent.handleUncaughtError(zone, error, stackTrace);
+            } else {
+              await _client.reportError(error, stackTrace);
+            }
+          },
     ),
   );
 }
 
+extension WebHTMLElementExtension on web.HTMLElement {
+  void appendHtml(String html) {
+    final div = web.document.createElement('div') as web.HTMLDivElement;
+    div.innerHTML = html.toJS;
+    final web.DocumentFragment fragment = web.document.createDocumentFragment();
+    fragment.append(div as JSAny);
+    web.document.adoptNode(fragment);
+    append(fragment as JSAny);
+  }
+}
+
 void _fallbackToManual(String error) {
-  html.document.body.appendHtml('''
+  web.document.body!.appendHtml('''
     <div id="manual-panel">
       <h3>$error</h3>
 
@@ -167,35 +189,34 @@ void _fallbackToManual(String error) {
 
       <!-- Absolutely position it so it receives the clicks and not the glasspane -->
       <ul style="position: absolute">
-        ${
-          benchmarks.keys
-            .map((String name) => '<li><button id="$name">$name</button></li>')
-            .join('\n')
-        }
+        ${benchmarks.keys.map((String name) => '<li><button id="$name">$name</button></li>').join('\n')}
       </ul>
     </div>
-  ''', validator: html.NodeValidatorBuilder()..allowHtml5()..allowInlineStyles());
+  ''');
 
   for (final String benchmarkName in benchmarks.keys) {
-    final html.Element button = html.document.querySelector('#$benchmarkName');
-    button.addEventListener('click', (_) {
-      final html.Element manualPanel = html.document.querySelector('#manual-panel');
-      manualPanel?.remove();
-      _runBenchmark(benchmarkName);
-    });
+    final web.Element button = web.document.querySelector('#$benchmarkName')!;
+    button.addEventListener(
+      'click',
+      (JSObject _) {
+        final web.Element? manualPanel = web.document.querySelector('#manual-panel');
+        manualPanel?.remove();
+        _runBenchmark(benchmarkName);
+      }.toJS,
+    );
   }
 }
 
 /// Visualizes results on the Web page for manual inspection.
 void _printResultsToScreen(Profile profile) {
-  html.document.body.remove();
-  html.document.body = html.BodyElement();
-  html.document.body.appendHtml('<h2>${profile.name}</h2>');
+  web.document.body!.remove();
+  web.document.body = web.document.createElement('body') as web.HTMLBodyElement;
+  web.document.body!.appendHtml('<h2>${profile.name}</h2>');
 
   profile.scoreData.forEach((String scoreKey, Timeseries timeseries) {
-    html.document.body.appendHtml('<h2>$scoreKey</h2>');
-    html.document.body.appendHtml('<pre>${timeseries.computeStats()}</pre>');
-    html.document.body.append(TimeseriesVisualization(timeseries).render());
+    web.document.body!.appendHtml('<h2>$scoreKey</h2>');
+    web.document.body!.appendHtml('<pre>${timeseries.computeStats()}</pre>');
+    web.document.body!.append(TimeseriesVisualization(timeseries).render() as JSAny);
   });
 }
 
@@ -203,35 +224,37 @@ void _printResultsToScreen(Profile profile) {
 class TimeseriesVisualization {
   TimeseriesVisualization(this._timeseries) {
     _stats = _timeseries.computeStats();
-    _canvas = html.CanvasElement();
-    _screenWidth = html.window.screen.width;
+    _canvas = web.document.createElement('canvas') as web.HTMLCanvasElement;
+    _screenWidth = web.window.screen.width;
     _canvas.width = _screenWidth;
-    _canvas.height = (_kCanvasHeight * html.window.devicePixelRatio).round();
+    _canvas.height = (_kCanvasHeight * web.window.devicePixelRatio).round();
     _canvas.style
-      ..width = '100%'
-      ..height = '${_kCanvasHeight}px'
-      ..outline = '1px solid green';
-    _ctx = _canvas.context2D;
+      ..setProperty('width', '100%')
+      ..setProperty('height', '${_kCanvasHeight}px')
+      ..setProperty('outline', '1px solid green');
+    _ctx = _canvas.getContext('2d')! as web.CanvasRenderingContext2D;
 
     // The amount of vertical space available on the chart. Because some
     // outliers can be huge they can dwarf all the useful values. So we
     // limit it to 1.5 x the biggest non-outlier.
-    _maxValueChartRange = 1.5 * _stats.samples
-      .where((AnnotatedSample sample) => !sample.isOutlier)
-      .map<double>((AnnotatedSample sample) => sample.magnitude)
-      .fold<double>(0, math.max);
+    _maxValueChartRange =
+        1.5 *
+        _stats.samples
+            .where((AnnotatedSample sample) => !sample.isOutlier)
+            .map<double>((AnnotatedSample sample) => sample.magnitude)
+            .fold<double>(0, math.max);
   }
 
   static const double _kCanvasHeight = 200;
 
   final Timeseries _timeseries;
-  TimeseriesStats _stats;
-  html.CanvasElement _canvas;
-  html.CanvasRenderingContext2D _ctx;
-  int _screenWidth;
+  late TimeseriesStats _stats;
+  late web.HTMLCanvasElement _canvas;
+  late web.CanvasRenderingContext2D _ctx;
+  late int _screenWidth;
 
   // Used to normalize benchmark values to chart height.
-  double _maxValueChartRange;
+  late double _maxValueChartRange;
 
   /// Converts a sample value to vertical canvas coordinates.
   ///
@@ -243,36 +266,36 @@ class TimeseriesVisualization {
   /// A utility for drawing lines.
   void drawLine(num x1, num y1, num x2, num y2) {
     _ctx.beginPath();
-    _ctx.moveTo(x1, y1);
-    _ctx.lineTo(x2, y2);
+    _ctx.moveTo(x1.toDouble(), y1.toDouble());
+    _ctx.lineTo(x2.toDouble(), y2.toDouble());
     _ctx.stroke();
   }
 
   /// Renders the timeseries into a `<canvas>` and returns the canvas element.
-  html.CanvasElement render() {
-    _ctx.translate(0, _kCanvasHeight * html.window.devicePixelRatio);
-    _ctx.scale(1, -html.window.devicePixelRatio);
+  web.HTMLCanvasElement render() {
+    _ctx.translate(0, _kCanvasHeight * web.window.devicePixelRatio);
+    _ctx.scale(1, -web.window.devicePixelRatio);
 
     final double barWidth = _screenWidth / _stats.samples.length;
     double xOffset = 0;
-    for (int i = 0; i < _stats.samples.length; i++) {
+    for (var i = 0; i < _stats.samples.length; i++) {
       final AnnotatedSample sample = _stats.samples[i];
 
       if (sample.isWarmUpValue) {
-        // Put gray background behing warm-up samples.
-        _ctx.fillStyle = 'rgba(200,200,200,1)';
+        // Put gray background behind warm-up samples.
+        _ctx.fillStyle = 'rgba(200,200,200,1)'.toJS;
         _ctx.fillRect(xOffset, 0, barWidth, _normalized(_maxValueChartRange));
       }
 
       if (sample.magnitude > _maxValueChartRange) {
         // The sample value is so big it doesn't fit on the chart. Paint it purple.
-        _ctx.fillStyle = 'rgba(100,50,100,0.8)';
+        _ctx.fillStyle = 'rgba(100,50,100,0.8)'.toJS;
       } else if (sample.isOutlier) {
         // The sample is an outlier, color it light red.
-        _ctx.fillStyle = 'rgba(255,50,50,0.6)';
+        _ctx.fillStyle = 'rgba(255,50,50,0.6)'.toJS;
       } else {
         // A non-outlier sample, color it light blue.
-        _ctx.fillStyle = 'rgba(50,50,255,0.6)';
+        _ctx.fillStyle = 'rgba(50,50,255,0.6)'.toJS;
       }
 
       _ctx.fillRect(xOffset, 0, barWidth - 1, _normalized(sample.magnitude));
@@ -284,15 +307,15 @@ class TimeseriesVisualization {
     drawLine(0, _normalized(_stats.average), _screenWidth, _normalized(_stats.average));
 
     // Draw a horizontal dashed line corresponding to the outlier cut off.
-    _ctx.setLineDash(<num>[5, 5]);
+    _ctx.setLineDash(<JSNumber>[5.toJS, 5.toJS].toJS);
     drawLine(0, _normalized(_stats.outlierCutOff), _screenWidth, _normalized(_stats.outlierCutOff));
 
     // Draw a light red band that shows the noise (1 stddev in each direction).
-    _ctx.fillStyle = 'rgba(255,50,50,0.3)';
+    _ctx.fillStyle = 'rgba(255,50,50,0.3)'.toJS;
     _ctx.fillRect(
       0,
       _normalized(_stats.average * (1 - _stats.noise)),
-      _screenWidth,
+      _screenWidth.toDouble(),
       _normalized(2 * _stats.average * _stats.noise),
     );
 
@@ -306,23 +329,36 @@ class TimeseriesVisualization {
 /// implement a manual fallback. This allows debugging benchmarks using plain
 /// `flutter run`.
 class LocalBenchmarkServerClient {
+  LocalBenchmarkServerClient(this.serverOrigin);
+
   /// This value is returned by [requestNextBenchmark].
   static const String kManualFallback = '__manual_fallback__';
+
+  /// The origin (e.g., http://localhost:1234) of the benchmark server that
+  /// hosts the macrobenchmarking API.
+  final Uri serverOrigin;
 
   /// Whether we fell back to manual mode.
   ///
   /// This happens when you run benchmarks using plain `flutter run` rather than
   /// devicelab test harness. The test harness spins up a special server that
   /// provides API for automatically picking the next benchmark to run.
-  bool isInManualMode;
+  bool isInManualMode = false;
+
+  Map<String, String> get headers => <String, String>{
+    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept',
+    'Access-Control-Allow-Methods': 'Post',
+    'Access-Control-Allow-Origin': serverOrigin.path,
+  };
 
   /// Asks the local server for the name of the next benchmark to run.
   ///
   /// Returns [kManualFallback] if local server is not available (uses 404 as a
   /// signal).
   Future<String> requestNextBenchmark() async {
-    final html.HttpRequest request = await _requestXhr(
-      '/next-benchmark',
+    final web.XMLHttpRequest request = await _requestXhr(
+      serverOrigin.resolve('next-benchmark'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'application/json',
       sendData: json.encode(benchmarks.keys.toList()),
@@ -331,7 +367,7 @@ class LocalBenchmarkServerClient {
     // 404 is expected in the following cases:
     // - The benchmark is ran using plain `flutter run`, which does not provide "next-benchmark" handler.
     // - We ran all benchmarks and the benchmark is telling us there are no more benchmarks to run.
-    if (request.status == 404) {
+    if (request.status != 200) {
       isInManualMode = true;
       return kManualFallback;
     }
@@ -353,8 +389,9 @@ class LocalBenchmarkServerClient {
   /// DevTools Protocol.
   Future<void> startPerformanceTracing(String benchmarkName) async {
     _checkNotManualMode();
-    await html.HttpRequest.request(
-      '/start-performance-tracing?label=$benchmarkName',
+    await _requestXhr(
+      serverOrigin.resolve('start-performance-tracing?label=$benchmarkName'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'application/json',
     );
@@ -363,8 +400,9 @@ class LocalBenchmarkServerClient {
   /// Stops the performance tracing session started by [startPerformanceTracing].
   Future<void> stopPerformanceTracing() async {
     _checkNotManualMode();
-    await html.HttpRequest.request(
-      '/stop-performance-tracing',
+    await _requestXhr(
+      serverOrigin.resolve('stop-performance-tracing'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'application/json',
     );
@@ -374,8 +412,9 @@ class LocalBenchmarkServerClient {
   /// server.
   Future<void> sendProfileData(Profile profile) async {
     _checkNotManualMode();
-    final html.HttpRequest request = await html.HttpRequest.request(
-      '/profile-data',
+    final web.XMLHttpRequest request = await _requestXhr(
+      serverOrigin.resolve('profile-data'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'application/json',
       sendData: json.encode(profile.toJson()),
@@ -383,7 +422,7 @@ class LocalBenchmarkServerClient {
     if (request.status != 200) {
       throw Exception(
         'Failed to report profile data to benchmark server. '
-        'The server responded with status code ${request.status}.'
+        'The server responded with status code ${request.status}.',
       );
     }
   }
@@ -393,44 +432,43 @@ class LocalBenchmarkServerClient {
   /// The server will halt the devicelab task and log the error.
   Future<void> reportError(dynamic error, StackTrace stackTrace) async {
     _checkNotManualMode();
-    await html.HttpRequest.request(
-      '/on-error',
+    await _requestXhr(
+      serverOrigin.resolve('on-error'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'application/json',
-      sendData: json.encode(<String, dynamic>{
-        'error': '$error',
-        'stackTrace': '$stackTrace',
-      }),
+      sendData: json.encode(<String, dynamic>{'error': '$error', 'stackTrace': '$stackTrace'}),
     );
   }
 
   /// Reports a message about the demo to the benchmark server.
   Future<void> printToConsole(String report) async {
     _checkNotManualMode();
-    await html.HttpRequest.request(
-      '/print-to-console',
+    await _requestXhr(
+      serverOrigin.resolve('print-to-console'),
+      requestHeaders: headers,
       method: 'POST',
       mimeType: 'text/plain',
       sendData: report,
     );
   }
 
-  /// This is the same as calling [html.HttpRequest.request] but it doesn't
+  /// This is the same as calling [HttpRequest.request] but it doesn't
   /// crash on 404, which we use to detect `flutter run`.
-  Future<html.HttpRequest> _requestXhr(
-    String url, {
-    String method,
-    bool withCredentials,
-    String responseType,
-    String mimeType,
-    Map<String, String> requestHeaders,
+  Future<web.XMLHttpRequest> _requestXhr(
+    Uri url, {
+    String? method,
+    bool? withCredentials,
+    String? responseType,
+    String? mimeType,
+    Map<String, String>? requestHeaders,
     dynamic sendData,
   }) {
-    final Completer<html.HttpRequest> completer = Completer<html.HttpRequest>();
-    final html.HttpRequest xhr = html.HttpRequest();
+    final completer = Completer<web.XMLHttpRequest>();
+    final xhr = web.XMLHttpRequest();
 
     method ??= 'GET';
-    xhr.open(method, url, async: true);
+    xhr.open(method, '$url', true);
 
     if (withCredentials != null) {
       xhr.withCredentials = withCredentials;
@@ -450,14 +488,22 @@ class LocalBenchmarkServerClient {
       });
     }
 
-    xhr.onLoad.listen((html.ProgressEvent e) {
-      completer.complete(xhr);
-    });
+    xhr.addEventListener(
+      'load',
+      (web.ProgressEvent e) {
+        completer.complete(xhr);
+      }.toJS,
+    );
 
-    xhr.onError.listen(completer.completeError);
+    xhr.addEventListener(
+      'error',
+      (JSObject error) {
+        return completer.completeError(error);
+      }.toJS,
+    );
 
     if (sendData != null) {
-      xhr.send(sendData);
+      xhr.send((sendData as Object?).jsify());
     } else {
       xhr.send();
     }

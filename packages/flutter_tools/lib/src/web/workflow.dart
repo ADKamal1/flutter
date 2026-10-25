@@ -2,27 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:meta/meta.dart';
-
 import '../base/platform.dart';
-import '../doctor.dart';
+import '../doctor_validator.dart';
 import '../features.dart';
 
 class WebWorkflow extends Workflow {
-  const WebWorkflow({
-    @required Platform platform,
-    @required FeatureFlags featureFlags,
-  }) : _platform = platform,
-       _featureFlags = featureFlags;
+  const WebWorkflow({required this._platform, required this._featureFlags});
 
   final Platform _platform;
   final FeatureFlags _featureFlags;
 
   @override
-  bool get appliesToHostPlatform => _featureFlags.isWebEnabled &&
-    (_platform.isWindows ||
-       _platform.isMacOS ||
-       _platform.isLinux);
+  bool get appliesToHostPlatform =>
+      _featureFlags.isWebEnabled && (_platform.isWindows || _platform.isMacOS || _platform.isLinux);
 
   @override
   bool get canLaunchDevices => _featureFlags.isWebEnabled;

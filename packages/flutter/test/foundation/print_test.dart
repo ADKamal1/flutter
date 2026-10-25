@@ -2,40 +2,48 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
 import 'package:fake_async/fake_async.dart';
-import '../flutter_test_alternative.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'capture_output.dart';
-
-String? foo;
 
 void main() {
   test('debugPrint', () {
     expect(
-      captureOutput(() { debugPrintSynchronously('Hello, world'); }),
+      captureOutput(() {
+        debugPrintSynchronously('Hello, world');
+      }),
       equals(<String>['Hello, world']),
     );
 
     expect(
-      captureOutput(() { debugPrintSynchronously('Hello, world', wrapWidth: 10); }),
+      captureOutput(() {
+        debugPrintSynchronously('Hello, world', wrapWidth: 10);
+      }),
       equals(<String>['Hello,\nworld']),
     );
 
-    for (int i = 0; i < 14; ++i) {
+    for (var i = 0; i < 14; ++i) {
       expect(
-        captureOutput(() { debugPrintSynchronously('Hello,   world', wrapWidth: i); }),
+        captureOutput(() {
+          debugPrintSynchronously('Hello,   world', wrapWidth: i);
+        }),
         equals(<String>['Hello,\nworld']),
       );
     }
 
     expect(
-      captureOutput(() { debugPrintThrottled('Hello, world'); }),
+      captureOutput(() {
+        debugPrintThrottled('Hello, world');
+      }),
       equals(<String>['Hello, world']),
     );
 
     expect(
-      captureOutput(() { debugPrintThrottled('Hello, world', wrapWidth: 10); }),
+      captureOutput(() {
+        debugPrintThrottled('Hello, world', wrapWidth: 10);
+      }),
       equals(<String>['Hello,', 'world']),
     );
   });
@@ -43,7 +51,7 @@ void main() {
   test('debugPrint throttling', () {
     FakeAsync().run((FakeAsync async) {
       List<String> log = captureOutput(() {
-        debugPrintThrottled('A' * (22 * 1024) + '\nB');
+        debugPrintThrottled('${'A' * (22 * 1024)}\nB');
       });
       expect(log.length, 1);
       async.elapse(const Duration(seconds: 2));
@@ -62,12 +70,16 @@ void main() {
 
   test('debugPrint can print null', () {
     expect(
-      captureOutput(() { debugPrintThrottled(null); }),
+      captureOutput(() {
+        debugPrintThrottled(null);
+      }),
       equals(<String>['null']),
     );
 
     expect(
-      captureOutput(() { debugPrintThrottled(null, wrapWidth: 80); }),
+      captureOutput(() {
+        debugPrintThrottled(null, wrapWidth: 80);
+      }),
       equals(<String>['null']),
     );
   });

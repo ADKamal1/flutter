@@ -2,27 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter/gestures.dart';
-import 'package:vector_math/vector_math_64.dart';
-
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('wrapped HitTestResult gets HitTestEntry added to wrapping HitTestResult', () async {
     final HitTestEntry entry1 = HitTestEntry(_DummyHitTestTarget());
     final HitTestEntry entry2 = HitTestEntry(_DummyHitTestTarget());
     final HitTestEntry entry3 = HitTestEntry(_DummyHitTestTarget());
-    final Matrix4 transform = Matrix4.translationValues(40.0, 150.0, 0.0);
+    final transform = Matrix4.translationValues(40.0, 150.0, 0.0);
 
-    final HitTestResult wrapped = MyHitTestResult()
-      ..publicPushTransform(transform);
+    final HitTestResult wrapped = MyHitTestResult()..publicPushTransform(transform);
     wrapped.add(entry1);
     expect(wrapped.path, equals(<HitTestEntry>[entry1]));
     expect(entry1.transform, transform);
 
-    final HitTestResult wrapping = HitTestResult.wrap(wrapped);
+    final wrapping = HitTestResult.wrap(wrapped);
     expect(wrapping.path, equals(<HitTestEntry>[entry1]));
     expect(wrapping.path, same(wrapped.path));
 
@@ -38,17 +33,17 @@ void main() {
   });
 
   test('HitTestResult should correctly push and pop transforms', () {
-    Matrix4 currentTransform(HitTestResult targetResult) {
+    Matrix4? currentTransform(HitTestResult targetResult) {
       final HitTestEntry entry = HitTestEntry(_DummyHitTestTarget());
       targetResult.add(entry);
       return entry.transform;
     }
 
-    final MyHitTestResult result = MyHitTestResult();
+    final result = MyHitTestResult();
 
-    final Matrix4 m1 = Matrix4.translationValues(10, 20, 0);
-    final Matrix4 m2 = Matrix4.rotationZ(1);
-    final Matrix4 m3 = Matrix4.diagonal3Values(1.1, 1.2, 1.0);
+    final m1 = Matrix4.translationValues(10, 20, 0);
+    final m2 = Matrix4.rotationZ(1);
+    final m3 = Matrix4.diagonal3Values(1.1, 1.2, 1.0);
 
     result.publicPushTransform(m1);
     expect(currentTransform(result), equals(m1));
@@ -58,12 +53,13 @@ void main() {
     expect(currentTransform(result), equals(m2 * m1)); // Test repeated add
 
     // The `wrapped` is wrapped at [m1, m2]
-    final MyHitTestResult wrapped = MyHitTestResult.wrap(result);
+    final wrapped = MyHitTestResult.wrap(result);
     expect(currentTransform(wrapped), equals(m2 * m1));
 
     result.publicPushTransform(m3);
-    expect(currentTransform(result), equals(m3 * m2 * m1));
-    expect(currentTransform(wrapped), equals(m3 * m2 * m1));
+
+    expect(currentTransform(result), equals(m3.multiplied(m2).multiplied(m1)));
+    expect(currentTransform(wrapped), equals(m3.multiplied(m2).multiplied(m1)));
 
     result.publicPopTransform();
     result.publicPopTransform();
@@ -78,18 +74,18 @@ void main() {
   });
 
   test('HitTestResult should correctly push and pop offsets', () {
-    Matrix4 currentTransform(HitTestResult targetResult) {
+    Matrix4? currentTransform(HitTestResult targetResult) {
       final HitTestEntry entry = HitTestEntry(_DummyHitTestTarget());
       targetResult.add(entry);
       return entry.transform;
     }
 
-    final MyHitTestResult result = MyHitTestResult();
+    final result = MyHitTestResult();
 
-    final Matrix4 m1 = Matrix4.rotationZ(1);
-    final Matrix4 m2 = Matrix4.diagonal3Values(1.1, 1.2, 1.0);
-    const Offset o3 = Offset(10, 20);
-    final Matrix4 m3 = Matrix4.translationValues(o3.dx, o3.dy, 0.0);
+    final m1 = Matrix4.rotationZ(1);
+    final m2 = Matrix4.diagonal3Values(1.1, 1.2, 1.0);
+    const o3 = Offset(10, 20);
+    final m3 = Matrix4.translationValues(o3.dx, o3.dy, 0.0);
 
     // Test pushing offset as the first element
     result.publicPushOffset(o3);
@@ -102,12 +98,12 @@ void main() {
     expect(currentTransform(result), equals(m1 * m3)); // Test repeated add
 
     // The `wrapped` is wrapped at [m1, m2]
-    final MyHitTestResult wrapped = MyHitTestResult.wrap(result);
+    final wrapped = MyHitTestResult.wrap(result);
     expect(currentTransform(wrapped), equals(m1 * m3));
 
     result.publicPushTransform(m2);
-    expect(currentTransform(result), equals(m2 * m1 * m3));
-    expect(currentTransform(wrapped), equals(m2 * m1 * m3));
+    expect(currentTransform(result), equals(m2.multiplied(m1).multiplied(m3)));
+    expect(currentTransform(wrapped), equals(m2.multiplied(m1).multiplied(m3)));
 
     result.publicPopTransform();
     result.publicPopTransform();
@@ -118,7 +114,7 @@ void main() {
     result.publicPushOffset(o3);
     result.publicPushTransform(m1);
 
-    expect(currentTransform(result), equals(m1 * m3 * m2));
+    expect(currentTransform(result), equals(m1.multiplied(m3).multiplied(m2)));
 
     result.publicPopTransform();
 
@@ -135,7 +131,7 @@ class _DummyHitTestTarget implements HitTestTarget {
 
 class MyHitTestResult extends HitTestResult {
   MyHitTestResult();
-  MyHitTestResult.wrap(HitTestResult result) : super.wrap(result);
+  MyHitTestResult.wrap(super.result) : super.wrap();
 
   void publicPushTransform(Matrix4 transform) => pushTransform(transform);
   void publicPushOffset(Offset offset) => pushOffset(offset);
