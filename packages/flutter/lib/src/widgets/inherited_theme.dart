@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/foundation.dart';
+/// @docImport 'package:flutter/material.dart';
+library;
 
 import 'framework.dart';
+
+// Examples can assume:
+// TooltipThemeData data = const TooltipThemeData();
 
 /// An [InheritedWidget] that defines visual properties like colors
 /// and text styles, which the [child]'s subtree depends on.
@@ -17,7 +21,7 @@ import 'framework.dart';
 /// like the contents of a new route or an overlay, will be able to see the
 /// ancestor inherited themes of the context it was built in.
 ///
-/// {@tool dartpad --template=freeform}
+/// {@tool dartpad}
 /// This example demonstrates how `InheritedTheme.capture()` can be used
 /// to wrap the contents of a new route with the inherited themes that
 /// are present when the route was built - but are not present when route
@@ -27,75 +31,13 @@ import 'framework.dart';
 /// new route's Text widget will inherit the "something must be wrong"
 /// fallback text style, rather than the default text style defined in MyApp.
 ///
-/// ```dart imports
-/// import 'package:flutter/material.dart';
-/// ```
-///
-/// ```dart main
-/// void main() {
-///   runApp(MyApp());
-/// }
-/// ```
-///
-/// ```dart
-/// class MyAppBody extends StatelessWidget {
-///   @override
-///   Widget build(BuildContext context) {
-///     final NavigatorState navigator = Navigator.of(context);
-///     // This InheritedTheme.capture() saves references to themes that are
-///     // found above the context provided to this widget's build method
-///     // excluding themes are are found above the navigator. Those themes do
-///     // not have to be captured, because they will already be visible from
-///     // the new route pushed onto said navigator.
-///     // Themes are captured outside of the route's builder because when the
-///     // builder executes, the context may not be valid anymore.
-///     final CapturedThemes themes = InheritedTheme.capture(from: context, to: navigator.context);
-///     return GestureDetector(
-///       onTap: () {
-///         Navigator.of(context).push(
-///           MaterialPageRoute(
-///             builder: (BuildContext _) {
-///               // Wrap the actual child of the route in the previously
-///               // captured themes.
-///               return themes.wrap(Container(
-///                 alignment: Alignment.center,
-///                 color: Colors.white,
-///                 child: Text('Hello World'),
-///               ));
-///             },
-///           ),
-///         );
-///       },
-///       child: Center(child: Text('Tap Here')),
-///     );
-///   }
-/// }
-///
-/// class MyApp extends StatelessWidget {
-///   @override
-///   Widget build(BuildContext context) {
-///     return MaterialApp(
-///       home: Scaffold(
-///         // Override the DefaultTextStyle defined by the Scaffold.
-///         // Descendant widgets will inherit this big blue text style.
-///         body: DefaultTextStyle(
-///           style: TextStyle(fontSize: 48, color: Colors.blue),
-///           child: MyAppBody(),
-///         ),
-///       ),
-///     );
-///   }
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/inherited_theme/inherited_theme.0.dart **
 /// {@end-tool}
 abstract class InheritedTheme extends InheritedWidget {
   /// Abstract const constructor. This constructor enables subclasses to provide
   /// const constructors so that they can be used in const expressions.
 
-  const InheritedTheme({
-    Key? key,
-    required Widget child,
-  }) : super(key: key, child: child);
+  const InheritedTheme({super.key, required super.child});
 
   /// Return a copy of this inherited theme with the specified [child].
   ///
@@ -122,9 +64,6 @@ abstract class InheritedTheme extends InheritedWidget {
   /// the wrapped `child` - unless this method is called again to re-wrap the
   /// child.
   static Widget captureAll(BuildContext context, Widget child, {BuildContext? to}) {
-    assert(child != null);
-    assert(context != null);
-
     return capture(from: context, to: to).wrap(child);
   }
 
@@ -142,16 +81,17 @@ abstract class InheritedTheme extends InheritedWidget {
   /// this method is called again to re-capture the updated themes.
   ///
   /// To wrap a [Widget] in the captured themes, call [CapturedThemes.wrap].
-  static CapturedThemes capture({ required BuildContext from, required BuildContext? to }) {
-    assert(from != null);
-
+  ///
+  /// This method can be expensive if there are many widgets between `from` and
+  /// `to` (it walks the element tree between those nodes).
+  static CapturedThemes capture({required BuildContext from, required BuildContext? to}) {
     if (from == to) {
       // Nothing to capture.
       return CapturedThemes._(const <InheritedTheme>[]);
     }
 
-    final List<InheritedTheme> themes = <InheritedTheme>[];
-    final Set<Type> themeTypes = <Type>{};
+    final themes = <InheritedTheme>[];
+    final themeTypes = <Type>{};
     late bool debugDidFindAncestor;
     assert(() {
       debugDidFindAncestor = to == null;
@@ -165,8 +105,7 @@ abstract class InheritedTheme extends InheritedWidget {
         }());
         return false;
       }
-      if (ancestor is InheritedElement && ancestor.widget is InheritedTheme) {
-        final InheritedTheme theme = ancestor.widget as InheritedTheme;
+      if (ancestor case InheritedElement(widget: final InheritedTheme theme)) {
         final Type themeType = theme.runtimeType;
         // Only remember the first theme of any type. This assumes
         // that inherited themes completely shadow ancestors of the
@@ -179,7 +118,10 @@ abstract class InheritedTheme extends InheritedWidget {
       return true;
     });
 
-    assert(debugDidFindAncestor, 'The provided `to` context must be an ancestor of the `from` context.');
+    assert(
+      debugDidFindAncestor,
+      'The provided `to` context must be an ancestor of the `from` context.',
+    );
     return CapturedThemes._(themes);
   }
 }
@@ -200,11 +142,7 @@ class CapturedThemes {
 }
 
 class _CaptureAll extends StatelessWidget {
-  const _CaptureAll({
-    Key? key,
-    required this.themes,
-    required this.child,
-  }) : assert(themes != null), assert(child != null), super(key: key);
+  const _CaptureAll({required this.themes, required this.child});
 
   final List<InheritedTheme> themes;
   final Widget child;
@@ -212,8 +150,9 @@ class _CaptureAll extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget wrappedChild = child;
-    for (final InheritedTheme theme in themes)
+    for (final InheritedTheme theme in themes) {
       wrappedChild = theme.wrap(context, wrappedChild);
+    }
     return wrappedChild;
   }
 }

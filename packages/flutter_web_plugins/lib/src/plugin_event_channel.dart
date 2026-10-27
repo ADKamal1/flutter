@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -17,10 +15,9 @@ import 'plugin_registry.dart';
 /// channel sends a stream of events to the handler listening on the
 /// framework-side.
 ///
-/// The channel [name] must not be null. If no [codec] is provided, then
-/// [StandardMethodCodec] is used. If no [binaryMessenger] is provided, then
-/// [pluginBinaryMessenger], which sends messages to the framework-side,
-/// is used.
+/// If no [codec] is provided, then [StandardMethodCodec] is used. If no
+/// [binaryMessenger] is provided, then [pluginBinaryMessenger], which sends
+/// messages to the framework-side, is used.
 ///
 /// Channels created using this class implement two methods for
 /// subscribing to the event stream. The methods use the encoding of
@@ -28,34 +25,29 @@ import 'plugin_registry.dart';
 ///
 /// The first method is `listen`. When called, it begins forwarding
 /// messages to the framework side when they are added to the
-/// [controller]. This triggers the [StreamController.onListen] callback
-/// on the [controller].
+/// `controller`. This triggers the [StreamController.onListen] callback
+/// on the `controller`.
 ///
 /// The other method is `cancel`. When called, it stops forwarding
 /// events to the framework. This triggers the [StreamController.onCancel]
-/// callback on the [controller].
+/// callback on the `controller`.
 ///
-/// Events added to the [controller] when the framework is not
+/// Events added to the `controller` when the framework is not
 /// subscribed are silently discarded.
 class PluginEventChannel<T> {
   /// Creates a new plugin event channel.
-  ///
-  /// The [name] and [codec] arguments must not be null.
   const PluginEventChannel(
     this.name, [
     this.codec = const StandardMethodCodec(),
     this.binaryMessenger,
-  ])  : assert(name != null),
-        assert(codec != null);
+  ]);
 
   /// The logical channel on which communication happens.
-  ///
-  /// This must not be null.
   final String name;
 
   /// The message codec used by this channel.
   ///
-  /// This must not be null. This defaults to [StandardMethodCodec].
+  /// Defaults to [StandardMethodCodec].
   final MethodCodec codec;
 
   /// The messenger used by this channel to send platform messages.
@@ -63,7 +55,7 @@ class PluginEventChannel<T> {
   /// When this is null, the [pluginBinaryMessenger] is used instead,
   /// which sends messages from the platform-side to the
   /// framework-side.
-  final BinaryMessenger binaryMessenger;
+  final BinaryMessenger? binaryMessenger;
 
   /// Use [setController] instead.
   ///
@@ -71,8 +63,9 @@ class PluginEventChannel<T> {
   /// and providing a getter would require making this class non-const.
   @Deprecated(
     'Replace calls to the "controller" setter with calls to the "setController" method. '
-    'This feature was deprecated after v1.23.0-7.0.pre.'
+    'This feature was deprecated after v1.23.0-7.0.pre.',
   )
+  // ignore: avoid_setters_without_getters
   set controller(StreamController<T> controller) {
     setController(controller);
   }
@@ -81,7 +74,7 @@ class PluginEventChannel<T> {
   ///
   /// Setting the controller to null disconnects from the channel (setting
   /// the message handler on the [binaryMessenger] to null).
-  void setController(StreamController<T> controller) {
+  void setController(StreamController<T>? controller) {
     final BinaryMessenger messenger = binaryMessenger ?? pluginBinaryMessenger;
     if (controller == null) {
       messenger.setMessageHandler(name, null);
@@ -93,28 +86,23 @@ class PluginEventChannel<T> {
       // this class be const is convenient since it allows references
       // to be obtained by using the constructor rather than having
       // to literally pass references around.
-      final _EventChannelHandler<T> handler = _EventChannelHandler<T>(
-        name,
-        codec,
-        controller,
-        messenger,
-      );
+      final handler = _EventChannelHandler<T>(name, codec, controller, messenger);
       messenger.setMessageHandler(name, handler.handle);
     }
   }
 }
 
 class _EventChannelHandler<T> {
-  _EventChannelHandler(this.name, this.codec, this.controller, this.messenger) : assert(messenger != null);
+  _EventChannelHandler(this.name, this.codec, this.controller, this.messenger);
 
   final String name;
   final MethodCodec codec;
   final StreamController<T> controller;
   final BinaryMessenger messenger;
 
-  StreamSubscription<T> subscription;
+  StreamSubscription<T>? subscription;
 
-  Future<ByteData> handle(ByteData message) {
+  Future<ByteData>? handle(ByteData? message) {
     final MethodCall call = codec.decodeMethodCall(message);
     switch (call.method) {
       case 'listen':
@@ -128,25 +116,24 @@ class _EventChannelHandler<T> {
   }
 
   Future<ByteData> _listen() async {
-    if (subscription != null) {
-      await subscription.cancel();
-    }
-    subscription = controller.stream.listen((dynamic event) {
-      messenger.send(name, codec.encodeSuccessEnvelope(event));
-    }, onError: (dynamic error) {
-      messenger.send(name, codec.encodeErrorEnvelope(code: 'error', message: '$error'));
-    });
+    // Cancel any existing subscription.
+    await subscription?.cancel();
+    subscription = controller.stream.listen(
+      (dynamic event) {
+        messenger.send(name, codec.encodeSuccessEnvelope(event));
+      },
+      onError: (dynamic error) {
+        messenger.send(name, codec.encodeErrorEnvelope(code: 'error', message: '$error'));
+      },
+    );
     return codec.encodeSuccessEnvelope(null);
   }
 
   Future<ByteData> _cancel() async {
     if (subscription == null) {
-      return codec.encodeErrorEnvelope(
-        code: 'error',
-        message: 'No active subscription to cancel.',
-      );
+      return codec.encodeErrorEnvelope(code: 'error', message: 'No active subscription to cancel.');
     }
-    await subscription.cancel();
+    await subscription!.cancel();
     subscription = null;
     return codec.encodeSuccessEnvelope(null);
   }

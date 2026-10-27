@@ -11,6 +11,8 @@ import 'package:flutter/animation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'src/binding.dart';
+
 class NonStopVSync implements TickerProvider {
   const NonStopVSync();
   @override
@@ -20,7 +22,7 @@ class NonStopVSync implements TickerProvider {
 void main() {
   // We first create a render object that represents a green box.
   final RenderBox green = RenderDecoratedBox(
-    decoration: const BoxDecoration(color: Color(0xFF00FF00))
+    decoration: const BoxDecoration(color: Color(0xFF00FF00)),
   );
   // Second, we wrap that green box in a render object that forces the green box
   // to have a specific size.
@@ -32,29 +34,26 @@ void main() {
   // transform before painting its child. Each frame of the animation, we'll
   // update the transform of this render object to cause the green square to
   // spin.
-  final RenderTransform spin = RenderTransform(
+  final spin = RenderTransform(
     transform: Matrix4.identity(),
     alignment: Alignment.center,
     child: square,
   );
   // Finally, we center the spinning green square...
-  final RenderBox root = RenderPositionedBox(
-    alignment: Alignment.center,
-    child: spin,
-  );
+  final RenderBox root = RenderPositionedBox(child: spin);
   // and attach it to the window.
-  RenderingFlutterBinding(root: root);
+  ViewRenderingFlutterBinding(root: root);
 
   // To make the square spin, we use an animation that repeats every 1800
   // milliseconds.
-  final AnimationController animation = AnimationController(
+  final animation = AnimationController(
     duration: const Duration(milliseconds: 1800),
     vsync: const NonStopVSync(),
   )..repeat();
   // The animation will produce a value between 0.0 and 1.0 each frame, but we
   // want to rotate the square using a value between 0.0 and math.pi. To change
   // the range of the animation, we use a Tween.
-  final Tween<double> tween = Tween<double>(begin: 0.0, end: math.pi);
+  final tween = Tween<double>(begin: 0.0, end: math.pi);
   // We add a listener to the animation, which will be called every time the
   // animation ticks.
   animation.addListener(() {

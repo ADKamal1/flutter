@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:stocks/main.dart' as stocks;
 import 'package:stocks/stock_data.dart' as stock_data;
 
@@ -13,16 +11,17 @@ import '../common.dart';
 
 const Duration kBenchmarkTime = Duration(seconds: 15);
 
-Future<void> main() async {
-  assert(false, "Don't run benchmarks in checked mode! Use 'flutter run --release'.");
+Future<List<double>> runBuildBenchmark() async {
+  assert(false, "Don't run benchmarks in debug mode! Use 'flutter run --release'.");
   stock_data.StockData.actuallyFetchData = false;
 
   // We control the framePolicy below to prevent us from scheduling frames in
   // the engine, so that the engine does not interfere with our timings.
-  final LiveTestWidgetsFlutterBinding binding = TestWidgetsFlutterBinding.ensureInitialized() as LiveTestWidgetsFlutterBinding;
+  final binding = TestWidgetsFlutterBinding.ensureInitialized() as LiveTestWidgetsFlutterBinding;
 
-  final Stopwatch watch = Stopwatch();
-  int iterations = 0;
+  final watch = Stopwatch();
+  var iterations = 0;
+  final values = <double>[];
 
   await benchmarkWidgets((WidgetTester tester) async {
     stocks.main();
@@ -30,13 +29,15 @@ Future<void> main() async {
     await tester.pump(const Duration(seconds: 1)); // Complete startup animation
     await tester.tapAt(const Offset(20.0, 40.0)); // Open drawer
     await tester.pump(); // Start drawer animation
-    await tester.pump(const Duration(seconds: 1)); // Complete drawer animation
+    await tester.pumpAndSettle(const Duration(seconds: 1)); // Complete drawer animation
 
     final Element appState = tester.element(find.byType(stocks.StocksApp));
     binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.benchmark;
 
-    watch.start();
-    while (watch.elapsed < kBenchmarkTime) {
+    Duration elapsed = Duration.zero;
+    while (elapsed < kBenchmarkTime) {
+      watch.reset();
+      watch.start();
       appState.markNeedsBuild();
       // We don't use tester.pump() because we're trying to drive it in an
       // artificially high load to find out how much CPU each frame takes.
@@ -45,17 +46,29 @@ Future<void> main() async {
       // We use Timer.run to ensure there's a microtask flush in between
       // the two calls below.
       await tester.pumpBenchmark(Duration(milliseconds: iterations * 16));
+      watch.stop();
       iterations += 1;
+      elapsed += Duration(microseconds: watch.elapsedMicroseconds);
+      values.add(watch.elapsedMicroseconds.toDouble());
     }
-    watch.stop();
   });
+  return values;
+}
 
-  final BenchmarkResultPrinter printer = BenchmarkResultPrinter();
-  printer.addResult(
+Future<void> execute() async {
+  final printer = BenchmarkResultPrinter();
+  printer.addResultStatistics(
     description: 'Stock build',
-    value: watch.elapsedMicroseconds / iterations,
+    values: await runBuildBenchmark(),
     unit: 'µs per iteration',
     name: 'stock_build_iteration',
   );
   printer.printToStdout();
+}
+
+//
+//  Note that the benchmark is normally run by benchmark_collection.dart.
+//
+Future<void> main() async {
+  return execute();
 }

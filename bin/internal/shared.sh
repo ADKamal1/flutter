@@ -3,7 +3,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 # ---------------------------------- NOTE ---------------------------------- #
 #
 # Please keep the logic in this file consistent with the logic in the
@@ -17,11 +16,11 @@ set -e
 # Needed because if it is set, cd may print the path it changed to.
 unset CDPATH
 
-function retry_upgrade {
+function pub_upgrade_with_retry {
   local total_tries="10"
   local remaining_tries=$((total_tries - 1))
   while [[ "$remaining_tries" -gt 0 ]]; do
-    (cd "$FLUTTER_TOOLS_DIR" && "$PUB" upgrade "$VERBOSITY" --no-precompile) && break
+    (cd "$FLUTTER_TOOLS_DIR" && "$DART" pub upgrade --suppress-analytics >&2) && break
     >&2 echo "Error: Unable to 'pub upgrade' flutter tool. Retrying in five seconds... ($remaining_tries tries left)"
     remaining_tries=$((remaining_tries - 1))
     sleep 5
@@ -31,12 +30,17 @@ function retry_upgrade {
     >&2 echo "Command 'pub upgrade' still failed after $total_tries tries, giving up."
     return 1
   fi
+
+  # Touch the pubspec.lock to ensure, even if this was a NOP, it is newer than pubspec.yaml.
+  # See https://github.com/flutter/flutter/issues/171024.
+  touch "$FLUTTER_TOOLS_DIR/pubspec.lock" >&2
+
   return 0
 }
 
 # Trap function for removing any remaining lock file at exit.
 function _rmlock () {
-  [ -n "$FLUTTER_UPGRADE_LOCK" ] && rm -rf "$FLUTTER_UPGRADE_LOCK"
+  [ -n "$FLUTTER_UPGRADE_LOCK" ] && rm -rf -- "$FLUTTER_UPGRADE_LOCK"
 }
 
 # Determines which lock method to use, based on what is available on the system.
@@ -114,14 +118,22 @@ function _wait_for_lock () {
 function upgrade_flutter () (
   mkdir -p "$FLUTTER_ROOT/bin/cache"
 
-  local revision="$(cd "$FLUTTER_ROOT"; git rev-parse HEAD)"
+  # Ensure the engine.version is populated
+  "$FLUTTER_ROOT/bin/internal/update_engine_version.sh"
+
+  local revision="$(git -C "$FLUTTER_ROOT" rev-parse HEAD)"
+  local compilekey="$revision:$FLUTTER_TOOL_ARGS"
 
   # Invalidate cache if:
   #  * SNAPSHOT_PATH is not a file, or
-  #  * STAMP_PATH is not a file with nonzero size, or
-  #  * Contents of STAMP_PATH is not our local git HEAD revision, or
+  #  * STAMP_PATH is not a file, or
+  #  * STAMP_PATH is an empty file, or
+  #  * Contents of STAMP_PATH is not what we are going to compile, or
   #  * pubspec.yaml last modified after pubspec.lock
-  if [[ ! -f "$SNAPSHOT_PATH" || ! -s "$STAMP_PATH" || "$(cat "$STAMP_PATH")" != "$revision" || "$FLUTTER_TOOLS_DIR/pubspec.yaml" -nt "$FLUTTER_TOOLS_DIR/pubspec.lock" ]]; then
+  if [[ ! -f "$SNAPSHOT_PATH" || \
+        ! -s "$STAMP_PATH" || \
+        "$(< "$STAMP_PATH")" != "$compilekey" || \
+        "$FLUTTER_TOOLS_DIR/pubspec.yaml" -nt "$FLUTTER_TOOLS_DIR/pubspec.lock" ]]; then
     # Waits for the update lock to be acquired. Placing this check inside the
     # conditional allows the majority of flutter/dart installations to bypass
     # the lock entirely, but as a result this required a second verification that
@@ -129,30 +141,48 @@ function upgrade_flutter () (
     _wait_for_lock
 
     # A different shell process might have updated the tool/SDK.
-    if [[ -f "$SNAPSHOT_PATH" && -s "$STAMP_PATH" && "$(cat "$STAMP_PATH")" == "$revision" && "$FLUTTER_TOOLS_DIR/pubspec.yaml" -ot "$FLUTTER_TOOLS_DIR/pubspec.lock" ]]; then
+    if [[ -f "$SNAPSHOT_PATH" && -s "$STAMP_PATH" && "$(< "$STAMP_PATH")" == "$compilekey" && "$FLUTTER_TOOLS_DIR/pubspec.yaml" -ot "$FLUTTER_TOOLS_DIR/pubspec.lock" ]]; then
       exit $?
     fi
 
+    # Fetch Dart...
     rm -f "$FLUTTER_ROOT/version"
+    rm -f "$FLUTTER_ROOT/bin/cache/flutter.version.json"
     touch "$FLUTTER_ROOT/bin/cache/.dartignore"
     "$FLUTTER_ROOT/bin/internal/update_dart_sdk.sh"
-    VERBOSITY="--verbosity=error"
+
+    if [[ "$BIN_NAME" == 'dart' || "$BIN_NAME" == 'flutter-dev' ]]; then
+      # Don't try to build tool
+      return
+    fi
 
     >&2 echo Building flutter tool...
+
+    # Prepare packages...
     if [[ "$CI" == "true" || "$BOT" == "true" || "$CONTINUOUS_INTEGRATION" == "true" || "$CHROME_HEADLESS" == "1" ]]; then
       PUB_ENVIRONMENT="$PUB_ENVIRONMENT:flutter_bot"
-      VERBOSITY="--verbosity=normal"
+    else
+      export PUB_SUMMARY_ONLY=1
     fi
     export PUB_ENVIRONMENT="$PUB_ENVIRONMENT:flutter_install"
+    pub_upgrade_with_retry
 
-    if [[ -d "$FLUTTER_ROOT/.pub-cache" ]]; then
-      export PUB_CACHE="${PUB_CACHE:-"$FLUTTER_ROOT/.pub-cache"}"
+    # Move the old snapshot - we can't just overwrite it as the VM might currently have it
+    # memory mapped (e.g. on flutter upgrade). For downloading a new dart sdk the folder is moved,
+    # so we take the same approach of moving the file here.
+    SNAPSHOT_PATH_OLD="$SNAPSHOT_PATH.old"
+    if [ -f "$SNAPSHOT_PATH" ]; then
+      mv "$SNAPSHOT_PATH" "$SNAPSHOT_PATH_OLD"
     fi
 
-    retry_upgrade
+    # Compile...
+    "$DART" --verbosity=error $FLUTTER_TOOL_ARGS --snapshot="$SNAPSHOT_PATH" --snapshot-kind="app-jit" --packages="$FLUTTER_TOOLS_DIR/.dart_tool/package_config.json" --no-enable-mirrors "$SCRIPT_PATH" > /dev/null
+    echo "$compilekey" > "$STAMP_PATH"
 
-    "$DART" --disable-dart-dev $FLUTTER_TOOL_ARGS --snapshot="$SNAPSHOT_PATH" --packages="$FLUTTER_TOOLS_DIR/.packages" --no-enable-mirrors "$SCRIPT_PATH"
-    echo "$revision" > "$STAMP_PATH"
+    # Delete any temporary snapshot path.
+    if [ -f "$SNAPSHOT_PATH_OLD" ]; then
+      rm -f "$SNAPSHOT_PATH_OLD"
+    fi
   fi
   # The exit here is extraneous since the function is run in a subshell, but
   # this serves as documentation that running the function in a subshell is
@@ -179,19 +209,17 @@ function shared::execute() {
   DART_SDK_PATH="$FLUTTER_ROOT/bin/cache/dart-sdk"
 
   DART="$DART_SDK_PATH/bin/dart"
-  PUB="$DART_SDK_PATH/bin/pub"
 
   # If running over git-bash, overrides the default UNIX executables with win32
   # executables
   case "$(uname -s)" in
-    MINGW*)
+    MINGW* | MSYS* )
       DART="$DART.exe"
-      PUB="$PUB.bat"
       ;;
   esac
 
-  # Test if running as superuser – but don't warn if running within Docker
-  if [[ "$EUID" == "0" && ! -f /.dockerenv ]]; then
+  # Test if running as superuser – but don't warn if running within Docker or CI.
+  if [[ "$EUID" == "0" && ! -f /.dockerenv && "$CI" != "true" && "$BOT" != "true" && "$CONTINUOUS_INTEGRATION" != "true" ]]; then
     >&2 echo "   Woah! You appear to be trying to run flutter as root."
     >&2 echo "   We strongly recommend running the flutter tool without superuser privileges."
     >&2 echo "  /"
@@ -209,26 +237,43 @@ function shared::execute() {
     >&2 echo "Error: The Flutter directory is not a clone of the GitHub project."
     >&2 echo "       The flutter tool requires Git in order to operate properly;"
     >&2 echo "       to install Flutter, see the instructions at:"
-    >&2 echo "       https://flutter.dev/get-started"
+    >&2 echo "       https://docs.flutter.dev/get-started"
     exit 1
   fi
 
-  # To debug the tool, you can uncomment the following lines to enable checked
-  # mode and set an observatory port:
-  # FLUTTER_TOOL_ARGS="--enable-asserts $FLUTTER_TOOL_ARGS"
-  # FLUTTER_TOOL_ARGS="$FLUTTER_TOOL_ARGS --observe=65432"
-
-  upgrade_flutter 7< "$PROG_NAME"
-
   BIN_NAME="$(basename "$PROG_NAME")"
+
+  # File descriptor 7 is prepared here so that we can use it with
+  # flock(1) in _lock() (see above).
+  #
+  # We use number 7 because it's a luckier number than 3; luck is
+  # important when making locks work reliably. Also because that way
+  # if anyone is redirecting other file descriptors there's less
+  # chance of a conflict.
+  #
+  # In any case, the file we redirect into this file descriptor is
+  # this very source file you are reading right now, because that's
+  # the only file we can truly guarantee exists, since we're running
+  # it. We don't use PROG_NAME because otherwise if you run `dart` and
+  # `flutter` simultaneously they'll end up using different lock files
+  # and will corrupt each others' downloads.
+  #
+  # SHARED_NAME itself is prepared by the caller script.
+  upgrade_flutter 7< "$SHARED_NAME"
+
   case "$BIN_NAME" in
+    flutter-dev)
+      # FLUTTER_TOOL_ARGS aren't quoted below, because it is meant to be
+      # considered as separate space-separated args.
+      exec "$DART" run --resident --packages="$FLUTTER_TOOLS_DIR/.dart_tool/package_config.json" $FLUTTER_TOOL_ARGS "$SCRIPT_PATH" "$@"
+      ;;
     flutter*)
       # FLUTTER_TOOL_ARGS aren't quoted below, because it is meant to be
       # considered as separate space-separated args.
-      "$DART" --disable-dart-dev --packages="$FLUTTER_TOOLS_DIR/.packages" $FLUTTER_TOOL_ARGS "$SNAPSHOT_PATH" "$@"
+      exec "$DART" --packages="$FLUTTER_TOOLS_DIR/.dart_tool/package_config.json" $FLUTTER_TOOL_ARGS "$SNAPSHOT_PATH" "$@"
       ;;
     dart*)
-      "$DART" "$@"
+      exec "$DART" "$@"
       ;;
     *)
       >&2 echo "Error! Executable name $BIN_NAME not recognized!"

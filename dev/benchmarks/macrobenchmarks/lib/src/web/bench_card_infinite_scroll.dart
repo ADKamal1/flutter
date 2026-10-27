@@ -35,7 +35,7 @@ class BenchCardInfiniteScroll extends WidgetRecorder {
 }
 
 class _InfiniteScrollCards extends StatefulWidget {
-  const _InfiniteScrollCards(this.initialOffset, this.finalOffset, {Key key}) : super(key: key);
+  const _InfiniteScrollCards(this.initialOffset, this.finalOffset);
 
   final double initialOffset;
   final double finalOffset;
@@ -47,8 +47,8 @@ class _InfiniteScrollCards extends StatefulWidget {
 class _InfiniteScrollCardsState extends State<_InfiniteScrollCards> {
   static const Duration stepDuration = Duration(seconds: 20);
 
-  ScrollController scrollController;
-  double offset;
+  late ScrollController scrollController;
+  late double offset;
 
   @override
   void initState() {
@@ -56,9 +56,7 @@ class _InfiniteScrollCardsState extends State<_InfiniteScrollCards> {
 
     offset = widget.initialOffset;
 
-    scrollController = ScrollController(
-      initialScrollOffset: offset,
-    );
+    scrollController = ScrollController(initialScrollOffset: offset);
 
     // Without the timer the animation doesn't begin.
     Timer.run(() async {
@@ -71,6 +69,12 @@ class _InfiniteScrollCardsState extends State<_InfiniteScrollCards> {
   }
 
   @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView.builder(
       controller: scrollController,
@@ -80,10 +84,7 @@ class _InfiniteScrollCardsState extends State<_InfiniteScrollCards> {
           height: 100.0,
           child: Card(
             elevation: 16.0,
-            child: Text(
-              '${lipsum[index % lipsum.length]} $index',
-              textAlign: TextAlign.center,
-            ),
+            child: Text('${lipsum[index % lipsum.length]} $index', textAlign: TextAlign.center),
           ),
         );
       },

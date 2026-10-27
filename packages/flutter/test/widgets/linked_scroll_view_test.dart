@@ -12,12 +12,11 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class LinkedScrollController extends ScrollController {
-  LinkedScrollController({ this.before, this.after });
+  LinkedScrollController({this.before, this.after});
 
   LinkedScrollController? before;
   LinkedScrollController? after;
@@ -36,9 +35,15 @@ class LinkedScrollController extends ScrollController {
 
   @override
   void attach(ScrollPosition position) {
-    assert(position is LinkedScrollPosition, 'A LinkedScrollController must only be used with LinkedScrollPositions.');
-    final LinkedScrollPosition linkedPosition = position as LinkedScrollPosition;
-    assert(linkedPosition.owner == this, 'A LinkedScrollPosition cannot change controllers once created.');
+    assert(
+      position is LinkedScrollPosition,
+      'A LinkedScrollController must only be used with LinkedScrollPositions.',
+    );
+    final linkedPosition = position as LinkedScrollPosition;
+    assert(
+      linkedPosition.owner == this,
+      'A LinkedScrollPosition cannot change controllers once created.',
+    );
     super.attach(position);
     _parent?.attach(position);
   }
@@ -58,7 +63,11 @@ class LinkedScrollController extends ScrollController {
   }
 
   @override
-  LinkedScrollPosition createScrollPosition(ScrollPhysics physics, ScrollContext context, ScrollPosition? oldPosition) {
+  LinkedScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) {
     return LinkedScrollPosition(
       this,
       physics: physics,
@@ -84,40 +93,32 @@ class LinkedScrollController extends ScrollController {
 
   Iterable<LinkedScrollActivity> link(LinkedScrollPosition driver) sync* {
     assert(hasClients);
-    for (final LinkedScrollPosition position in positions.cast<LinkedScrollPosition>())
+    for (final LinkedScrollPosition position in positions.cast<LinkedScrollPosition>()) {
       yield position.link(driver);
+    }
   }
 
   @override
   void debugFillDescription(List<String> description) {
     super.debugFillDescription(description);
-    if (before != null && after != null) {
-      description.add('links: ⬌');
-    } else if (before != null) {
-      description.add('links: ⬅');
-    } else if (after != null) {
-      description.add('links: ➡');
-    } else {
-      description.add('links: none');
-    }
+    final String linkSymbol = switch ((before, after)) {
+      (null, null) => 'none',
+      (null, _) => '➡',
+      (_, null) => '⬅',
+      (_, _) => '⬌',
+    };
+    description.add('links: $linkSymbol');
   }
-
 }
 
 class LinkedScrollPosition extends ScrollPositionWithSingleContext {
   LinkedScrollPosition(
     this.owner, {
-    required ScrollPhysics physics,
-    required ScrollContext context,
-    required double initialPixels,
-    ScrollPosition? oldPosition,
-  }) : assert(owner != null),
-       super(
-         physics: physics,
-         context: context,
-         initialPixels: initialPixels,
-         oldPosition: oldPosition,
-       );
+    required super.physics,
+    required super.context,
+    required double super.initialPixels,
+    super.oldPosition,
+  });
 
   final LinkedScrollController owner;
 
@@ -126,16 +127,19 @@ class LinkedScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   void beginActivity(ScrollActivity? newActivity) {
-    if (newActivity == null)
+    if (newActivity == null) {
       return;
+    }
     if (_beforeActivities != null) {
-      for (final LinkedScrollActivity activity in _beforeActivities!)
+      for (final LinkedScrollActivity activity in _beforeActivities!) {
         activity.unlink(this);
+      }
       _beforeActivities!.clear();
     }
     if (_afterActivities != null) {
-      for (final LinkedScrollActivity activity in _afterActivities!)
+      for (final LinkedScrollActivity activity in _afterActivities!) {
         activity.unlink(this);
+      }
       _afterActivities!.clear();
     }
     super.beginActivity(newActivity);
@@ -146,35 +150,40 @@ class LinkedScrollPosition extends ScrollPositionWithSingleContext {
     updateUserScrollDirection(delta > 0.0 ? ScrollDirection.forward : ScrollDirection.reverse);
     final double value = pixels - physics.applyPhysicsToUserOffset(this, delta);
 
-    if (value == pixels)
+    if (value == pixels) {
       return;
+    }
 
-    double beforeOverscroll = 0.0;
+    var beforeOverscroll = 0.0;
     if (owner.canLinkWithBefore && (value < minScrollExtent)) {
       final double delta = value - minScrollExtent;
       _beforeActivities ??= HashSet<LinkedScrollActivity>();
       _beforeActivities!.addAll(owner.linkWithBefore(this));
-      for (final LinkedScrollActivity activity in _beforeActivities!)
+      for (final LinkedScrollActivity activity in _beforeActivities!) {
         beforeOverscroll = math.min(activity.moveBy(delta), beforeOverscroll);
+      }
       assert(beforeOverscroll <= 0.0);
     }
 
-    double afterOverscroll = 0.0;
+    var afterOverscroll = 0.0;
     if (owner.canLinkWithAfter && (value > maxScrollExtent)) {
       final double delta = value - maxScrollExtent;
       _afterActivities ??= HashSet<LinkedScrollActivity>();
       _afterActivities!.addAll(owner.linkWithAfter(this));
-      for (final LinkedScrollActivity activity in _afterActivities!)
+      for (final LinkedScrollActivity activity in _afterActivities!) {
         afterOverscroll = math.max(activity.moveBy(delta), afterOverscroll);
+      }
       assert(afterOverscroll >= 0.0);
     }
 
     assert(beforeOverscroll == 0.0 || afterOverscroll == 0.0);
 
-    final double localOverscroll = setPixels(value.clamp(
-      owner.canLinkWithBefore ? minScrollExtent : -double.infinity,
-      owner.canLinkWithAfter ? maxScrollExtent : double.infinity,
-    ));
+    final double localOverscroll = setPixels(
+      value.clamp(
+        owner.canLinkWithBefore ? minScrollExtent : -double.infinity,
+        owner.canLinkWithAfter ? maxScrollExtent : double.infinity,
+      ),
+    );
 
     assert(localOverscroll == 0.0 || (beforeOverscroll == 0.0 && afterOverscroll == 0.0));
   }
@@ -184,18 +193,17 @@ class LinkedScrollPosition extends ScrollPositionWithSingleContext {
   }
 
   LinkedScrollActivity link(LinkedScrollPosition driver) {
-    if (this.activity is! LinkedScrollActivity)
+    if (this.activity is! LinkedScrollActivity) {
       beginActivity(LinkedScrollActivity(this));
-    final LinkedScrollActivity? activity = this.activity as LinkedScrollActivity?;
+    }
+    final activity = this.activity as LinkedScrollActivity?;
     activity!.link(driver);
     return activity;
   }
 
   void unlink(LinkedScrollActivity activity) {
-    if (_beforeActivities != null)
-      _beforeActivities!.remove(activity);
-    if (_afterActivities != null)
-      _afterActivities!.remove(activity);
+    _beforeActivities?.remove(activity);
+    _afterActivities?.remove(activity);
   }
 
   @override
@@ -206,9 +214,7 @@ class LinkedScrollPosition extends ScrollPositionWithSingleContext {
 }
 
 class LinkedScrollActivity extends ScrollActivity {
-  LinkedScrollActivity(
-    LinkedScrollPosition delegate,
-  ) : super(delegate);
+  LinkedScrollActivity(LinkedScrollPosition super.delegate);
 
   @override
   LinkedScrollPosition get delegate => super.delegate as LinkedScrollPosition;
@@ -221,8 +227,9 @@ class LinkedScrollActivity extends ScrollActivity {
 
   void unlink(LinkedScrollPosition driver) {
     drivers.remove(driver);
-    if (drivers.isEmpty)
+    if (drivers.isEmpty) {
       delegate.goIdle();
+    }
   }
 
   @override
@@ -241,8 +248,9 @@ class LinkedScrollActivity extends ScrollActivity {
     ScrollDirection? commonDirection;
     for (final LinkedScrollPosition driver in drivers) {
       commonDirection ??= driver.userScrollDirection;
-      if (driver.userScrollDirection != commonDirection)
+      if (driver.userScrollDirection != commonDirection) {
         commonDirection = ScrollDirection.idle;
+      }
     }
 
     if (commonDirection != null) {
@@ -253,16 +261,17 @@ class LinkedScrollActivity extends ScrollActivity {
 
   @override
   void dispose() {
-    for (final LinkedScrollPosition driver in drivers)
+    for (final LinkedScrollPosition driver in drivers) {
       driver.unlink(this);
+    }
     super.dispose();
   }
 }
 
 class Test extends StatefulWidget {
-  const Test({ Key? key }) : super(key: key);
+  const Test({super.key});
   @override
-  _TestState createState() => _TestState();
+  State<Test> createState() => _TestState();
 }
 
 class _TestState extends State<Test> {
@@ -280,8 +289,8 @@ class _TestState extends State<Test> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _beforeController.setParent(PrimaryScrollController.of(context));
-    _afterController.setParent(PrimaryScrollController.of(context));
+    _beforeController.setParent(PrimaryScrollController.maybeOf(context));
+    _afterController.setParent(PrimaryScrollController.maybeOf(context));
   }
 
   @override
@@ -332,7 +341,6 @@ class _TestState extends State<Test> {
               ],
             ),
           ),
-          const Divider(),
           Expanded(
             child: ListView(
               controller: _afterController,

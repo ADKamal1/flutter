@@ -31,5 +31,19 @@
   "selectAllButtonLabel": "Вибрати все",
   "tabSemanticsLabel": "Вкладка $tabIndex з $tabCount",
   "modalBarrierDismissLabel": "Закрити",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Шукайте",
+  "noSpellCheckReplacementsLabel": "Замін не знайдено",
+  "menuDismissLabel": "Закрити меню",
+  "lookUpButtonLabel": "Шукати",
+  "searchWebButtonLabel": "Пошук в Інтернеті",
+  "shareButtonLabel": "Поділитися…",
+  "clearButtonLabel": "Очистити",
+  "cancelButtonLabel": "Скасувати",
+  "backButtonLabel": "Назад",
+  "expansionTileExpandedHint": "двічі торкніться, щоб згорнути",
+  "expansionTileCollapsedHint": "двічі торкніться, щоб розгорнути",
+  "expansionTileExpandedTapHint": "Згорнути",
+  "expansionTileCollapsedTapHint": "Розгорнути й дізнатися більше",
+  "expandedHint": "Згорнуто",
+  "collapsedHint": "Розгорнуто"
 }

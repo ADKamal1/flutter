@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,21 +9,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'rendering_tester.dart';
 
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   // This test has to be kept separate from object_test.dart because the way
   // the rendering_test.dart dependency of this test uses the bindings in not
   // compatible with existing tests in object_test.dart.
   test('reentrant paint error', () {
     late FlutterErrorDetails errorDetails;
     final RenderBox root = TestReentrantPaintingErrorRenderBox();
-    layout(root, onErrors: () {
-      errorDetails = renderer.takeFlutterErrorDetails()!;
-    });
+    layout(
+      root,
+      onErrors: () {
+        errorDetails = TestRenderingFlutterBinding.instance.takeFlutterErrorDetails()!;
+      },
+    );
     pumpFrame(phase: EnginePhase.paint);
 
     expect(errorDetails, isNotNull);
     expect(errorDetails.stack, isNotNull);
     // Check the ErrorDetails without the stack trace
-    final List<String> lines =  errorDetails.toString().split('\n');
+    final List<String> lines = errorDetails.toString().split('\n');
     // The lines in the middle of the error message contain the stack trace
     // which will change depending on where the test is run.
     expect(lines.length, greaterThan(12));
@@ -43,7 +46,7 @@ void main() {
         'Since this typically indicates an infinite recursion, it is\n'
         'disallowed.\n'
         '\n'
-        'When the exception was thrown, this was the stack:'
+        'When the exception was thrown, this was the stack:',
       ),
     );
 
@@ -56,7 +59,7 @@ void main() {
         '  constraints: BoxConstraints(w=800.0, h=600.0)\n'
         '  size: Size(100.0, 100.0)\n'
         'This RenderObject has no descendants.\n'
-        '═════════════════════════════════════════════════════════════════\n'
+        '═════════════════════════════════════════════════════════════════\n',
       ),
     );
   });
@@ -93,11 +96,13 @@ void main() {
         '   A RenderObject that still has dirty compositing bits cannot be\n'
         '   painted because this indicates that the tree has not yet been\n'
         '   properly configured for creating the layer tree.\n'
-        '   This usually indicates an error in the Flutter framework itself.\n'
+        '   This usually indicates an error in the Flutter framework itself.\n',
       ),
     );
     expect(
-      flutterError.diagnostics.singleWhere((DiagnosticsNode node) => node.level == DiagnosticLevel.hint).toString(),
+      flutterError.diagnostics
+          .singleWhere((DiagnosticsNode node) => node.level == DiagnosticLevel.hint)
+          .toString(),
       'This usually indicates an error in the Flutter framework itself.',
     );
   });

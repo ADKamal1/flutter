@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class Inside extends StatefulWidget {
-  const Inside({ Key? key }) : super(key: key);
+  const Inside({super.key});
   @override
   InsideState createState() => InsideState();
 }
@@ -21,15 +21,12 @@ class InsideState extends State<Inside> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    setState(() { });
+    setState(() {});
   }
 }
 
 class Middle extends StatefulWidget {
-  const Middle({
-    Key? key,
-    this.child,
-  }) : super(key: key);
+  const Middle({super.key, this.child});
 
   final Inside? child;
 
@@ -40,19 +37,16 @@ class Middle extends StatefulWidget {
 class MiddleState extends State<Middle> {
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _handlePointerDown,
-      child: widget.child,
-    );
+    return Listener(onPointerDown: _handlePointerDown, child: widget.child);
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    setState(() { });
+    setState(() {});
   }
 }
 
 class Outside extends StatefulWidget {
-  const Outside({ Key? key }) : super(key: key);
+  const Outside({super.key});
   @override
   OutsideState createState() => OutsideState();
 }

@@ -21,8 +21,9 @@ import 'package:path/path.dart' as path;
 import '../localizations_utils.dart';
 
 Map<String, dynamic> _loadBundle(File file) {
-  if (!FileSystemEntity.isFileSync(file.path))
+  if (!FileSystemEntity.isFileSync(file.path)) {
     exitWithError('Unable to find input file: ${file.path}');
+  }
   return json.decode(file.readAsStringSync()) as Map<String, dynamic>;
 }
 
@@ -30,33 +31,37 @@ void _encodeBundleTranslations(Map<String, dynamic> bundle) {
   for (final String key in bundle.keys) {
     // The ARB file resource "attributes" for foo are called @foo. Don't need
     // to encode them.
-    if (key.startsWith('@'))
+    if (key.startsWith('@')) {
       continue;
-    final String translation = bundle[key] as String;
+    }
+    final translation = bundle[key] as String;
     // Rewrite the string as a series of unicode characters in JSON format.
     // Like "\u0012\u0123\u1234".
     bundle[key] = translation.runes.map((int code) {
-      final String codeString = '00${code.toRadixString(16)}';
+      final codeString = '00${code.toRadixString(16)}';
       return '\\u${codeString.substring(codeString.length - 4)}';
     }).join();
   }
 }
 
 void _checkEncodedTranslations(Map<String, dynamic> encodedBundle, Map<String, dynamic> bundle) {
-  bool errorFound = false;
-  const JsonDecoder decoder = JsonDecoder();
+  var errorFound = false;
+  const decoder = JsonDecoder();
   for (final String key in bundle.keys) {
     if (decoder.convert('"${encodedBundle[key]}"') != bundle[key]) {
-      stderr.writeln('  encodedTranslation for $key does not match original value "${bundle[key]}"');
+      stderr.writeln(
+        '  encodedTranslation for $key does not match original value "${bundle[key]}"',
+      );
       errorFound = true;
     }
   }
-  if (errorFound)
+  if (errorFound) {
     exitWithError('JSON unicode translation encoding failed');
+  }
 }
 
 void _rewriteBundle(File file, Map<String, dynamic> bundle) {
-  final StringBuffer contents = StringBuffer();
+  final contents = StringBuffer();
   contents.writeln('{');
   for (final String key in bundle.keys) {
     contents.writeln('  "$key": "${bundle[key]}"${key == bundle.keys.last ? '' : ','}');
@@ -66,18 +71,23 @@ void _rewriteBundle(File file, Map<String, dynamic> bundle) {
 }
 
 void encodeKnArbFiles(Directory directory) {
-  final File materialArbFile = File(path.join(directory.path, 'material_kn.arb'));
-  final File cupertinoArbFile = File(path.join(directory.path, 'cupertino_kn.arb'));
+  final widgetsArbFile = File(path.join(directory.path, 'widgets_kn.arb'));
+  final materialArbFile = File(path.join(directory.path, 'material_kn.arb'));
+  final cupertinoArbFile = File(path.join(directory.path, 'cupertino_kn.arb'));
 
+  final Map<String, dynamic> widgetsBundle = _loadBundle(widgetsArbFile);
   final Map<String, dynamic> materialBundle = _loadBundle(materialArbFile);
   final Map<String, dynamic> cupertinoBundle = _loadBundle(cupertinoArbFile);
 
+  _encodeBundleTranslations(widgetsBundle);
   _encodeBundleTranslations(materialBundle);
   _encodeBundleTranslations(cupertinoBundle);
 
+  _checkEncodedTranslations(widgetsBundle, _loadBundle(widgetsArbFile));
   _checkEncodedTranslations(materialBundle, _loadBundle(materialArbFile));
   _checkEncodedTranslations(cupertinoBundle, _loadBundle(cupertinoArbFile));
 
+  _rewriteBundle(widgetsArbFile, widgetsBundle);
   _rewriteBundle(materialArbFile, materialBundle);
   _rewriteBundle(cupertinoArbFile, cupertinoBundle);
 }

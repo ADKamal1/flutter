@@ -31,5 +31,19 @@
   "selectAllButtonLabel": "Izberi vse",
   "tabSemanticsLabel": "Zavihek $tabIndex od $tabCount",
   "modalBarrierDismissLabel": "Opusti",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Iskanje",
+  "noSpellCheckReplacementsLabel": "Ni zamenjav",
+  "menuDismissLabel": "Opusti meni",
+  "lookUpButtonLabel": "Pogled gor",
+  "searchWebButtonLabel": "Iskanje v spletu",
+  "shareButtonLabel": "Deli …",
+  "clearButtonLabel": "Počisti",
+  "cancelButtonLabel": "Prekliči",
+  "backButtonLabel": "Nazaj",
+  "expansionTileExpandedHint": "za strnitev se dvakrat dotaknite",
+  "expansionTileCollapsedHint": "za razširitev se dvakrat dotaknite",
+  "expansionTileExpandedTapHint": "Strni",
+  "expansionTileCollapsedTapHint": "Razširitev za več podrobnosti",
+  "expandedHint": "Strnjeno",
+  "collapsedHint": "Razširjeno"
 }

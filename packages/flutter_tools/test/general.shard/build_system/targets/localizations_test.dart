@@ -3,136 +3,32 @@
 // found in the LICENSE file.
 
 import 'package:file/memory.dart';
+import 'package:flutter_tools/src/artifacts.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/logger.dart';
 import 'package:flutter_tools/src/build_system/build_system.dart';
 import 'package:flutter_tools/src/build_system/targets/localizations.dart';
-import 'package:flutter_tools/src/localizations/gen_l10n.dart';
-import 'package:mockito/mockito.dart';
+import 'package:flutter_tools/src/localizations/localizations_utils.dart';
 
 import '../../../src/common.dart';
-import '../../../src/context.dart';
+import '../../../src/fake_process_manager.dart';
 
 void main() {
-  // Verifies that values are correctly passed through the localizations
-  // target, but does not validate them beyond the serialized data type.
-  testUsingContext('generateLocalizations forwards arguments correctly', () async {
-    final FileSystem fileSystem = MemoryFileSystem.test();
-    final Logger logger = BufferLogger.test();
-    final Directory flutterProjectDirectory = fileSystem
-      .directory(fileSystem.path.join('path', 'to', 'flutter_project'))
-      ..createSync(recursive: true);
-    final Directory arbDirectory = flutterProjectDirectory
-      .childDirectory('arb')
-      ..createSync();
-    arbDirectory.childFile('foo.arb').createSync();
-    arbDirectory.childFile('bar.arb').createSync();
-
-    final LocalizationOptions options = LocalizationOptions(
-      header: 'HEADER',
-      headerFile: Uri.file('header'),
-      arbDirectory: Uri.file('arb'),
-      deferredLoading: true,
-      outputClass: 'Foo',
-      outputLocalizationsFile: Uri.file('bar'),
-      preferredSupportedLocales: <String>['en_US'],
-      templateArbFile: Uri.file('example.arb'),
-      untranslatedMessagesFile: Uri.file('untranslated'),
-      useSyntheticPackage: false,
-      areResourceAttributesRequired: true,
-    );
-
-    final LocalizationsGenerator mockLocalizationsGenerator = MockLocalizationsGenerator();
-    generateLocalizations(
-      localizationsGenerator: mockLocalizationsGenerator,
-      options: options,
-      logger: logger,
-      projectDir: fileSystem.currentDirectory,
-      dependenciesDir: fileSystem.currentDirectory,
-    );
-
-    verify(
-      mockLocalizationsGenerator.initialize(
-        inputPathString: 'arb',
-        outputPathString: null,
-        templateArbFileName: 'example.arb',
-        outputFileString: 'bar',
-        classNameString: 'Foo',
-        preferredSupportedLocale: <String>['en_US'],
-        headerString: 'HEADER',
-        headerFile: 'header',
-        useDeferredLoading: true,
-        inputsAndOutputsListPath: '/',
-        useSyntheticPackage: false,
-        projectPathString: '/',
-        areResourceAttributesRequired: true,
-        untranslatedMessagesFile: 'untranslated',
-      ),
-    ).called(1);
-    verify(mockLocalizationsGenerator.loadResources()).called(1);
-    verify(mockLocalizationsGenerator.writeOutputFiles(logger)).called(1);
-  });
-
-  testUsingContext('generateLocalizations throws exception on missing flutter: generate: true flag', () async {
-    final FileSystem fileSystem = MemoryFileSystem.test();
-    final BufferLogger logger = BufferLogger.test();
-    final Directory arbDirectory = fileSystem.directory('arb')
-      ..createSync();
-    arbDirectory.childFile('foo.arb').createSync();
-    arbDirectory.childFile('bar.arb').createSync();
-
-    // Missing flutter: generate: true should throw exception.
-    fileSystem.file('pubspec.yaml').writeAsStringSync('''
-flutter:
-  uses-material-design: true
-''');
-
-    final LocalizationOptions options = LocalizationOptions(
-      header: 'HEADER',
-      headerFile: Uri.file('header'),
-      arbDirectory: Uri.file('arb'),
-      deferredLoading: true,
-      outputClass: 'Foo',
-      outputLocalizationsFile: Uri.file('bar'),
-      preferredSupportedLocales: <String>['en_US'],
-      templateArbFile: Uri.file('example.arb'),
-      untranslatedMessagesFile: Uri.file('untranslated'),
-      // Set synthetic package to true.
-      useSyntheticPackage: true,
-    );
-
-    final LocalizationsGenerator mockLocalizationsGenerator = MockLocalizationsGenerator();
-    expect(
-      () => generateLocalizations(
-        localizationsGenerator: mockLocalizationsGenerator,
-        options: options,
-        logger: logger,
-        projectDir: fileSystem.currentDirectory,
-        dependenciesDir: fileSystem.currentDirectory,
-      ),
-      throwsA(isA<Exception>()),
-    );
-    expect(
-      logger.errorText,
-      contains('Attempted to generate localizations code without having the flutter: generate flag turned on.'),
-    );
-  });
-
   testWithoutContext('generateLocalizations is skipped if l10n.yaml does not exist.', () async {
     final FileSystem fileSystem = MemoryFileSystem.test();
-    final Environment environment = Environment.test(
+    final environment = Environment.test(
       fileSystem.currentDirectory,
-      artifacts: null,
+      artifacts: Artifacts.test(),
       fileSystem: fileSystem,
       logger: BufferLogger.test(),
       processManager: FakeProcessManager.any(),
     );
 
-    expect(const GenerateLocalizationsTarget().canSkip(environment), true);
+    expect(await const GenerateLocalizationsTarget().canSkip(environment), true);
 
     environment.projectDir.childFile('l10n.yaml').createSync();
 
-    expect(const GenerateLocalizationsTarget().canSkip(environment), false);
+    expect(await const GenerateLocalizationsTarget().canSkip(environment), false);
   });
 
   testWithoutContext('parseLocalizationsOptions handles valid yaml configuration', () async {
@@ -148,54 +44,147 @@ header-file: header
 header: HEADER
 use-deferred-loading: true
 preferred-supported-locales: en_US
+required-resource-attributes: false
+nullable-getter: false
 ''');
 
-    final LocalizationOptions options = parseLocalizationsOptions(
+    final LocalizationOptions options = parseLocalizationsOptionsFromYAML(
       file: configFile,
       logger: BufferLogger.test(),
+      fileSystem: fileSystem,
+      defaultArbDir: fileSystem.path.join('lib', 'l10n'),
     );
 
-    expect(options.arbDirectory, Uri.parse('arb'));
-    expect(options.templateArbFile, Uri.parse('example.arb'));
-    expect(options.outputLocalizationsFile, Uri.parse('bar'));
-    expect(options.untranslatedMessagesFile, Uri.parse('untranslated'));
+    expect(options.arbDir, Uri.parse('arb').path);
+    expect(options.templateArbFile, Uri.parse('example.arb').path);
+    expect(options.outputLocalizationFile, Uri.parse('bar').path);
+    expect(options.untranslatedMessagesFile, Uri.parse('untranslated').path);
     expect(options.outputClass, 'Foo');
-    expect(options.headerFile, Uri.parse('header'));
+    expect(options.headerFile, Uri.parse('header').path);
     expect(options.header, 'HEADER');
-    expect(options.deferredLoading, true);
+    expect(options.useDeferredLoading, true);
     expect(options.preferredSupportedLocales, <String>['en_US']);
+    expect(options.requiredResourceAttributes, false);
+    expect(options.nullableGetter, false);
   });
 
-  testWithoutContext('parseLocalizationsOptions handles preferredSupportedLocales as list', () async {
+  testWithoutContext('parseLocalizationsOptions refuses synthetic-package: true', () async {
     final FileSystem fileSystem = MemoryFileSystem.test();
-    final File configFile = fileSystem.file('l10n.yaml')..writeAsStringSync('''
-preferred-supported-locales: ['en_US', 'de']
-''');
-
-    final LocalizationOptions options = parseLocalizationsOptions(
-      file: configFile,
-      logger: BufferLogger.test(),
-    );
-
-    expect(options.preferredSupportedLocales, <String>['en_US', 'de']);
-  });
-
-  testWithoutContext(
-      'parseLocalizationsOptions throws exception on invalid yaml configuration',
-      () async {
-    final FileSystem fileSystem = MemoryFileSystem.test();
-    final File configFile = fileSystem.file('l10n.yaml')..writeAsStringSync('''
-use-deferred-loading: string
+    final File configFile = fileSystem.file('l10n.yaml')
+      ..writeAsStringSync('''
+arb-dir: arb
+synthetic-package: true
+template-arb-file: example.arb
+output-localization-file: bar
+untranslated-messages-file: untranslated
+output-class: Foo
+header-file: header
+header: HEADER
+use-deferred-loading: true
+preferred-supported-locales: en_US
+required-resource-attributes: false
+nullable-getter: false
 ''');
 
     expect(
-      () => parseLocalizationsOptions(
+      () => parseLocalizationsOptionsFromYAML(
         file: configFile,
         logger: BufferLogger.test(),
+        fileSystem: fileSystem,
+        defaultArbDir: fileSystem.path.join('lib', 'l10n'),
       ),
-      throwsA(isA<Exception>()),
+      throwsToolExit(message: 'synthetic-package'),
+    );
+  });
+
+  testWithoutContext('parseLocalizationsOptions warns on synthetic-package: false', () async {
+    final FileSystem fileSystem = MemoryFileSystem.test();
+    final File configFile = fileSystem.file('l10n.yaml')
+      ..writeAsStringSync('''
+arb-dir: arb
+synthetic-package: false
+template-arb-file: example.arb
+output-localization-file: bar
+untranslated-messages-file: untranslated
+output-class: Foo
+header-file: header
+header: HEADER
+use-deferred-loading: true
+preferred-supported-locales: en_US
+required-resource-attributes: false
+nullable-getter: false
+''');
+
+    final logger = BufferLogger.test();
+    expect(
+      () => parseLocalizationsOptionsFromYAML(
+        file: configFile,
+        logger: logger,
+        fileSystem: fileSystem,
+        defaultArbDir: fileSystem.path.join('lib', 'l10n'),
+      ),
+      returnsNormally,
+    );
+
+    expect(logger.warningText, contains('synthetic-package'));
+  });
+
+  testWithoutContext(
+    'parseLocalizationsOptions handles preferredSupportedLocales as list',
+    () async {
+      final FileSystem fileSystem = MemoryFileSystem.test();
+      final File configFile = fileSystem.file('l10n.yaml')
+        ..writeAsStringSync('''
+preferred-supported-locales: ['en_US', 'de']
+''');
+
+      final LocalizationOptions options = parseLocalizationsOptionsFromYAML(
+        file: configFile,
+        logger: BufferLogger.test(),
+        fileSystem: fileSystem,
+        defaultArbDir: fileSystem.path.join('lib', 'l10n'),
+      );
+
+      expect(options.preferredSupportedLocales, <String>['en_US', 'de']);
+    },
+  );
+
+  testWithoutContext(
+    'parseLocalizationsOptions throws exception on invalid yaml configuration',
+    () async {
+      final FileSystem fileSystem = MemoryFileSystem.test();
+      final File configFile = fileSystem.file('l10n.yaml')
+        ..writeAsStringSync('''
+use-deferred-loading: string
+''');
+
+      expect(
+        () => parseLocalizationsOptionsFromYAML(
+          file: configFile,
+          logger: BufferLogger.test(),
+          fileSystem: fileSystem,
+          defaultArbDir: fileSystem.path.join('lib', 'l10n'),
+        ),
+        throwsException,
+      );
+    },
+  );
+
+  testWithoutContext('parseLocalizationsOptions tool exits on malformed Yaml', () async {
+    final FileSystem fileSystem = MemoryFileSystem.test();
+    final File configFile = fileSystem.file('l10n.yaml')
+      ..writeAsStringSync('''
+template-arb-file: {name}_en.arb
+''');
+
+    expect(
+      () => parseLocalizationsOptionsFromYAML(
+        file: configFile,
+        logger: BufferLogger.test(),
+        fileSystem: fileSystem,
+        defaultArbDir: fileSystem.path.join('lib', 'l10n'),
+      ),
+      throwsToolExit(),
     );
   });
 }
-
-class MockLocalizationsGenerator extends Mock implements LocalizationsGenerator {}

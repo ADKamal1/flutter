@@ -4,19 +4,19 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
 class PlatformChannel extends StatefulWidget {
+  const PlatformChannel({super.key});
+
   @override
-  _PlatformChannelState createState() => _PlatformChannelState();
+  State<PlatformChannel> createState() => _PlatformChannelState();
 }
 
 class _PlatformChannelState extends State<PlatformChannel> {
-  static const MethodChannel methodChannel =
-      MethodChannel('samples.flutter.io/battery');
-  static const EventChannel eventChannel =
-      EventChannel('samples.flutter.io/charging');
+  static const MethodChannel methodChannel = MethodChannel('samples.flutter.io/battery');
+  static const EventChannel eventChannel = EventChannel('samples.flutter.io/charging');
 
   String _batteryLevel = 'Battery level: unknown.';
   String _chargingStatus = 'Battery status: unknown.';
@@ -24,7 +24,7 @@ class _PlatformChannelState extends State<PlatformChannel> {
   Future<void> _getBatteryLevel() async {
     String batteryLevel;
     try {
-      final int result = await methodChannel.invokeMethod('getBatteryLevel');
+      final int? result = await methodChannel.invokeMethod('getBatteryLevel');
       batteryLevel = 'Battery level: $result%.';
     } on PlatformException {
       batteryLevel = 'Failed to get battery level.';
@@ -40,10 +40,9 @@ class _PlatformChannelState extends State<PlatformChannel> {
     eventChannel.receiveBroadcastStream().listen(_onEvent, onError: _onError);
   }
 
-  void _onEvent(Object event) {
+  void _onEvent(Object? event) {
     setState(() {
-      _chargingStatus =
-          "Battery status: ${event == 'charging' ? '' : 'dis'}charging.";
+      _chargingStatus = "Battery status: ${event == 'charging' ? '' : 'dis'}charging.";
     });
   }
 
@@ -65,10 +64,7 @@ class _PlatformChannelState extends State<PlatformChannel> {
               Text(_batteryLevel, key: const Key('Battery level label')),
               Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  child: const Text('Refresh'),
-                  onPressed: _getBatteryLevel,
-                ),
+                child: ElevatedButton(onPressed: _getBatteryLevel, child: const Text('Refresh')),
               ),
             ],
           ),
@@ -80,5 +76,5 @@ class _PlatformChannelState extends State<PlatformChannel> {
 }
 
 void main() {
-  runApp(MaterialApp(home: PlatformChannel()));
+  runApp(const MaterialApp(home: PlatformChannel()));
 }

@@ -2,14 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/widgets.dart';
+///
+/// @docImport 'multitap.dart';
+library;
 
-import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutter/foundation.dart';
 
 import 'arena.dart';
 import 'constants.dart';
 import 'events.dart';
+import 'gesture_details.dart';
 import 'recognizer.dart';
+
+export 'dart:ui' show Offset, PointerDeviceKind;
+
+export 'package:flutter/foundation.dart' show DiagnosticPropertiesBuilder;
+export 'package:vector_math/vector_math_64.dart' show Matrix4;
+
+export 'arena.dart' show GestureDisposition;
+export 'events.dart' show PointerCancelEvent, PointerDownEvent, PointerEvent, PointerUpEvent;
 
 /// Details for [GestureTapDownCallback], such as position.
 ///
@@ -17,32 +29,38 @@ import 'recognizer.dart';
 ///
 ///  * [GestureDetector.onTapDown], which receives this information.
 ///  * [TapGestureRecognizer], which passes this information to one of its callbacks.
-class TapDownDetails {
+class TapDownDetails with Diagnosticable implements PositionedGestureDetails {
   /// Creates details for a [GestureTapDownCallback].
-  ///
-  /// The [globalPosition] argument must not be null.
-  TapDownDetails({
-    this.globalPosition = Offset.zero,
-    Offset? localPosition,
-    this.kind,
-  }) : assert(globalPosition != null),
-       localPosition = localPosition ?? globalPosition;
+  TapDownDetails({this.globalPosition = Offset.zero, Offset? localPosition, this.kind})
+    : localPosition = localPosition ?? globalPosition;
 
-  /// The global position at which the pointer contacted the screen.
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.globalPosition}
+  @override
   final Offset globalPosition;
+
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.localPosition}
+  @override
+  final Offset localPosition;
 
   /// The kind of the device that initiated the event.
   final PointerDeviceKind? kind;
 
-  /// The local position at which the pointer contacted the screen.
-  final Offset localPosition;
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<Offset>('globalPosition', globalPosition));
+    properties.add(DiagnosticsProperty<Offset>('localPosition', localPosition));
+    properties.add(EnumProperty<PointerDeviceKind?>('kind', kind));
+  }
 }
 
+/// {@template flutter.gestures.tap.GestureTapDownCallback}
 /// Signature for when a pointer that might cause a tap has contacted the
 /// screen.
 ///
 /// The position at which the pointer contacted the screen is available in the
 /// `details`.
+/// {@endtemplate}
 ///
 /// See also:
 ///
@@ -56,14 +74,45 @@ typedef GestureTapDownCallback = void Function(TapDownDetails details);
 ///
 ///  * [GestureDetector.onTapUp], which receives this information.
 ///  * [TapGestureRecognizer], which passes this information to one of its callbacks.
-class TapUpDetails {
-  /// The [globalPosition] argument must not be null.
-  TapUpDetails({
+class TapUpDetails with Diagnosticable implements PositionedGestureDetails {
+  /// Creates a [TapUpDetails] data object.
+  TapUpDetails({this.globalPosition = Offset.zero, Offset? localPosition, required this.kind})
+    : localPosition = localPosition ?? globalPosition;
+
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.globalPosition}
+  @override
+  final Offset globalPosition;
+
+  /// {@macro flutter.gestures.gesturedetails.PositionedGestureDetails.localPosition}
+  @override
+  final Offset localPosition;
+
+  /// The kind of the device that initiated the event.
+  final PointerDeviceKind kind;
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<Offset>('globalPosition', globalPosition));
+    properties.add(DiagnosticsProperty<Offset>('localPosition', localPosition));
+    properties.add(EnumProperty<PointerDeviceKind>('kind', kind));
+  }
+}
+
+/// Details object for callbacks that use [GestureTapMoveCallback].
+///
+/// See also:
+///
+/// * [GestureDetector.onTapMove], which receives this information.
+/// * [TapGestureRecognizer], which passes this information to one of its callbacks.
+class TapMoveDetails {
+  /// Creates a [TapMoveDetails] data object.
+  TapMoveDetails({
     required this.kind,
     this.globalPosition = Offset.zero,
+    this.delta = Offset.zero,
     Offset? localPosition,
-  }) : assert(globalPosition != null),
-       localPosition = localPosition ?? globalPosition;
+  }) : localPosition = localPosition ?? globalPosition;
 
   /// The global position at which the pointer contacted the screen.
   final Offset globalPosition;
@@ -73,13 +122,19 @@ class TapUpDetails {
 
   /// The kind of the device that initiated the event.
   final PointerDeviceKind kind;
+
+  /// The amount the pointer has moved in the coordinate space of the
+  /// event receiver since the previous update.
+  final Offset delta;
 }
 
+/// {@template flutter.gestures.tap.GestureTapUpCallback}
 /// Signature for when a pointer that will trigger a tap has stopped contacting
 /// the screen.
 ///
 /// The position at which the pointer stopped contacting the screen is available
 /// in the `details`.
+/// {@endtemplate}
 ///
 /// See also:
 ///
@@ -94,6 +149,16 @@ typedef GestureTapUpCallback = void Function(TapUpDetails details);
 ///  * [GestureDetector.onTap], which matches this signature.
 ///  * [TapGestureRecognizer], which uses this signature in one of its callbacks.
 typedef GestureTapCallback = void Function();
+
+/// Signature for when a pointer that triggered a tap has moved.
+///
+/// The position at which the pointer moved is available in the `details`.
+///
+/// See also:
+///
+///  * [GestureDetector.onTapMove], which matches this signature.
+///  * [TapGestureRecognizer], which uses this signature in one of its callbacks.
+typedef GestureTapMoveCallback = void Function(TapMoveDetails details);
 
 /// Signature for when the pointer that previously triggered a
 /// [GestureTapDownCallback] will not end up causing a tap.
@@ -136,8 +201,15 @@ typedef GestureTapCancelCallback = void Function();
 ///    any buttons.
 abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer {
   /// Creates a tap gesture recognizer.
-  BaseTapGestureRecognizer({ Object? debugOwner })
-    : super(deadline: kPressTimeout , debugOwner: debugOwner);
+  ///
+  /// {@macro flutter.gestures.GestureRecognizer.supportedDevices}
+  BaseTapGestureRecognizer({
+    super.debugOwner,
+    super.supportedDevices,
+    super.allowedButtonsFilter,
+    super.preAcceptSlopTolerance,
+    super.postAcceptSlopTolerance,
+  }) : super(deadline: kPressTimeout);
 
   bool _sentTapDown = false;
   bool _wonArenaForPrimaryPointer = false;
@@ -156,7 +228,7 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
   /// If this recognizer doesn't win the arena, [handleTapCancel] is called next.
   /// Otherwise, [handleTapUp] is called next.
   @protected
-  void handleTapDown({ required PointerDownEvent down });
+  void handleTapDown({required PointerDownEvent down});
 
   /// A pointer has stopped contacting the screen, which is recognized as a tap.
   ///
@@ -169,7 +241,16 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
   /// If this recognizer doesn't win the arena, [handleTapCancel] is called
   /// instead.
   @protected
-  void handleTapUp({ required PointerDownEvent down, required PointerUpEvent up });
+  void handleTapUp({required PointerDownEvent down, required PointerUpEvent up});
+
+  /// A pointer that triggered a tap has moved.
+  ///
+  /// This triggers on the move event if the recognizer has recognized the tap gesture.
+  ///
+  /// The parameter `move` is the move event of the primary pointer that started
+  /// the tap sequence.
+  @protected
+  void handleTapMove({required PointerMoveEvent move}) {}
 
   /// A pointer that previously triggered [handleTapDown] will not end up
   /// causing a tap.
@@ -185,12 +266,23 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
   ///
   /// If this recognizer wins the arena, [handleTapUp] is called instead.
   @protected
-  void handleTapCancel({ required PointerDownEvent down, PointerCancelEvent? cancel, required String reason });
+  void handleTapCancel({
+    required PointerDownEvent down,
+    PointerCancelEvent? cancel,
+    required String reason,
+  });
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    assert(event != null);
     if (state == GestureRecognizerState.ready) {
+      // If there is no result in the previous gesture arena,
+      // we ignore them and prepare to accept a new pointer.
+      if (_down != null && _up != null) {
+        assert(_down!.pointer == _up!.pointer);
+        _reset();
+      }
+
+      assert(_down == null && _up == null);
       // `_down` must be assigned in this method instead of `handlePrimaryPointer`,
       // because `acceptGesture` might be called before `handlePrimaryPointer`,
       // which relies on `_down` to call `handleTapDown`.
@@ -199,7 +291,7 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
     if (_down != null) {
       // This happens when this tap gesture has been rejected while the pointer
       // is down (i.e. due to movement), when another allowed pointer is added,
-      // in which case all pointers are simply ignored. The `_down` being null
+      // in which case all pointers are ignored. The `_down` being null
       // means that _reset() has been called, since it is always set at the
       // first allowed down event and will not be cleared except for reset(),
       super.addAllowedPointer(event);
@@ -229,6 +321,8 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
     } else if (event.buttons != _down!.buttons) {
       resolve(GestureDisposition.rejected);
       stopTrackingPointer(primaryPointer!);
+    } else if (event is PointerMoveEvent) {
+      _checkMove(event);
     }
   }
 
@@ -266,8 +360,9 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
     if (pointer == primaryPointer) {
       // Another gesture won the arena.
       assert(state != GestureRecognizerState.possible);
-      if (_sentTapDown)
+      if (_sentTapDown) {
         _checkCancel(null, 'forced');
+      }
       _reset();
     }
   }
@@ -284,12 +379,18 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
     if (!_wonArenaForPrimaryPointer || _up == null) {
       return;
     }
+    assert(_up!.pointer == _down!.pointer);
     handleTapUp(down: _down!, up: _up!);
     _reset();
   }
 
   void _checkCancel(PointerCancelEvent? event, String note) {
     handleTapCancel(down: _down!, cancel: event, reason: note);
+  }
+
+  void _checkMove(PointerMoveEvent event) {
+    assert(event.pointer == _down!.pointer);
+    handleTapMove(move: event);
   }
 
   void _reset() {
@@ -305,10 +406,22 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(FlagProperty('wonArenaForPrimaryPointer', value: _wonArenaForPrimaryPointer, ifTrue: 'won arena'));
+    properties.add(
+      FlagProperty(
+        'wonArenaForPrimaryPointer',
+        value: _wonArenaForPrimaryPointer,
+        ifTrue: 'won arena',
+      ),
+    );
     properties.add(DiagnosticsProperty<Offset>('finalPosition', _up?.position, defaultValue: null));
-    properties.add(DiagnosticsProperty<Offset>('finalLocalPosition', _up?.localPosition, defaultValue: _up?.position));
-    properties.add(DiagnosticsProperty<int>('button', _down?.buttons, defaultValue: null));
+    properties.add(
+      DiagnosticsProperty<Offset>(
+        'finalLocalPosition',
+        _up?.localPosition,
+        defaultValue: _up?.position,
+      ),
+    );
+    properties.add(IntProperty('button', _down?.buttons, defaultValue: null));
     properties.add(FlagProperty('sentTapDown', value: _sentTapDown, ifTrue: 'sent tap down'));
   }
 }
@@ -331,16 +444,36 @@ abstract class BaseTapGestureRecognizer extends PrimaryPointerGestureRecognizer 
 /// one non-null `onTertiaryTap*` callback. If it has no callbacks, it is a
 /// no-op.
 ///
+/// {@template flutter.gestures.tap.TapGestureRecognizer.allowedButtonsFilter}
+/// The [allowedButtonsFilter] argument only gives this recognizer the
+/// ability to limit the buttons it accepts. It does not provide the
+/// ability to recognize any buttons beyond the ones it already accepts:
+/// kPrimaryButton, kSecondaryButton or kTertiaryButton. Therefore, a
+/// combined value of `kPrimaryButton & kSecondaryButton` would be ignored,
+/// but `kPrimaryButton | kSecondaryButton` would be allowed, as long as
+/// only one of them is selected at a time.
+/// {@endtemplate}
+///
 /// See also:
 ///
 ///  * [GestureDetector.onTap], which uses this recognizer.
 ///  * [MultiTapGestureRecognizer]
 class TapGestureRecognizer extends BaseTapGestureRecognizer {
   /// Creates a tap gesture recognizer.
-  TapGestureRecognizer({ Object? debugOwner }) : super(debugOwner: debugOwner);
+  ///
+  /// {@macro flutter.gestures.GestureRecognizer.supportedDevices}
+  TapGestureRecognizer({
+    super.debugOwner,
+    super.supportedDevices,
+    super.allowedButtonsFilter,
+    super.preAcceptSlopTolerance,
+    super.postAcceptSlopTolerance,
+  });
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onTapDown}
   /// A pointer has contacted the screen at a particular location with a primary
   /// button, which might be the start of a tap.
+  /// {@endtemplate}
   ///
   /// This triggers after the down event, once a short timeout ([deadline]) has
   /// elapsed, or once the gestures has won the arena, whichever comes first.
@@ -357,8 +490,10 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   ///  * [GestureDetector.onTapDown], which exposes this callback.
   GestureTapDownCallback? onTapDown;
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onTapUp}
   /// A pointer has stopped contacting the screen at a particular location,
   /// which is recognized as a tap of a primary button.
+  /// {@endtemplate}
   ///
   /// This triggers on the up event, if the recognizer wins the arena with it
   /// or has previously won, immediately followed by [onTap].
@@ -385,12 +520,29 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   /// See also:
   ///
   ///  * [kPrimaryButton], the button this callback responds to.
+  ///  * [onSecondaryTap], a similar callback but for a secondary button.
   ///  * [onTapUp], which has the same timing but with details.
   ///  * [GestureDetector.onTap], which exposes this callback.
   GestureTapCallback? onTap;
 
+  /// A pointer that triggered a tap has moved.
+  ///
+  /// This callback is triggered after the tap gesture has been recognized and the pointer starts to move.
+  ///
+  /// If the pointer moves beyond the `postAcceptSlopTolerance` distance, the tap will be canceled.
+  /// To make `onTapMove` more useful, consider setting `postAcceptSlopTolerance` to a larger value,
+  /// or to `null` for no limit on movement.
+  ///
+  /// See also:
+  ///
+  ///  * [kPrimaryButton], the button this callback responds to.
+  ///  * [GestureDetector.onTapMove], which exposes this callback.
+  GestureTapMoveCallback? onTapMove;
+
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onTapCancel}
   /// A pointer that previously triggered [onTapDown] will not end up causing
   /// a tap.
+  /// {@endtemplate}
   ///
   /// This triggers once the gesture loses the arena if [onTapDown] has
   /// previously been triggered.
@@ -406,8 +558,10 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   ///  * [GestureDetector.onTapCancel], which exposes this callback.
   GestureTapCancelCallback? onTapCancel;
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onSecondaryTap}
   /// A pointer has stopped contacting the screen, which is recognized as a tap
   /// of a secondary button.
+  /// {@endtemplate}
   ///
   /// This triggers on the up event, if the recognizer wins the arena with it or
   /// has previously won, immediately following [onSecondaryTapUp].
@@ -422,8 +576,10 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   ///  * [GestureDetector.onSecondaryTap], which exposes this callback.
   GestureTapCallback? onSecondaryTap;
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onSecondaryTapDown}
   /// A pointer has contacted the screen at a particular location with a
   /// secondary button, which might be the start of a secondary tap.
+  /// {@endtemplate}
   ///
   /// This triggers after the down event, once a short timeout ([deadline]) has
   /// elapsed, or once the gestures has won the arena, whichever comes first.
@@ -440,8 +596,10 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   ///  * [GestureDetector.onSecondaryTapDown], which exposes this callback.
   GestureTapDownCallback? onSecondaryTapDown;
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onSecondaryTapUp}
   /// A pointer has stopped contacting the screen at a particular location,
   /// which is recognized as a tap of a secondary button.
+  /// {@endtemplate}
   ///
   /// This triggers on the up event if the recognizer wins the arena with it
   /// or has previously won.
@@ -460,8 +618,10 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   ///  * [GestureDetector.onSecondaryTapUp], which exposes this callback.
   GestureTapUpCallback? onSecondaryTapUp;
 
+  /// {@template flutter.gestures.tap.TapGestureRecognizer.onSecondaryTapCancel}
   /// A pointer that previously triggered [onSecondaryTapDown] will not end up
   /// causing a tap.
+  /// {@endtemplate}
   ///
   /// This triggers once the gesture loses the arena if [onSecondaryTapDown]
   /// has previously been triggered.
@@ -535,22 +695,21 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
         if (onTapDown == null &&
             onTap == null &&
             onTapUp == null &&
-            onTapCancel == null)
+            onTapCancel == null &&
+            onTapMove == null) {
           return false;
-        break;
+        }
       case kSecondaryButton:
         if (onSecondaryTap == null &&
             onSecondaryTapDown == null &&
             onSecondaryTapUp == null &&
-            onSecondaryTapCancel == null)
+            onSecondaryTapCancel == null) {
           return false;
-        break;
+        }
       case kTertiaryButton:
-        if (onTertiaryTapDown == null &&
-            onTertiaryTapUp == null &&
-            onTertiaryTapCancel == null)
+        if (onTertiaryTapDown == null && onTertiaryTapUp == null && onTertiaryTapCancel == null) {
           return false;
-        break;
+        }
       default:
         return false;
     }
@@ -560,74 +719,94 @@ class TapGestureRecognizer extends BaseTapGestureRecognizer {
   @protected
   @override
   void handleTapDown({required PointerDownEvent down}) {
-    final TapDownDetails details = TapDownDetails(
+    final details = TapDownDetails(
       globalPosition: down.position,
       localPosition: down.localPosition,
       kind: getKindForPointer(down.pointer),
     );
     switch (down.buttons) {
       case kPrimaryButton:
-        if (onTapDown != null)
+        if (onTapDown != null) {
           invokeCallback<void>('onTapDown', () => onTapDown!(details));
-        break;
+        }
       case kSecondaryButton:
-        if (onSecondaryTapDown != null)
+        if (onSecondaryTapDown != null) {
           invokeCallback<void>('onSecondaryTapDown', () => onSecondaryTapDown!(details));
-        break;
+        }
       case kTertiaryButton:
-        if (onTertiaryTapDown != null)
+        if (onTertiaryTapDown != null) {
           invokeCallback<void>('onTertiaryTapDown', () => onTertiaryTapDown!(details));
-        break;
+        }
       default:
     }
   }
 
   @protected
   @override
-  void handleTapUp({ required PointerDownEvent down, required PointerUpEvent up}) {
-    final TapUpDetails details = TapUpDetails(
+  void handleTapUp({required PointerDownEvent down, required PointerUpEvent up}) {
+    final details = TapUpDetails(
       kind: up.kind,
       globalPosition: up.position,
       localPosition: up.localPosition,
     );
     switch (down.buttons) {
       case kPrimaryButton:
-        if (onTapUp != null)
+        if (onTapUp != null) {
           invokeCallback<void>('onTapUp', () => onTapUp!(details));
-        if (onTap != null)
+        }
+        if (onTap != null) {
           invokeCallback<void>('onTap', onTap!);
-        break;
+        }
       case kSecondaryButton:
-        if (onSecondaryTapUp != null)
+        if (onSecondaryTapUp != null) {
           invokeCallback<void>('onSecondaryTapUp', () => onSecondaryTapUp!(details));
-        if (onSecondaryTap != null)
+        }
+        if (onSecondaryTap != null) {
           invokeCallback<void>('onSecondaryTap', () => onSecondaryTap!());
-        break;
+        }
       case kTertiaryButton:
-        if (onTertiaryTapUp != null)
+        if (onTertiaryTapUp != null) {
           invokeCallback<void>('onTertiaryTapUp', () => onTertiaryTapUp!(details));
-        break;
+        }
       default:
     }
   }
 
   @protected
   @override
-  void handleTapCancel({ required PointerDownEvent down, PointerCancelEvent? cancel, required String reason }) {
-    final String note = reason == '' ? reason : '$reason ';
+  void handleTapMove({required PointerMoveEvent move}) {
+    if (onTapMove != null && move.buttons == kPrimaryButton) {
+      final details = TapMoveDetails(
+        globalPosition: move.position,
+        localPosition: move.localPosition,
+        kind: getKindForPointer(move.pointer),
+        delta: move.delta,
+      );
+      invokeCallback<void>('onTapMove', () => onTapMove!(details));
+    }
+  }
+
+  @protected
+  @override
+  void handleTapCancel({
+    required PointerDownEvent down,
+    PointerCancelEvent? cancel,
+    required String reason,
+  }) {
+    final note = reason == '' ? reason : '$reason ';
     switch (down.buttons) {
       case kPrimaryButton:
-        if (onTapCancel != null)
+        if (onTapCancel != null) {
           invokeCallback<void>('${note}onTapCancel', onTapCancel!);
-        break;
+        }
       case kSecondaryButton:
-        if (onSecondaryTapCancel != null)
+        if (onSecondaryTapCancel != null) {
           invokeCallback<void>('${note}onSecondaryTapCancel', onSecondaryTapCancel!);
-        break;
+        }
       case kTertiaryButton:
-        if (onTertiaryTapCancel != null)
+        if (onTertiaryTapCancel != null) {
           invokeCallback<void>('${note}onTertiaryTapCancel', onTertiaryTapCancel!);
-        break;
+        }
       default:
     }
   }

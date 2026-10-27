@@ -4,69 +4,81 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-// ignore: implementation_imports
-import 'package:flutter_test/src/all_elements.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart' show collectAllElementsFrom;
 
 import '../common.dart';
 
 const int _kNumIters = 10000;
 
-Future<void> main() async {
-  assert(false, "Don't run benchmarks in debug mode! Use 'flutter run --release'.");
-  runApp(MaterialApp(
-    home: Scaffold(
-      body: GridView.count(
-        crossAxisCount: 5,
-        children: List<Widget>.generate(25, (int index) {
-          return Center(
-            child: Scaffold(
-              appBar: AppBar(
-                title: Text('App $index'),
-                actions: const <Widget>[
-                  Icon(Icons.help),
-                  Icon(Icons.add),
-                  Icon(Icons.ac_unit),
-                ],
+Future<void> execute() async {
+  runApp(
+    MaterialApp(
+      home: Scaffold(
+        body: GridView.count(
+          crossAxisCount: 5,
+          children: List<Widget>.generate(25, (int index) {
+            return Center(
+              child: Scaffold(
+                appBar: AppBar(
+                  title: Text('App $index'),
+                  actions: const <Widget>[Icon(Icons.help), Icon(Icons.add), Icon(Icons.ac_unit)],
+                ),
+                body: const Column(
+                  children: <Widget>[
+                    Text('Item 1'),
+                    Text('Item 2'),
+                    Text('Item 3'),
+                    Text('Item 4'),
+                  ],
+                ),
               ),
-              body: Column(
-                children: const <Widget>[
-                  Text('Item 1'),
-                  Text('Item 2'),
-                  Text('Item 3'),
-                  Text('Item 4'),
-                ],
-              ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     ),
-  ));
+  );
 
-  await SchedulerBinding.instance.endOfFrame;
+  // Lists may not be scrolled into frame in landscape.
+  await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
-  final Stopwatch watch = Stopwatch();
+  // Wait for frame rendering to stabilize.
+  for (var i = 0; i < 5; i++) {
+    await SchedulerBinding.instance.endOfFrame;
+  }
 
-  print('flutter_test allElements benchmark... (${WidgetsBinding.instance.renderViewElement})');
+  final watch = Stopwatch();
+
+  print('flutter_test allElements benchmark... (${WidgetsBinding.instance.rootElement})');
   // Make sure we get enough elements to process for consistent benchmark runs
-  int elementCount = collectAllElementsFrom(WidgetsBinding.instance.renderViewElement, skipOffstage: false).length;
-  while (elementCount < 2482) {
+  int elementCount = collectAllElementsFrom(
+    WidgetsBinding.instance.rootElement!,
+    skipOffstage: false,
+  ).length;
+  while (elementCount < 2458) {
     await Future<void>.delayed(Duration.zero);
-    elementCount = collectAllElementsFrom(WidgetsBinding.instance.renderViewElement, skipOffstage: false).length;
+    elementCount = collectAllElementsFrom(
+      WidgetsBinding.instance.rootElement!,
+      skipOffstage: false,
+    ).length;
   }
   print('element count: $elementCount');
 
   watch.start();
-  for (int i = 0; i < _kNumIters; i += 1) {
+  for (var i = 0; i < _kNumIters; i += 1) {
     final List<Element> allElements = collectAllElementsFrom(
-      WidgetsBinding.instance.renderViewElement,
+      WidgetsBinding.instance.rootElement!,
       skipOffstage: false,
     ).toList();
     allElements.clear();
   }
   watch.stop();
 
-  final BenchmarkResultPrinter printer = BenchmarkResultPrinter();
+  final printer = BenchmarkResultPrinter();
   printer.addResult(
     description: 'All elements iterate',
     value: watch.elapsedMicroseconds / _kNumIters,

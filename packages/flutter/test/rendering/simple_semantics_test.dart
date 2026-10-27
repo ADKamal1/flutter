@@ -2,29 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tester.dart';
 
-
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   test('only send semantics update if semantics have changed', () {
-    final TestRender testRender = TestRender()
-      ..label = 'hello'
+    final testRender = TestRender()
+      ..properties = const SemanticsProperties(label: 'hello')
       ..textDirection = TextDirection.ltr;
 
-    final RenderConstrainedBox tree = RenderConstrainedBox(
+    final tree = RenderConstrainedBox(
       additionalConstraints: const BoxConstraints.tightFor(height: 20.0, width: 20.0),
       child: testRender,
     );
-    int semanticsUpdateCount = 0;
-    final SemanticsHandle semanticsHandle = renderer.pipelineOwner.ensureSemantics(
-        listener: () {
-          ++semanticsUpdateCount;
-        }
-    );
+    var semanticsUpdateCount = 0;
+    final SemanticsHandle semanticsHandle = TestRenderingFlutterBinding.instance.ensureSemantics();
+    TestRenderingFlutterBinding.instance.pipelineOwner.semanticsOwner!.addListener(() {
+      ++semanticsUpdateCount;
+    });
 
     layout(tree, phase: EnginePhase.flushSemantics);
 
@@ -47,7 +46,7 @@ void main() {
     semanticsUpdateCount = 0;
 
     // Change semantics and request update.
-    testRender.label = 'bye';
+    testRender.properties = const SemanticsProperties(label: 'bye');
     testRender.markNeedsSemanticsUpdate();
     pumpFrame(phase: EnginePhase.flushSemantics);
 
@@ -60,6 +59,8 @@ void main() {
 }
 
 class TestRender extends RenderSemanticsAnnotations {
+  TestRender() : super(properties: const SemanticsProperties());
+
   int describeSemanticsConfigurationCallCount = 0;
 
   @override

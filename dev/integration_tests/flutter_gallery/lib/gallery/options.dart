@@ -21,26 +21,26 @@ class GalleryOptions {
     this.showPerformanceOverlay = false,
   });
 
-  final ThemeMode themeMode;
-  final GalleryTextScaleValue textScaleFactor;
-  final GalleryVisualDensityValue visualDensity;
+  final ThemeMode? themeMode;
+  final GalleryTextScaleValue? textScaleFactor;
+  final GalleryVisualDensityValue? visualDensity;
   final TextDirection textDirection;
   final double timeDilation;
-  final TargetPlatform platform;
+  final TargetPlatform? platform;
   final bool showPerformanceOverlay;
   final bool showRasterCacheImagesCheckerboard;
   final bool showOffscreenLayersCheckerboard;
 
   GalleryOptions copyWith({
-    ThemeMode themeMode,
-    GalleryTextScaleValue textScaleFactor,
-    GalleryVisualDensityValue visualDensity,
-    TextDirection textDirection,
-    double timeDilation,
-    TargetPlatform platform,
-    bool showPerformanceOverlay,
-    bool showRasterCacheImagesCheckerboard,
-    bool showOffscreenLayersCheckerboard,
+    ThemeMode? themeMode,
+    GalleryTextScaleValue? textScaleFactor,
+    GalleryVisualDensityValue? visualDensity,
+    TextDirection? textDirection,
+    double? timeDilation,
+    TargetPlatform? platform,
+    bool? showPerformanceOverlay,
+    bool? showRasterCacheImagesCheckerboard,
+    bool? showOffscreenLayersCheckerboard,
   }) {
     return GalleryOptions(
       themeMode: themeMode ?? this.themeMode,
@@ -50,28 +50,31 @@ class GalleryOptions {
       timeDilation: timeDilation ?? this.timeDilation,
       platform: platform ?? this.platform,
       showPerformanceOverlay: showPerformanceOverlay ?? this.showPerformanceOverlay,
-      showOffscreenLayersCheckerboard: showOffscreenLayersCheckerboard ?? this.showOffscreenLayersCheckerboard,
-      showRasterCacheImagesCheckerboard: showRasterCacheImagesCheckerboard ?? this.showRasterCacheImagesCheckerboard,
+      showOffscreenLayersCheckerboard:
+          showOffscreenLayersCheckerboard ?? this.showOffscreenLayersCheckerboard,
+      showRasterCacheImagesCheckerboard:
+          showRasterCacheImagesCheckerboard ?? this.showRasterCacheImagesCheckerboard,
     );
   }
 
   @override
   bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType)
+    if (other.runtimeType != runtimeType) {
       return false;
-    return other is GalleryOptions
-        && other.themeMode == themeMode
-        && other.textScaleFactor == textScaleFactor
-        && other.visualDensity == visualDensity
-        && other.textDirection == textDirection
-        && other.platform == platform
-        && other.showPerformanceOverlay == showPerformanceOverlay
-        && other.showRasterCacheImagesCheckerboard == showRasterCacheImagesCheckerboard
-        && other.showOffscreenLayersCheckerboard == showRasterCacheImagesCheckerboard;
+    }
+    return other is GalleryOptions &&
+        other.themeMode == themeMode &&
+        other.textScaleFactor == textScaleFactor &&
+        other.visualDensity == visualDensity &&
+        other.textDirection == textDirection &&
+        other.platform == platform &&
+        other.showPerformanceOverlay == showPerformanceOverlay &&
+        other.showRasterCacheImagesCheckerboard == showRasterCacheImagesCheckerboard &&
+        other.showOffscreenLayersCheckerboard == showRasterCacheImagesCheckerboard;
   }
 
   @override
-  int get hashCode => hashValues(
+  int get hashCode => Object.hash(
     themeMode,
     textScaleFactor,
     visualDensity,
@@ -93,13 +96,13 @@ const double _kItemHeight = 48.0;
 const EdgeInsetsDirectional _kItemPadding = EdgeInsetsDirectional.only(start: 56.0);
 
 class _OptionsItem extends StatelessWidget {
-  const _OptionsItem({ Key key, this.child }) : super(key: key);
+  const _OptionsItem({this.child});
 
-  final Widget child;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    final double textScaleFactor = MediaQuery.textScaleFactorOf(context);
+    final double textScaleFactor = MediaQuery.textScalerOf(context).textScaleFactor;
 
     return MergeSemantics(
       child: Container(
@@ -110,10 +113,7 @@ class _OptionsItem extends StatelessWidget {
           style: DefaultTextStyle.of(context).style,
           maxLines: 2,
           overflow: TextOverflow.fade,
-          child: IconTheme(
-            data: Theme.of(context).primaryIconTheme,
-            child: child,
-          ),
+          child: IconTheme(data: Theme.of(context).primaryIconTheme, child: child!),
         ),
       ),
     );
@@ -121,17 +121,17 @@ class _OptionsItem extends StatelessWidget {
 }
 
 class _BooleanItem extends StatelessWidget {
-  const _BooleanItem(this.title, this.value, this.onChanged, { this.switchKey });
+  const _BooleanItem(this.title, this.value, this.onChanged, {this.switchKey});
 
   final String title;
   final bool value;
   final ValueChanged<bool> onChanged;
   // [switchKey] is used for accessing the switch from driver tests.
-  final Key switchKey;
+  final Key? switchKey;
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.brightnessOf(context) == Brightness.dark;
     return _OptionsItem(
       child: Row(
         children: <Widget>[
@@ -153,36 +153,33 @@ class _ActionItem extends StatelessWidget {
   const _ActionItem(this.text, this.onTap);
 
   final String text;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return _OptionsItem(
-      child: _TextButton(
-        onPressed: onTap,
-        child: Text(text),
-      ),
+      child: _TextButton(onPressed: onTap, child: Text(text)),
     );
   }
 }
 
 class _TextButton extends StatelessWidget {
-  const _TextButton({ Key key, this.onPressed, this.child }) : super(key: key);
+  const _TextButton({this.onPressed, this.child});
 
-  final VoidCallback onPressed;
-  final Widget child;
+  final VoidCallback? onPressed;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     return TextButton(
       style: TextButton.styleFrom(
-        primary: theme.colorScheme.onPrimary,
-        textStyle: theme.textTheme.subtitle1,
+        foregroundColor: theme.colorScheme.onPrimary,
+        textStyle: theme.textTheme.titleMedium,
         padding: EdgeInsets.zero,
       ),
       onPressed: onPressed,
-      child: child,
+      child: child!,
     );
   }
 }
@@ -197,15 +194,12 @@ class _Heading extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     return _OptionsItem(
       child: DefaultTextStyle(
-        style: theme.textTheme.headline6.copyWith(
+        style: theme.textTheme.titleLarge!.copyWith(
           fontFamily: 'GoogleSans',
           color: theme.colorScheme.onPrimary,
           fontWeight: FontWeight.w700,
         ),
-        child: Semantics(
-          child: Text(text),
-          header: true,
-        ),
+        child: Semantics(header: true, child: Text(text)),
       ),
     );
   }
@@ -214,8 +208,8 @@ class _Heading extends StatelessWidget {
 class _ThemeModeItem extends StatelessWidget {
   const _ThemeModeItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   static final Map<ThemeMode, String> modeLabels = <ThemeMode, String>{
     ThemeMode.system: 'System Default',
@@ -234,8 +228,8 @@ class _ThemeModeItem extends StatelessWidget {
               children: <Widget>[
                 const Text('Theme'),
                 Text(
-                  modeLabels[options.themeMode],
-                  style: Theme.of(context).primaryTextTheme.bodyText2,
+                  modeLabels[options!.themeMode!]!,
+                  style: Theme.of(context).primaryTextTheme.bodyMedium,
                 ),
               ],
             ),
@@ -243,19 +237,14 @@ class _ThemeModeItem extends StatelessWidget {
           PopupMenuButton<ThemeMode>(
             padding: const EdgeInsetsDirectional.only(end: 16.0),
             icon: const Icon(Icons.arrow_drop_down),
-            initialValue: options.themeMode,
+            initialValue: options!.themeMode,
             itemBuilder: (BuildContext context) {
               return ThemeMode.values.map<PopupMenuItem<ThemeMode>>((ThemeMode mode) {
-                return PopupMenuItem<ThemeMode>(
-                  value: mode,
-                  child: Text(modeLabels[mode]),
-                );
+                return PopupMenuItem<ThemeMode>(value: mode, child: Text(modeLabels[mode]!));
               }).toList();
             },
             onSelected: (ThemeMode mode) {
-              onOptionsChanged(
-                options.copyWith(themeMode: mode),
-              );
+              onOptionsChanged!(options!.copyWith(themeMode: mode));
             },
           ),
         ],
@@ -267,8 +256,8 @@ class _ThemeModeItem extends StatelessWidget {
 class _TextScaleFactorItem extends StatelessWidget {
   const _TextScaleFactorItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -281,8 +270,8 @@ class _TextScaleFactorItem extends StatelessWidget {
               children: <Widget>[
                 const Text('Text size'),
                 Text(
-                  options.textScaleFactor.label,
-                  style: Theme.of(context).primaryTextTheme.bodyText2,
+                  options!.textScaleFactor!.label,
+                  style: Theme.of(context).primaryTextTheme.bodyMedium,
                 ),
               ],
             ),
@@ -291,7 +280,9 @@ class _TextScaleFactorItem extends StatelessWidget {
             padding: const EdgeInsetsDirectional.only(end: 16.0),
             icon: const Icon(Icons.arrow_drop_down),
             itemBuilder: (BuildContext context) {
-              return kAllGalleryTextScaleValues.map<PopupMenuItem<GalleryTextScaleValue>>((GalleryTextScaleValue scaleValue) {
+              return kAllGalleryTextScaleValues.map<PopupMenuItem<GalleryTextScaleValue>>((
+                GalleryTextScaleValue scaleValue,
+              ) {
                 return PopupMenuItem<GalleryTextScaleValue>(
                   value: scaleValue,
                   child: Text(scaleValue.label),
@@ -299,9 +290,7 @@ class _TextScaleFactorItem extends StatelessWidget {
               }).toList();
             },
             onSelected: (GalleryTextScaleValue scaleValue) {
-              onOptionsChanged(
-                options.copyWith(textScaleFactor: scaleValue),
-              );
+              onOptionsChanged!(options!.copyWith(textScaleFactor: scaleValue));
             },
           ),
         ],
@@ -313,8 +302,8 @@ class _TextScaleFactorItem extends StatelessWidget {
 class _VisualDensityItem extends StatelessWidget {
   const _VisualDensityItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -327,8 +316,8 @@ class _VisualDensityItem extends StatelessWidget {
               children: <Widget>[
                 const Text('Visual density'),
                 Text(
-                  options.visualDensity.label,
-                  style: Theme.of(context).primaryTextTheme.bodyText2,
+                  options!.visualDensity!.label,
+                  style: Theme.of(context).primaryTextTheme.bodyMedium,
                 ),
               ],
             ),
@@ -337,7 +326,9 @@ class _VisualDensityItem extends StatelessWidget {
             padding: const EdgeInsetsDirectional.only(end: 16.0),
             icon: const Icon(Icons.arrow_drop_down),
             itemBuilder: (BuildContext context) {
-              return kAllGalleryVisualDensityValues.map<PopupMenuItem<GalleryVisualDensityValue>>((GalleryVisualDensityValue densityValue) {
+              return kAllGalleryVisualDensityValues.map<PopupMenuItem<GalleryVisualDensityValue>>((
+                GalleryVisualDensityValue densityValue,
+              ) {
                 return PopupMenuItem<GalleryVisualDensityValue>(
                   value: densityValue,
                   child: Text(densityValue.label),
@@ -345,9 +336,7 @@ class _VisualDensityItem extends StatelessWidget {
               }).toList();
             },
             onSelected: (GalleryVisualDensityValue densityValue) {
-              onOptionsChanged(
-                options.copyWith(visualDensity: densityValue),
-              );
+              onOptionsChanged!(options!.copyWith(visualDensity: densityValue));
             },
           ),
         ],
@@ -359,72 +348,48 @@ class _VisualDensityItem extends StatelessWidget {
 class _TextDirectionItem extends StatelessWidget {
   const _TextDirectionItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   @override
   Widget build(BuildContext context) {
-    return _BooleanItem(
-      'Force RTL',
-      options.textDirection == TextDirection.rtl,
-      (bool value) {
-        onOptionsChanged(
-          options.copyWith(
-            textDirection: value ? TextDirection.rtl : TextDirection.ltr,
-          ),
-        );
-      },
-      switchKey: const Key('text_direction'),
-    );
+    return _BooleanItem('Force RTL', options!.textDirection == TextDirection.rtl, (bool value) {
+      onOptionsChanged!(
+        options!.copyWith(textDirection: value ? TextDirection.rtl : TextDirection.ltr),
+      );
+    }, switchKey: const Key('text_direction'));
   }
 }
 
 class _TimeDilationItem extends StatelessWidget {
   const _TimeDilationItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   @override
   Widget build(BuildContext context) {
-    return _BooleanItem(
-      'Slow motion',
-      options.timeDilation != 1.0,
-      (bool value) {
-        onOptionsChanged(
-          options.copyWith(
-            timeDilation: value ? 20.0 : 1.0,
-          ),
-        );
-      },
-      switchKey: const Key('slow_motion'),
-    );
+    return _BooleanItem('Slow motion', options!.timeDilation != 1.0, (bool value) {
+      onOptionsChanged!(options!.copyWith(timeDilation: value ? 20.0 : 1.0));
+    }, switchKey: const Key('slow_motion'));
   }
 }
 
 class _PlatformItem extends StatelessWidget {
   const _PlatformItem(this.options, this.onOptionsChanged);
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
 
   String _platformLabel(TargetPlatform platform) {
-    switch(platform) {
-      case TargetPlatform.android:
-        return 'Mountain View';
-      case TargetPlatform.fuchsia:
-        return 'Fuchsia';
-      case TargetPlatform.iOS:
-        return 'Cupertino';
-      case TargetPlatform.linux:
-        return 'Material Desktop (linux)';
-      case TargetPlatform.macOS:
-        return 'Material Desktop (macOS)';
-      case TargetPlatform.windows:
-        return 'Material Desktop (Windows)';
-    }
-    assert(false);
-    return null;
+    return switch (platform) {
+      TargetPlatform.android => 'Mountain View',
+      TargetPlatform.fuchsia => 'Fuchsia',
+      TargetPlatform.iOS => 'Cupertino',
+      TargetPlatform.linux => 'Material Desktop (linux)',
+      TargetPlatform.macOS => 'Material Desktop (macOS)',
+      TargetPlatform.windows => 'Material Desktop (Windows)',
+    };
   }
 
   @override
@@ -437,10 +402,10 @@ class _PlatformItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text('Platform mechanics'),
-                 Text(
-                   _platformLabel(options.platform),
-                   style: Theme.of(context).primaryTextTheme.bodyText2,
-                 ),
+                Text(
+                  _platformLabel(options!.platform!),
+                  style: Theme.of(context).primaryTextTheme.bodyMedium,
+                ),
               ],
             ),
           ),
@@ -456,9 +421,7 @@ class _PlatformItem extends StatelessWidget {
               }).toList();
             },
             onSelected: (TargetPlatform platform) {
-              onOptionsChanged(
-                options.copyWith(platform: platform),
-              );
+              onOptionsChanged!(options!.copyWith(platform: platform));
             },
           ),
         ],
@@ -468,52 +431,35 @@ class _PlatformItem extends StatelessWidget {
 }
 
 class GalleryOptionsPage extends StatelessWidget {
-  const GalleryOptionsPage({
-    Key key,
-    this.options,
-    this.onOptionsChanged,
-    this.onSendFeedback,
-  }) : super(key: key);
+  const GalleryOptionsPage({super.key, this.options, this.onOptionsChanged, this.onSendFeedback});
 
-  final GalleryOptions options;
-  final ValueChanged<GalleryOptions> onOptionsChanged;
-  final VoidCallback onSendFeedback;
+  final GalleryOptions? options;
+  final ValueChanged<GalleryOptions>? onOptionsChanged;
+  final VoidCallback? onSendFeedback;
 
   List<Widget> _enabledDiagnosticItems() {
     // Boolean showFoo options with a value of null: don't display
     // the showFoo option at all.
-    if (options.showOffscreenLayersCheckerboard == null &&
-        options.showRasterCacheImagesCheckerboard == null &&
-        options.showPerformanceOverlay == null)
+    if (options == null) {
       return const <Widget>[];
+    }
 
     return <Widget>[
       const Divider(),
       const _Heading('Diagnostics'),
-      if (options.showOffscreenLayersCheckerboard != null)
-        _BooleanItem(
-          'Highlight offscreen layers',
-          options.showOffscreenLayersCheckerboard,
-          (bool value) {
-            onOptionsChanged(options.copyWith(showOffscreenLayersCheckerboard: value));
-          },
-        ),
-      if (options.showRasterCacheImagesCheckerboard != null)
-        _BooleanItem(
-          'Highlight raster cache images',
-          options.showRasterCacheImagesCheckerboard,
-          (bool value) {
-            onOptionsChanged(options.copyWith(showRasterCacheImagesCheckerboard: value));
-          },
-        ),
-      if (options.showPerformanceOverlay != null)
-        _BooleanItem(
-          'Show performance overlay',
-          options.showPerformanceOverlay,
-          (bool value) {
-            onOptionsChanged(options.copyWith(showPerformanceOverlay: value));
-          },
-        ),
+      _BooleanItem('Highlight offscreen layers', options!.showOffscreenLayersCheckerboard, (
+        bool value,
+      ) {
+        onOptionsChanged!(options!.copyWith(showOffscreenLayersCheckerboard: value));
+      }),
+      _BooleanItem('Highlight raster cache images', options!.showRasterCacheImagesCheckerboard, (
+        bool value,
+      ) {
+        onOptionsChanged!(options!.copyWith(showRasterCacheImagesCheckerboard: value));
+      }),
+      _BooleanItem('Show performance overlay', options!.showPerformanceOverlay, (bool value) {
+        onOptionsChanged!(options!.copyWith(showPerformanceOverlay: value));
+      }),
     ];
   }
 
@@ -522,7 +468,7 @@ class GalleryOptionsPage extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
 
     return DefaultTextStyle(
-      style: theme.primaryTextTheme.subtitle1,
+      style: theme.primaryTextTheme.titleMedium!,
       child: ListView(
         padding: const EdgeInsets.only(bottom: 124.0),
         children: <Widget>[

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/src/cupertino/debug.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -14,19 +13,20 @@ void main() {
     await tester.pumpWidget(
       Container(
         key: noLocalizationsAvailable,
-        child: CupertinoApp(
-          home: Container(
-            key: localizationsAvailable,
-          ),
-        ),
+        child: CupertinoApp(home: Container(key: localizationsAvailable)),
       ),
     );
 
-    expect(() => debugCheckHasCupertinoLocalizations(noLocalizationsAvailable.currentContext!), throwsA(isAssertionError.having(
-      (AssertionError e) => e.message,
-      'message',
-      contains('No CupertinoLocalizations found'),
-    )));
+    expect(
+      () => debugCheckHasCupertinoLocalizations(noLocalizationsAvailable.currentContext!),
+      throwsA(
+        isAssertionError.having(
+          (AssertionError e) => e.message,
+          'message',
+          contains('No CupertinoLocalizations found'),
+        ),
+      ),
+    );
 
     expect(debugCheckHasCupertinoLocalizations(localizationsAvailable.currentContext!), isTrue);
   });

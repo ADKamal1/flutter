@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+@Tags(<String>['reduced-test-set'])
+library;
+
 import 'dart:math' as math show pi;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../flutter_test_alternative.dart' show Fake;
 import '../widgets/semantics_tester.dart';
 
 class MockCanvas extends Fake implements Canvas {
@@ -27,6 +29,7 @@ class MockCanvas extends Fake implements Canvas {
   void scale(double sx, [double? sy]) {
     capturedSx = sx;
     capturedSy = sy!;
+    invocations.add(RecordedScale(sx, sy));
   }
 
   final List<RecordedCanvasCall> invocations = <RecordedCanvasCall>[];
@@ -73,7 +76,22 @@ class RecordedTranslate extends RecordedCanvasCall {
   }
 
   @override
-  int get hashCode => hashValues(dx, dy);
+  int get hashCode => Object.hash(dx, dy);
+}
+
+class RecordedScale extends RecordedCanvasCall {
+  const RecordedScale(this.sx, this.sy);
+
+  final double sx;
+  final double sy;
+
+  @override
+  bool operator ==(Object other) {
+    return other is RecordedScale && other.sx == sx && other.sy == sy;
+  }
+
+  @override
+  int get hashCode => Object.hash(sx, sy);
 }
 
 void main() {
@@ -82,9 +100,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-          ),
+          data: IconThemeData(color: Color(0xFF666666)),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -93,7 +109,7 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
     expect(canvas.capturedPaint, hasColor(0xFF666666));
   });
@@ -103,10 +119,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-            opacity: 0.5,
-          ),
+          data: IconThemeData(color: Color(0xFF666666), opacity: 0.5),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -115,7 +128,7 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
     expect(canvas.capturedPaint, hasColor(0x80666666));
   });
@@ -125,9 +138,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-          ),
+          data: IconThemeData(color: Color(0xFF666666)),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -137,7 +148,7 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
     expect(canvas.capturedPaint, hasColor(0xFF0000FF));
   });
@@ -147,10 +158,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-            size: 12.0,
-          ),
+          data: IconThemeData(color: Color(0xFF666666), size: 12.0),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -159,7 +167,7 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(12.0, 12.0));
     // arrow_menu default size is 48x48 so we expect it to be scaled by 0.25.
     expect(canvas.capturedSx, 0.25);
@@ -171,10 +179,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-            size: 12.0,
-          ),
+          data: IconThemeData(color: Color(0xFF666666), size: 12.0),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -184,7 +189,7 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(12.0, 12.0));
     // arrow_menu default size is 48x48 so we expect it to be scaled by 2.
     expect(canvas.capturedSx, 2);
@@ -192,7 +197,7 @@ void main() {
   });
 
   testWidgets('Semantic label', (WidgetTester tester) async {
-    final SemanticsTester semantics = SemanticsTester(tester);
+    final semantics = SemanticsTester(tester);
 
     await tester.pumpWidget(
       const Directionality(
@@ -216,23 +221,28 @@ void main() {
       const Directionality(
         textDirection: TextDirection.rtl,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-          ),
-          child: AnimatedIcon(
-            progress: AlwaysStoppedAnimation<double>(0.0),
-            icon: AnimatedIcons.arrow_menu,
+          data: IconThemeData(color: Color(0xFF666666)),
+          child: RepaintBoundary(
+            child: AnimatedIcon(
+              progress: AlwaysStoppedAnimation<double>(0.0),
+              icon: AnimatedIcons.arrow_menu,
+            ),
           ),
         ),
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
     expect(canvas.invocations, const <RecordedCanvasCall>[
       RecordedRotate(math.pi),
       RecordedTranslate(-48, -48),
+      RecordedScale(0.5, 0.5),
     ]);
+    await expectLater(
+      find.byType(AnimatedIcon),
+      matchesGoldenFile('animated_icons_test.icon.rtl.png'),
+    );
   });
 
   testWidgets('Inherited text direction ltr', (WidgetTester tester) async {
@@ -240,20 +250,24 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-          ),
-          child: AnimatedIcon(
-            progress: AlwaysStoppedAnimation<double>(0.0),
-            icon: AnimatedIcons.arrow_menu,
+          data: IconThemeData(color: Color(0xFF666666)),
+          child: RepaintBoundary(
+            child: AnimatedIcon(
+              progress: AlwaysStoppedAnimation<double>(0.0),
+              icon: AnimatedIcons.arrow_menu,
+            ),
           ),
         ),
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
-    expect(canvas.invocations, isEmpty);
+    expect(canvas.invocations, const <RecordedCanvasCall>[RecordedScale(0.5, 0.5)]);
+    await expectLater(
+      find.byType(AnimatedIcon),
+      matchesGoldenFile('animated_icons_test.icon.ltr.png'),
+    );
   });
 
   testWidgets('Inherited text direction overridden', (WidgetTester tester) async {
@@ -261,9 +275,7 @@ void main() {
       const Directionality(
         textDirection: TextDirection.ltr,
         child: IconTheme(
-          data: IconThemeData(
-            color: Color(0xFF666666),
-          ),
+          data: IconThemeData(color: Color(0xFF666666)),
           child: AnimatedIcon(
             progress: AlwaysStoppedAnimation<double>(0.0),
             icon: AnimatedIcons.arrow_menu,
@@ -273,31 +285,49 @@ void main() {
       ),
     );
     final CustomPaint customPaint = tester.widget(find.byType(CustomPaint));
-    final MockCanvas canvas = MockCanvas();
+    final canvas = MockCanvas();
     customPaint.painter!.paint(canvas, const Size(48.0, 48.0));
     expect(canvas.invocations, const <RecordedCanvasCall>[
       RecordedRotate(math.pi),
       RecordedTranslate(-48, -48),
+      RecordedScale(0.5, 0.5),
     ]);
+  });
+
+  testWidgets('Direction has no effect on position of widget', (WidgetTester tester) async {
+    const icon = AnimatedIcon(
+      progress: AlwaysStoppedAnimation<double>(0.0),
+      icon: AnimatedIcons.arrow_menu,
+    );
+    await tester.pumpWidget(const Directionality(textDirection: TextDirection.rtl, child: icon));
+    final Rect rtlRect = tester.getRect(find.byType(AnimatedIcon));
+    await tester.pumpWidget(const Directionality(textDirection: TextDirection.ltr, child: icon));
+    final Rect ltrRect = tester.getRect(find.byType(AnimatedIcon));
+    expect(rtlRect, ltrRect);
   });
 }
 
-PaintColorMatcher hasColor(int color) {
-  return PaintColorMatcher(color);
+PaintColorMatcher hasColor(int color, {double threshold = 1 / 255}) {
+  return PaintColorMatcher(color, threshold);
 }
 
 class PaintColorMatcher extends Matcher {
-  const PaintColorMatcher(this.expectedColor);
+  const PaintColorMatcher(this.expectedColor, this.threshold);
 
   final int expectedColor;
+  final double threshold;
 
   @override
-  Description describe(Description description) =>
-    description.add('color was not $expectedColor');
+  Description describe(Description description) => description.add('color was not $expectedColor');
 
   @override
   bool matches(dynamic item, Map<dynamic, dynamic> matchState) {
-    final Paint actualPaint = item as Paint;
-    return actualPaint.color == Color(expectedColor);
+    final actualPaint = item as Paint;
+    final expected = Color(expectedColor);
+    return actualPaint.color.colorSpace == expected.colorSpace &&
+        (actualPaint.color.a - expected.a).abs() < threshold &&
+        (actualPaint.color.r - expected.r).abs() < threshold &&
+        (actualPaint.color.g - expected.g).abs() < threshold &&
+        (actualPaint.color.b - expected.b).abs() < threshold;
   }
 }

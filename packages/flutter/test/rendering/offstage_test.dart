@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tester.dart';
 
 void main() {
+  TestRenderingFlutterBinding.ensureInitialized();
+
   test('offstage', () {
     RenderBox child;
-    bool painted = false;
+    var painted = false;
     // incoming constraints are tight 800x600
     final RenderBox root = RenderPositionedBox(
       child: RenderConstrainedBox(
@@ -19,7 +20,9 @@ void main() {
         child: RenderOffstage(
           child: RenderCustomPaint(
             painter: TestCallbackPainter(
-              onPaint: () { painted = true; },
+              onPaint: () {
+                painted = true;
+              },
             ),
             child: child = RenderConstrainedBox(
               additionalConstraints: const BoxConstraints.tightFor(height: 10.0, width: 10.0),

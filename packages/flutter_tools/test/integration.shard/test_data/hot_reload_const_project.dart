@@ -7,10 +7,10 @@ import 'project.dart';
 
 class HotReloadConstProject extends Project {
   @override
-  final String pubspec = '''
+  final pubspec = '''
   name: test
   environment:
-    sdk: ">=2.0.0-dev.68.0 <3.0.0"
+    sdk: ^3.7.0-0
 
   dependencies:
     flutter:
@@ -18,7 +18,7 @@ class HotReloadConstProject extends Project {
   ''';
 
   @override
-  final String main = r'''
+  final main = r'''
   import 'package:flutter/material.dart';
   import 'package:flutter/scheduler.dart';
   import 'package:flutter/services.dart';
@@ -26,8 +26,8 @@ class HotReloadConstProject extends Project {
 
   void main() async {
     WidgetsFlutterBinding.ensureInitialized();
-    final ByteData message = const StringCodec().encodeMessage('AppLifecycleState.resumed');
-    await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('flutter/lifecycle', message, (_) { });
+    final ByteData message = const StringCodec().encodeMessage('AppLifecycleState.resumed')!;
+    await ServicesBinding.instance!.defaultBinaryMessenger.handlePlatformMessage('flutter/lifecycle', message, (_) { });
     runApp(const MyApp());
   }
 
@@ -51,6 +51,10 @@ class HotReloadConstProject extends Project {
       'final int field = 2;',
       '// final int field = 2;',
     );
-    writeFile(fileSystem.path.join(dir.path, 'lib', 'main.dart'), newMainContents);
+    writeFile(
+      fileSystem.path.join(dir.path, 'lib', 'main.dart'),
+      newMainContents,
+      writeFutureModifiedDate: true,
+    );
   }
 }

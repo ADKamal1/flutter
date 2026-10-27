@@ -2,25 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/widgets.dart';
+// This file is run as part of a reduced test set in CI on Mac and Windows
+// machines.
+@Tags(<String>['reduced-test-set'])
+library;
+
+import 'dart:ui' as ui;
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../widgets/semantics_tester.dart';
 
-dynamic getRenderSegmentedControl(WidgetTester tester) {
-  return tester.allRenderObjects.firstWhere(
-    (RenderObject currentObject) {
-      return currentObject.toStringShort().contains('_RenderSegmentedControl');
-    },
-  );
+RenderBox getRenderSegmentedControl(WidgetTester tester) {
+  return tester.allRenderObjects.firstWhere((RenderObject currentObject) {
+    return currentObject.toStringShort().contains('_RenderSegmentedControl');
+  }) as RenderBox;
 }
 
 StatefulBuilder setupSimpleSegmentedControl() {
-  final Map<int, Widget> children = <int, Widget>{};
+  final children = <int, Widget>{};
   children[0] = const Text('Child 1');
   children[1] = const Text('Child 2');
-  int sharedValue = 0;
+  var sharedValue = 0;
 
   return StatefulBuilder(
     builder: (BuildContext context, StateSetter setState) {
@@ -39,25 +47,62 @@ StatefulBuilder setupSimpleSegmentedControl() {
   );
 }
 
-Widget boilerplate({ required Widget child }) {
+Widget boilerplate({required Widget child}) {
   return Directionality(
     textDirection: TextDirection.ltr,
     child: Center(child: child),
   );
 }
 
+int getChildCount(WidgetTester tester) {
+  return (getRenderSegmentedControl(tester)
+          as RenderBoxContainerDefaultsMixin<RenderBox, ContainerBoxParentData<RenderBox>>)
+      .getChildrenAsList()
+      .length;
+}
+
+ui.RSuperellipse getSurroundingShape(WidgetTester tester, {int child = 0}) {
+  return ((getRenderSegmentedControl(tester)
+                      as RenderBoxContainerDefaultsMixin<
+                        RenderBox,
+                        ContainerBoxParentData<RenderBox>
+                      >)
+                  .getChildrenAsList()[child]
+                  .parentData!
+              as dynamic)
+          .surroundingRect
+      as ui.RSuperellipse;
+}
+
+Size getChildSize(WidgetTester tester, {int child = 0}) {
+  return (getRenderSegmentedControl(tester)
+          as RenderBoxContainerDefaultsMixin<RenderBox, ContainerBoxParentData<RenderBox>>)
+      .getChildrenAsList()[child]
+      .size;
+}
+
+Color getBorderColor(WidgetTester tester) {
+  return (getRenderSegmentedControl(tester) as dynamic).borderColor as Color;
+}
+
+int? getSelectedIndex(WidgetTester tester) {
+  return (getRenderSegmentedControl(tester) as dynamic).selectedIndex as int?;
+}
+
 Color getBackgroundColor(WidgetTester tester, int childIndex) {
-  return getRenderSegmentedControl(tester).backgroundColors[childIndex] as Color;
+  // Using dynamic so the test can access a private class.
+  // ignore: avoid_dynamic_calls
+  return (getRenderSegmentedControl(tester) as dynamic).backgroundColors[childIndex] as Color;
 }
 
 void main() {
   testWidgets('Tap changes toggle state', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
     children[2] = const Text('Child 3');
 
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -86,59 +131,59 @@ void main() {
   });
 
   testWidgets('Need at least 2 children', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
-    try {
-      await tester.pumpWidget(
+    await expectLater(
+      () => tester.pumpWidget(
         boilerplate(
           child: CupertinoSegmentedControl<int>(
-            children: children,
-            onValueChanged: (int newValue) { },
+            children: const <int, Widget>{},
+            onValueChanged: (int newValue) {},
           ),
         ),
-      );
-      fail('Should not be possible to create a segmented control with no children');
-    } on AssertionError catch (e) {
-      expect(e.toString(), contains('children.length'));
-    }
-    try {
-      children[0] = const Text('Child 1');
+      ),
+      throwsA(
+        isAssertionError.having(
+          (AssertionError error) => error.toString(),
+          '.toString()',
+          contains('children.length'),
+        ),
+      ),
+    );
 
-      await tester.pumpWidget(
+    await expectLater(
+      () => tester.pumpWidget(
         boilerplate(
           child: CupertinoSegmentedControl<int>(
-            children: children,
-            onValueChanged: (int newValue) { },
+            children: const <int, Widget>{0: Text('Child 1')},
+            onValueChanged: (int newValue) {},
           ),
         ),
-      );
-      fail('Should not be possible to create a segmented control with just one child');
-    } on AssertionError catch (e) {
-      expect(e.toString(), contains('children.length'));
-    }
+      ),
+      throwsA(
+        isAssertionError.having(
+          (AssertionError error) => error.toString(),
+          '.toString()',
+          contains('children.length'),
+        ),
+      ),
+    );
   });
 
   testWidgets('Padding works', (WidgetTester tester) async {
-    const Key key = Key('Container');
+    const key = Key('Container');
 
-    final Map<int, Widget> children = <int, Widget>{};
-    children[0] = const SizedBox(
-      height: double.infinity,
-      child: Text('Child 1'),
-    ) ;
-    children[1] = const SizedBox(
-      height: double.infinity,
-      child: Text('Child 2'),
-    ) ;
+    final children = <int, Widget>{};
+    children[0] = const SizedBox(height: double.infinity, child: Text('Child 1'));
+    children[1] = const SizedBox(height: double.infinity, child: Text('Child 2'));
 
-    Future<void> verifyPadding({ EdgeInsets? padding }) async {
+    Future<void> verifyPadding({EdgeInsets? padding}) async {
       final EdgeInsets effectivePadding = padding ?? const EdgeInsets.symmetric(horizontal: 16);
       final Rect segmentedControlRect = tester.getRect(find.byKey(key));
       expect(
-          tester.getTopLeft(find.byWidget(children[0]!)),
-          segmentedControlRect.topLeft.translate(
-            effectivePadding.topLeft.dx,
-            effectivePadding.topLeft.dy,
-          ),
+        tester.getTopLeft(find.byWidget(children[0]!)),
+        segmentedControlRect.topLeft.translate(
+          effectivePadding.topLeft.dx,
+          effectivePadding.topLeft.dy,
+        ),
       );
       expect(
         tester.getBottomLeft(find.byWidget(children[0]!)),
@@ -165,13 +210,13 @@ void main() {
     }
 
     await tester.pumpWidget(
-        boilerplate(
-          child: CupertinoSegmentedControl<int>(
-            key: key,
-            children: children,
-            onValueChanged: (int newValue) { },
-          ),
+      boilerplate(
+        child: CupertinoSegmentedControl<int>(
+          key: key,
+          children: children,
+          onValueChanged: (int newValue) {},
         ),
+      ),
     );
 
     // Default padding works.
@@ -184,14 +229,14 @@ void main() {
     await verifyPadding();
 
     await tester.pumpWidget(
-        boilerplate(
-          child: CupertinoSegmentedControl<int>(
-            key: key,
-            padding: const EdgeInsets.fromLTRB(1, 3, 5, 7),
-            children: children,
-            onValueChanged: (int newValue) { },
-          ),
+      boilerplate(
+        child: CupertinoSegmentedControl<int>(
+          key: key,
+          padding: const EdgeInsets.fromLTRB(1, 3, 5, 7),
+          children: children,
+          onValueChanged: (int newValue) {},
         ),
+      ),
     );
 
     // Custom padding works.
@@ -204,34 +249,41 @@ void main() {
     await verifyPadding(padding: const EdgeInsets.fromLTRB(1, 3, 5, 7));
   });
 
-  testWidgets('Value attribute must be the key of one of the children widgets', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Value attribute must be the key of one of the children widgets', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
-    try {
-      await tester.pumpWidget(
+    await expectLater(
+      () => tester.pumpWidget(
         boilerplate(
           child: CupertinoSegmentedControl<int>(
             children: children,
-            onValueChanged: (int newValue) { },
+            onValueChanged: (int newValue) {},
             groupValue: 2,
           ),
         ),
-      );
-      fail('Should not be possible to create segmented control in which '
-          'value is not the key of one of the children widgets');
-    } on AssertionError catch (e) {
-      expect(e.toString(), contains('children'));
-    }
+      ),
+      throwsA(
+        isAssertionError.having(
+          (AssertionError error) => error.toString(),
+          '.toString()',
+          contains('children'),
+        ),
+      ),
+    );
   });
 
-  testWidgets('Widgets have correct default text/icon styles, change correctly on selection', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Widgets have correct default text/icon styles, change correctly on selection', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Icon(IconData(1));
 
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -269,58 +321,59 @@ void main() {
     expect(iconTheme.data.color, isSameColorAs(CupertinoColors.white));
   });
 
-  testWidgets(
-    'Segmented controls respects themes',
-    (WidgetTester tester) async {
-      final Map<int, Widget> children = <int, Widget>{};
-      children[0] = const Text('Child 1');
-      children[1] = const Icon(IconData(1));
-
-      int sharedValue = 0;
-
-      await tester.pumpWidget(
-        CupertinoApp(
-          theme: const CupertinoThemeData(brightness: Brightness.dark),
-          home: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setState) {
-              return CupertinoSegmentedControl<int>(
-                children: children,
-                onValueChanged: (int newValue) {
-                  setState(() {
-                    sharedValue = newValue;
-                  });
-                },
-                groupValue: sharedValue,
-              );
-            },
-          ),
-        ),
-      );
-
-      DefaultTextStyle textStyle = tester.widget(find.widgetWithText(DefaultTextStyle, 'Child 1').first);
-      IconThemeData iconTheme = IconTheme.of(tester.element(find.byIcon(const IconData(1))));
-
-      expect(textStyle.style.color, isSameColorAs(CupertinoColors.black));
-      expect(iconTheme.color, isSameColorAs(CupertinoColors.systemBlue.darkColor));
-
-      await tester.tap(find.byIcon(const IconData(1)));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
-      textStyle = tester.widget(find.widgetWithText(DefaultTextStyle, 'Child 1').first);
-      iconTheme = IconTheme.of(tester.element(find.byIcon(const IconData(1))));
-
-      expect(textStyle.style.color, isSameColorAs(CupertinoColors.systemBlue.darkColor));
-      expect(iconTheme.color, isSameColorAs(CupertinoColors.black));
-    },
-  );
-
-  testWidgets('SegmentedControl is correct when user provides custom colors', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Segmented controls respects themes', (WidgetTester tester) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Icon(IconData(1));
 
-    int sharedValue = 0;
+    var sharedValue = 0;
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        theme: const CupertinoThemeData(brightness: Brightness.dark),
+        home: StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return CupertinoSegmentedControl<int>(
+              children: children,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            );
+          },
+        ),
+      ),
+    );
+
+    DefaultTextStyle textStyle = tester.widget(
+      find.widgetWithText(DefaultTextStyle, 'Child 1').first,
+    );
+    IconThemeData iconTheme = IconTheme.of(tester.element(find.byIcon(const IconData(1))));
+
+    expect(textStyle.style.color, isSameColorAs(CupertinoColors.white));
+    expect(iconTheme.color, isSameColorAs(CupertinoColors.systemBlue.darkColor));
+
+    await tester.tap(find.byIcon(const IconData(1)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    textStyle = tester.widget(find.widgetWithText(DefaultTextStyle, 'Child 1').first);
+    iconTheme = IconTheme.of(tester.element(find.byIcon(const IconData(1))));
+
+    expect(textStyle.style.color, isSameColorAs(CupertinoColors.systemBlue.darkColor));
+    expect(iconTheme.color, isSameColorAs(CupertinoColors.white));
+  });
+
+  testWidgets('SegmentedControl is correct when user provides custom colors', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
+    children[0] = const Text('Child 1');
+    children[1] = const Icon(IconData(1));
+
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -347,7 +400,7 @@ void main() {
     DefaultTextStyle textStyle = tester.widget(find.widgetWithText(DefaultTextStyle, 'Child 1'));
     IconTheme iconTheme = tester.widget(find.widgetWithIcon(IconTheme, const IconData(1)));
 
-    expect(getRenderSegmentedControl(tester).borderColor, CupertinoColors.black);
+    expect(getBorderColor(tester), CupertinoColors.black);
     expect(textStyle.style.color, CupertinoColors.lightBackgroundGray);
     expect(iconTheme.data.color, CupertinoColors.activeGreen.color);
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeGreen.color);
@@ -365,15 +418,19 @@ void main() {
     expect(getBackgroundColor(tester, 1), CupertinoColors.activeGreen.color);
 
     final Offset center = tester.getCenter(find.text('Child 1'));
-    await tester.startGesture(center);
+    final TestGesture gesture = await tester.startGesture(center);
     await tester.pumpAndSettle();
 
     expect(getBackgroundColor(tester, 0), const Color(0x638CFC7B));
     expect(getBackgroundColor(tester, 1), CupertinoColors.activeGreen.color);
+
+    // Finish gesture to release resources.
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Widgets are centered within segments', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
@@ -382,12 +439,11 @@ void main() {
         textDirection: TextDirection.ltr,
         child: Align(
           alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: 200.0,
-            height: 200.0,
+          child: SizedBox.square(
+            dimension: 200.0,
             child: CupertinoSegmentedControl<int>(
               children: children,
-              onValueChanged: (int newValue) { },
+              onValueChanged: (int newValue) {},
             ),
           ),
         ),
@@ -400,11 +456,11 @@ void main() {
   });
 
   testWidgets('Tap calls onValueChanged', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
-    bool value = false;
+    var value = false;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -428,12 +484,14 @@ void main() {
     expect(value, isTrue);
   });
 
-  testWidgets('State does not change if onValueChanged does not call setState()', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('State does not change if onValueChanged does not call setState()', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
-    const int sharedValue = 0;
+    const sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -441,7 +499,7 @@ void main() {
           return boilerplate(
             child: CupertinoSegmentedControl<int>(
               children: children,
-              onValueChanged: (int newValue) { },
+              onValueChanged: (int newValue) {},
               groupValue: sharedValue,
             ),
           );
@@ -459,70 +517,64 @@ void main() {
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
   });
 
-  testWidgets(
-    'Background color of child should change on selection, '
-    'and should not change when tapped again',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(setupSimpleSegmentedControl());
+  testWidgets('Background color of child should change on selection, '
+      'and should not change when tapped again', (WidgetTester tester) async {
+    await tester.pumpWidget(setupSimpleSegmentedControl());
 
-      expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
-      await tester.tap(find.text('Child 2'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Child 2'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-      expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
 
-      await tester.tap(find.text('Child 2'));
-      await tester.pump();
+    await tester.tap(find.text('Child 2'));
+    await tester.pump();
 
-      expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
-    },
-  );
+    expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
+  });
 
-  testWidgets(
-    'Children can be non-Text or Icon widgets (in this case, '
-        'a Container or Placeholder widget)',
-    (WidgetTester tester) async {
-      final Map<int, Widget> children = <int, Widget>{};
-      children[0] = const Text('Child 1');
-      children[1] = Container(
-        constraints: const BoxConstraints.tightFor(width: 50.0, height: 50.0),
-      );
-      children[2] = const Placeholder();
+  testWidgets('Children can be non-Text or Icon widgets (in this case, '
+      'a Container or Placeholder widget)', (WidgetTester tester) async {
+    final children = <int, Widget>{};
+    children[0] = const Text('Child 1');
+    children[1] = Container(constraints: const BoxConstraints.tightFor(width: 50.0, height: 50.0));
+    children[2] = const Placeholder();
 
-      int sharedValue = 0;
+    var sharedValue = 0;
 
-      await tester.pumpWidget(
-        StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return boilerplate(
-              child: CupertinoSegmentedControl<int>(
-                children: children,
-                onValueChanged: (int newValue) {
-                  setState(() {
-                    sharedValue = newValue;
-                  });
-                },
-                groupValue: sharedValue,
-              ),
-            );
-          },
-        ),
-      );
-    },
-  );
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              children: children,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            ),
+          );
+        },
+      ),
+    );
+  });
 
   testWidgets('Passed in value is child initially selected', (WidgetTester tester) async {
     await tester.pumpWidget(setupSimpleSegmentedControl());
 
-    expect(getRenderSegmentedControl(tester).selectedIndex, 0);
+    expect(getSelectedIndex(tester), 0);
 
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
   });
 
-  testWidgets('Null input for value results in no child initially selected', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Null input for value results in no child initially selected', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
@@ -546,51 +598,59 @@ void main() {
       ),
     );
 
-    expect(getRenderSegmentedControl(tester).selectedIndex, null);
+    expect(getSelectedIndex(tester), null);
 
     expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.white));
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
   });
 
-  testWidgets('Long press changes background color of not-selected child', (WidgetTester tester) async {
+  testWidgets('Long press changes background color of not-selected child', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(setupSimpleSegmentedControl());
 
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
     final Offset center = tester.getCenter(find.text('Child 2'));
-    await tester.startGesture(center);
+    final TestGesture gesture = await tester.startGesture(center);
     await tester.pumpAndSettle();
 
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
     expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
+
+    // Finish gesture to release resources.
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('Long press does not change background color of currently-selected child', (WidgetTester tester) async {
+  testWidgets('Long press does not change background color of currently-selected child', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(setupSimpleSegmentedControl());
 
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
     final Offset center = tester.getCenter(find.text('Child 1'));
-    await tester.startGesture(center);
+    final TestGesture gesture = await tester.startGesture(center);
     await tester.pumpAndSettle();
 
     expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
+
+    // Finish gesture to release resources.
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('Height of segmented control is determined by tallest widget', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
-    children[0] = Container(
-      constraints: const BoxConstraints.tightFor(height: 100.0),
-    );
-    children[1] = Container(
-      constraints: const BoxConstraints.tightFor(height: 400.0),
-    );
-    children[2] = Container(
-      constraints: const BoxConstraints.tightFor(height: 200.0),
-    );
+  testWidgets('Height of segmented control is determined by tallest widget', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
+    children[0] = Container(constraints: const BoxConstraints.tightFor(height: 100.0));
+    children[1] = Container(constraints: const BoxConstraints.tightFor(height: 400.0));
+    children[2] = Container(constraints: const BoxConstraints.tightFor(height: 200.0));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -599,7 +659,7 @@ void main() {
             child: CupertinoSegmentedControl<int>(
               key: const ValueKey<String>('Segmented Control'),
               children: children,
-              onValueChanged: (int newValue) { },
+              onValueChanged: (int newValue) {},
             ),
           );
         },
@@ -607,22 +667,19 @@ void main() {
     );
 
     final RenderBox buttonBox = tester.renderObject(
-        find.byKey(const ValueKey<String>('Segmented Control')));
+      find.byKey(const ValueKey<String>('Segmented Control')),
+    );
 
     expect(buttonBox.size.height, 400.0);
   });
 
-  testWidgets('Width of each segmented control segment is determined by widest widget', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
-    children[0] = Container(
-      constraints: const BoxConstraints.tightFor(width: 50.0),
-    );
-    children[1] = Container(
-      constraints: const BoxConstraints.tightFor(width: 100.0),
-    );
-    children[2] = Container(
-      constraints: const BoxConstraints.tightFor(width: 200.0),
-    );
+  testWidgets('Width of each segmented control segment is determined by widest widget', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
+    children[0] = Container(constraints: const BoxConstraints.tightFor(width: 50.0));
+    children[1] = Container(constraints: const BoxConstraints.tightFor(width: 100.0));
+    children[2] = Container(constraints: const BoxConstraints.tightFor(width: 200.0));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -631,7 +688,7 @@ void main() {
             child: CupertinoSegmentedControl<int>(
               key: const ValueKey<String>('Segmented Control'),
               children: children,
-              onValueChanged: (int newValue) { },
+              onValueChanged: (int newValue) {},
             ),
           );
         },
@@ -639,7 +696,8 @@ void main() {
     );
 
     final RenderBox segmentedControl = tester.renderObject(
-        find.byKey(const ValueKey<String>('Segmented Control')));
+      find.byKey(const ValueKey<String>('Segmented Control')),
+    );
 
     // Subtract the 16.0px from each side. Remaining width should be allocated
     // to each child equally.
@@ -647,16 +705,13 @@ void main() {
 
     expect(childWidth, 200.0);
 
-    expect(childWidth,
-        getRenderSegmentedControl(tester).getChildrenAsList()[0].parentData.surroundingRect.width);
-    expect(childWidth,
-        getRenderSegmentedControl(tester).getChildrenAsList()[1].parentData.surroundingRect.width);
-    expect(childWidth,
-        getRenderSegmentedControl(tester).getChildrenAsList()[2].parentData.surroundingRect.width);
+    expect(childWidth, getSurroundingShape(tester).width);
+    expect(childWidth, getSurroundingShape(tester, child: 1).width);
+    expect(childWidth, getSurroundingShape(tester, child: 2).width);
   });
 
   testWidgets('Width is finite in unbounded space', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
@@ -669,7 +724,7 @@ void main() {
                 CupertinoSegmentedControl<int>(
                   key: const ValueKey<String>('Segmented Control'),
                   children: children,
-                  onValueChanged: (int newValue) { },
+                  onValueChanged: (int newValue) {},
                 ),
               ],
             ),
@@ -679,13 +734,16 @@ void main() {
     );
 
     final RenderBox segmentedControl = tester.renderObject(
-        find.byKey(const ValueKey<String>('Segmented Control')));
+      find.byKey(const ValueKey<String>('Segmented Control')),
+    );
 
     expect(segmentedControl.size.width.isFinite, isTrue);
   });
 
-  testWidgets('Directionality test - RTL should reverse order of widgets', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Directionality test - RTL should reverse order of widgets', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
@@ -695,22 +753,24 @@ void main() {
         child: Center(
           child: CupertinoSegmentedControl<int>(
             children: children,
-            onValueChanged: (int newValue) { },
+            onValueChanged: (int newValue) {},
           ),
         ),
       ),
     );
 
-    expect(tester.getTopRight(find.text('Child 1')).dx >
-        tester.getTopRight(find.text('Child 2')).dx, isTrue);
+    expect(
+      tester.getTopRight(find.text('Child 1')).dx > tester.getTopRight(find.text('Child 2')).dx,
+      isTrue,
+    );
   });
 
   testWidgets('Correct initial selection and toggling behavior - RTL', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -749,12 +809,12 @@ void main() {
   });
 
   testWidgets('Segmented control semantics', (WidgetTester tester) async {
-    final SemanticsTester semantics = SemanticsTester(tester);
+    final semantics = SemanticsTester(tester);
 
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -779,83 +839,97 @@ void main() {
 
     expect(
       semantics,
-        hasSemantics(
-          TestSemantics.root(
-            children: <TestSemantics>[
-              TestSemantics.rootChild(
-                label: 'Child 1',
-                flags: <SemanticsFlag>[
-                  SemanticsFlag.isButton,
-                  SemanticsFlag.isInMutuallyExclusiveGroup,
-                  SemanticsFlag.isSelected,
-                ],
-                actions: <SemanticsAction>[
-                  SemanticsAction.tap,
-                ],
-              ),
-              TestSemantics.rootChild(
-                label: 'Child 2',
-                flags: <SemanticsFlag>[
-                  SemanticsFlag.isButton,
-                  SemanticsFlag.isInMutuallyExclusiveGroup,
-                ],
-                actions: <SemanticsAction>[
-                  SemanticsAction.tap,
-                ],
-              ),
-            ],
-          ),
-          ignoreId: true,
-          ignoreRect: true,
-          ignoreTransform: true,
+      hasSemantics(
+        TestSemantics.root(
+          children: <TestSemantics>[
+            TestSemantics.rootChild(
+              role: SemanticsRole.radioGroup,
+              children: <TestSemantics>[
+                TestSemantics(
+                  label: 'Child 1',
+                  flags: <SemanticsFlag>[
+                    SemanticsFlag.isButton,
+                    SemanticsFlag.isInMutuallyExclusiveGroup,
+                    SemanticsFlag.hasSelectedState,
+                    SemanticsFlag.isSelected,
+                    SemanticsFlag.isFocusable,
+                  ],
+                  actions: <SemanticsAction>[SemanticsAction.tap, SemanticsAction.focus],
+                ),
+                TestSemantics(
+                  label: 'Child 2',
+                  flags: <SemanticsFlag>[
+                    SemanticsFlag.isButton,
+                    SemanticsFlag.isInMutuallyExclusiveGroup,
+                    // Declares that it is selectable, but not currently selected.
+                    SemanticsFlag.hasSelectedState,
+                    SemanticsFlag.isFocusable,
+                  ],
+                  actions: <SemanticsAction>[SemanticsAction.tap, SemanticsAction.focus],
+                ),
+              ],
+            ),
+          ],
         ),
+        ignoreId: true,
+        ignoreRect: true,
+        ignoreTransform: true,
+      ),
     );
 
     await tester.tap(find.text('Child 2'));
     await tester.pump();
 
     expect(
-        semantics,
-        hasSemantics(
-          TestSemantics.root(
-            children: <TestSemantics>[
-              TestSemantics.rootChild(
-                label: 'Child 1',
-                flags: <SemanticsFlag>[
-                  SemanticsFlag.isButton,
-                  SemanticsFlag.isInMutuallyExclusiveGroup,
-                ],
-                actions: <SemanticsAction>[
-                  SemanticsAction.tap,
-                ],
-              ),
-              TestSemantics.rootChild(
-                label: 'Child 2',
-                flags: <SemanticsFlag>[
-                  SemanticsFlag.isButton,
-                  SemanticsFlag.isInMutuallyExclusiveGroup,
-                  SemanticsFlag.isSelected,
-                ],
-                actions: <SemanticsAction>[
-                  SemanticsAction.tap,
-                ],
-              ),
-            ],
-          ),
-          ignoreId: true,
-          ignoreRect: true,
-          ignoreTransform: true,
-        ));
+      semantics,
+      hasSemantics(
+        TestSemantics.root(
+          children: <TestSemantics>[
+            TestSemantics.rootChild(
+              role: SemanticsRole.radioGroup,
+              children: <TestSemantics>[
+                TestSemantics(
+                  label: 'Child 1',
+                  flags: <SemanticsFlag>[
+                    SemanticsFlag.isButton,
+                    SemanticsFlag.isInMutuallyExclusiveGroup,
+                    // Declares that it is selectable, but not currently selected.
+                    SemanticsFlag.hasSelectedState,
+                    SemanticsFlag.isFocusable,
+                  ],
+                  actions: <SemanticsAction>[SemanticsAction.tap, SemanticsAction.focus],
+                ),
+                TestSemantics(
+                  label: 'Child 2',
+                  flags: <SemanticsFlag>[
+                    SemanticsFlag.isButton,
+                    SemanticsFlag.isInMutuallyExclusiveGroup,
+                    SemanticsFlag.hasSelectedState,
+                    SemanticsFlag.isSelected,
+                    SemanticsFlag.isFocusable,
+                    SemanticsFlag.isFocused,
+                  ],
+                  actions: <SemanticsAction>[SemanticsAction.tap, SemanticsAction.focus],
+                ),
+              ],
+            ),
+          ],
+        ),
+        ignoreId: true,
+        ignoreRect: true,
+        ignoreTransform: true,
+      ),
+    );
 
     semantics.dispose();
   });
 
   testWidgets('Non-centered taps work on smaller widgets', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
 
-    int sharedValue = 1;
+    var sharedValue = 1;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -878,31 +952,30 @@ void main() {
 
     expect(sharedValue, 1);
 
-    final double childWidth = getRenderSegmentedControl(tester).firstChild.size.width as double;
+    final double childWidth = getChildSize(tester).width;
     final Offset centerOfSegmentedControl = tester.getCenter(find.text('Child 1'));
 
     // Tap just inside segment bounds
     await tester.tapAt(
-      Offset(
-        centerOfSegmentedControl.dx + (childWidth / 2) - 10.0,
-        centerOfSegmentedControl.dy,
-      ),
+      Offset(centerOfSegmentedControl.dx + (childWidth / 2) - 10.0, centerOfSegmentedControl.dy),
     );
 
     expect(sharedValue, 0);
   });
 
   testWidgets('Hit-tests report accurate local position in segments', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     late TapDownDetails tapDownDetails;
     children[0] = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (TapDownDetails details) { tapDownDetails = details; },
+      onTapDown: (TapDownDetails details) {
+        tapDownDetails = details;
+      },
       child: const SizedBox(width: 200, height: 200),
     );
     children[1] = const Text('Child 2');
 
-    int sharedValue = 1;
+    var sharedValue = 1;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -932,79 +1005,81 @@ void main() {
     expect(tapDownDetails.globalPosition, segment0GlobalOffset + const Offset(7, 11));
   });
 
-  testWidgets(
-    'Segment still hittable with a child that has no hitbox',
-    (WidgetTester tester) async {
-      // Regression test for https://github.com/flutter/flutter/issues/57326.
-      final Map<int, Widget> children = <int, Widget>{};
-      children[0] = const Text('Child 1');
-      children[1] = const SizedBox();
-      int sharedValue = 0;
+  testWidgets('Segment still hittable with a child that has no hitbox', (
+    WidgetTester tester,
+  ) async {
+    // Regression test for https://github.com/flutter/flutter/issues/57326.
+    final children = <int, Widget>{};
+    children[0] = const Text('Child 1');
+    children[1] = const SizedBox();
+    var sharedValue = 0;
 
-      await tester.pumpWidget(
-        StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return boilerplate(
-              child: CupertinoSegmentedControl<int>(
-                key: const ValueKey<String>('Segmented Control'),
-                children: children,
-                onValueChanged: (int newValue) {
-                  setState(() {
-                    sharedValue = newValue;
-                  });
-                },
-                groupValue: sharedValue,
-              ),
-            );
-          },
-        ),
-      );
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              key: const ValueKey<String>('Segmented Control'),
+              children: children,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            ),
+          );
+        },
+      ),
+    );
 
-      expect(sharedValue, 0);
+    expect(sharedValue, 0);
 
-      final Offset centerOfTwo = tester.getCenter(find.byWidget(children[1]!));
-      // Tap within the bounds of children[1], but not at the center.
-      // children[1] is a SizedBox thus not hittable by itself.
-      await tester.tapAt(centerOfTwo + const Offset(10, 0));
+    final Offset centerOfTwo = tester.getCenter(find.byWidget(children[1]!));
+    // Tap within the bounds of children[1], but not at the center.
+    // children[1] is a SizedBox thus not hittable by itself.
+    await tester.tapAt(centerOfTwo + const Offset(10, 0));
 
-      expect(sharedValue, 1);
+    expect(sharedValue, 1);
   });
 
-  testWidgets('Animation is correct when the selected segment changes', (WidgetTester tester) async {
+  testWidgets('Animation is correct when the selected segment changes', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(setupSimpleSegmentedControl());
 
     await tester.tap(find.text('Child 2'));
 
     await tester.pump();
-    expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
-    expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.activeBlue));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x33007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
-    expect(getBackgroundColor(tester, 1), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x64007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff7bbaff));
-    expect(getBackgroundColor(tester, 1), const Color(0x95007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff7bbaff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x95007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xffb9daff));
-    expect(getBackgroundColor(tester, 1), const Color(0xc7007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xffb9daff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xc7007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xfff7faff));
-    expect(getBackgroundColor(tester, 1), const Color(0xf8007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xfff7faff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xf8007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
     expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.white));
-    expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.activeBlue));
   });
 
   testWidgets('Animation is correct when widget is rebuilt', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('Child 1');
     children[1] = const Text('Child 2');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1043,8 +1118,8 @@ void main() {
         },
       ),
     );
-    expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
-    expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.activeBlue));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x33007aff)));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1062,10 +1137,10 @@ void main() {
           );
         },
       ),
-      const Duration(milliseconds: 40),
+      duration: const Duration(milliseconds: 40),
     );
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
-    expect(getBackgroundColor(tester, 1), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x64007aff)));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1083,10 +1158,10 @@ void main() {
           );
         },
       ),
-      const Duration(milliseconds: 40),
+      duration: const Duration(milliseconds: 40),
     );
-    expect(getBackgroundColor(tester, 0), const Color(0xff7bbaff));
-    expect(getBackgroundColor(tester, 1), const Color(0x95007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff7bbaff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x95007aff)));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1104,10 +1179,10 @@ void main() {
           );
         },
       ),
-      const Duration(milliseconds: 40),
+      duration: const Duration(milliseconds: 40),
     );
-    expect(getBackgroundColor(tester, 0), const Color(0xffb9daff));
-    expect(getBackgroundColor(tester, 1), const Color(0xc7007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xffb9daff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xc7007aff)));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1125,10 +1200,10 @@ void main() {
           );
         },
       ),
-      const Duration(milliseconds: 40),
+      duration: const Duration(milliseconds: 40),
     );
-    expect(getBackgroundColor(tester, 0), const Color(0xfff7faff));
-    expect(getBackgroundColor(tester, 1), const Color(0xf8007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xfff7faff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xf8007aff)));
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1146,18 +1221,18 @@ void main() {
           );
         },
       ),
-      const Duration(milliseconds: 40),
+      duration: const Duration(milliseconds: 40),
     );
     expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.white));
-    expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.activeBlue));
   });
 
   testWidgets('Multiple segments are pressed', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1180,26 +1255,33 @@ void main() {
 
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
-    await tester.startGesture(tester.getCenter(find.text('B')));
+    final TestGesture gesture1 = await tester.startGesture(tester.getCenter(find.text('B')));
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
     expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
     expect(getBackgroundColor(tester, 2), isSameColorAs(CupertinoColors.white));
 
-    await tester.startGesture(tester.getCenter(find.text('C')));
+    final TestGesture gesture2 = await tester.startGesture(tester.getCenter(find.text('C')));
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
     // Press on C has no effect while B is held down.
     expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
     expect(getBackgroundColor(tester, 2), isSameColorAs(CupertinoColors.white));
+
+    // Finish gesture to release resources.
+    await gesture1.up();
+    await gesture2.up();
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('Transition is triggered while a transition is already occurring', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+  testWidgets('Transition is triggered while a transition is already occurring', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1223,12 +1305,12 @@ void main() {
     await tester.tap(find.text('B'));
 
     await tester.pump();
-    expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
-    expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.activeBlue));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x33007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
-    expect(getBackgroundColor(tester, 1), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x64007aff)));
 
     // While A to B transition is occurring, press on C.
     await tester.tap(find.text('C'));
@@ -1236,38 +1318,40 @@ void main() {
     await tester.pump();
 
     // A and B are now both transitioning to white.
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
-    expect(getBackgroundColor(tester, 1), const Color(0xffc1deff));
-    expect(getBackgroundColor(tester, 2), const Color(0x33007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xffc1deff)));
+    expect(getBackgroundColor(tester, 2), isSameColorAs(const Color(0x33007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
     // B background color has reached unselected state.
-    expect(getBackgroundColor(tester, 0), const Color(0xff7bbaff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff7bbaff)));
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
-    expect(getBackgroundColor(tester, 2), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 2), isSameColorAs(const Color(0x64007aff)));
 
     await tester.pump(const Duration(milliseconds: 100));
     // A background color has reached unselected state.
     expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.white));
-    expect(getBackgroundColor(tester, 2), const Color(0xe0007aff));
+    expect(getBackgroundColor(tester, 2), isSameColorAs(const Color(0xe0007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
     // C background color has reached selected state.
-    expect(getBackgroundColor(tester, 2), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 2), isSameColorAs(CupertinoColors.activeBlue));
   });
 
-  testWidgets('Segment is selected while it is transitioning to unselected state', (WidgetTester tester) async {
+  testWidgets('Segment is selected while it is transitioning to unselected state', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(setupSimpleSegmentedControl());
 
     await tester.tap(find.text('Child 2'));
 
     await tester.pump();
-    expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
-    expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.activeBlue));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x33007aff)));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
-    expect(getBackgroundColor(tester, 1), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x64007aff)));
 
     // While A to B transition is occurring, press on A again.
     await tester.tap(find.text('Child 1'));
@@ -1275,21 +1359,21 @@ void main() {
     await tester.pump();
 
     // Both transitions start to reverse.
-    expect(getBackgroundColor(tester, 0), const Color(0xcd007aff));
-    expect(getBackgroundColor(tester, 1), const Color(0xffc1deff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xcd007aff)));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0xffc1deff)));
 
     await tester.pump(const Duration(milliseconds: 40));
     // A and B finish transitioning.
-    expect(getBackgroundColor(tester, 0), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.activeBlue));
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
   });
 
   testWidgets('Add segment while animation is running', (WidgetTester tester) async {
-    Map<int, Widget> children = <int, Widget>{};
+    var children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1303,7 +1387,7 @@ void main() {
                   sharedValue = newValue;
                 });
                 if (sharedValue == 1) {
-                  children = Map<int, Widget>.from(children);
+                  children = Map<int, Widget>.of(children);
                   children[3] = const Text('D');
                 }
               },
@@ -1333,11 +1417,11 @@ void main() {
   });
 
   testWidgets('Remove segment while animation is running', (WidgetTester tester) async {
-    Map<int, Widget> children = <int, Widget>{};
+    var children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
-    int sharedValue = 0;
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1352,7 +1436,7 @@ void main() {
                 });
                 if (sharedValue == 1) {
                   children.remove(2);
-                  children = Map<int, Widget>.from(children);
+                  children = Map<int, Widget>.of(children);
                 }
               },
               groupValue: sharedValue,
@@ -1362,23 +1446,23 @@ void main() {
       ),
     );
 
-    expect(getRenderSegmentedControl(tester).getChildrenAsList().length, 3);
+    expect(getChildCount(tester), 3);
 
     await tester.tap(find.text('B'));
 
     await tester.pump();
-    expect(getBackgroundColor(tester, 1), const Color(0x33007aff));
-    expect(getRenderSegmentedControl(tester).getChildrenAsList().length, 2);
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x33007aff)));
+    expect(getChildCount(tester), 2);
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 1), const Color(0x64007aff));
+    expect(getBackgroundColor(tester, 1), isSameColorAs(const Color(0x64007aff)));
 
     await tester.pump(const Duration(milliseconds: 150));
-    expect(getBackgroundColor(tester, 1), CupertinoColors.activeBlue);
+    expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.activeBlue));
   });
 
   testWidgets('Remove currently animating segment', (WidgetTester tester) async {
-    Map<int, Widget> children = <int, Widget>{};
+    var children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
@@ -1397,7 +1481,7 @@ void main() {
                 });
                 if (sharedValue == 1) {
                   children.remove(1);
-                  children = Map<int, Widget>.from(children);
+                  children = Map<int, Widget>.of(children);
                   sharedValue = null;
                 }
               },
@@ -1408,19 +1492,19 @@ void main() {
       ),
     );
 
-    expect(getRenderSegmentedControl(tester).getChildrenAsList().length, 3);
+    expect(getChildCount(tester), 3);
 
     await tester.tap(find.text('B'));
 
     await tester.pump();
-    expect(getRenderSegmentedControl(tester).getChildrenAsList().length, 2);
+    expect(getChildCount(tester), 2);
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff3d9aff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff3d9aff)));
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
     await tester.pump(const Duration(milliseconds: 40));
-    expect(getBackgroundColor(tester, 0), const Color(0xff7bbaff));
+    expect(getBackgroundColor(tester, 0), isSameColorAs(const Color(0xff7bbaff)));
     expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
 
     await tester.pump(const Duration(milliseconds: 100));
@@ -1430,12 +1514,8 @@ void main() {
 
   // Regression test: https://github.com/flutter/flutter/issues/43414.
   testWidgets("Quick double tap doesn't break the internal state", (WidgetTester tester) async {
-    const Map<int, Widget> children = <int, Widget>{
-      0: Text('A'),
-      1: Text('B'),
-      2: Text('C'),
-    };
-    int sharedValue = 0;
+    const children = <int, Widget>{0: Text('A'), 1: Text('B'), 2: Text('C')};
+    var sharedValue = 0;
 
     await tester.pumpWidget(
       StatefulBuilder(
@@ -1445,7 +1525,9 @@ void main() {
               key: const ValueKey<String>('Segmented Control'),
               children: children,
               onValueChanged: (int newValue) {
-                setState(() { sharedValue = newValue; });
+                setState(() {
+                  sharedValue = newValue;
+                });
               },
               groupValue: sharedValue,
             ),
@@ -1470,12 +1552,12 @@ void main() {
   });
 
   testWidgets('Golden Test Placeholder Widget', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = Container();
     children[1] = const Placeholder();
     children[2] = Container();
 
-    const int currentValue = 0;
+    const currentValue = 0;
 
     await tester.pumpWidget(
       RepaintBoundary(
@@ -1487,7 +1569,7 @@ void main() {
                 child: CupertinoSegmentedControl<int>(
                   key: const ValueKey<String>('Segmented Control'),
                   children: children,
-                  onValueChanged: (int newValue) { },
+                  onValueChanged: (int newValue) {},
                   groupValue: currentValue,
                 ),
               ),
@@ -1504,12 +1586,12 @@ void main() {
   });
 
   testWidgets('Golden Test Pressed State', (WidgetTester tester) async {
-    final Map<int, Widget> children = <int, Widget>{};
+    final children = <int, Widget>{};
     children[0] = const Text('A');
     children[1] = const Text('B');
     children[2] = const Text('C');
 
-    const int currentValue = 0;
+    const currentValue = 0;
 
     await tester.pumpWidget(
       RepaintBoundary(
@@ -1521,7 +1603,7 @@ void main() {
                 child: CupertinoSegmentedControl<int>(
                   key: const ValueKey<String>('Segmented Control'),
                   children: children,
-                  onValueChanged: (int newValue) { },
+                  onValueChanged: (int newValue) {},
                   groupValue: currentValue,
                 ),
               ),
@@ -1532,12 +1614,297 @@ void main() {
     );
 
     final Offset center = tester.getCenter(find.text('B'));
-    await tester.startGesture(center);
+    final TestGesture gesture = await tester.startGesture(center);
     await tester.pumpAndSettle();
 
     await expectLater(
       find.byType(RepaintBoundary),
       matchesGoldenFile('segmented_control_test.1.png'),
     );
+
+    // Finish gesture to release resources.
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Hovering over Cupertino segmented control updates cursor to clickable on Web', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
+    children[0] = const Text('A');
+    children[1] = const Text('B');
+    children[2] = const Text('C');
+
+    const currentValue = 0;
+
+    await tester.pumpWidget(
+      RepaintBoundary(
+        child: StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return boilerplate(
+              child: SizedBox(
+                width: 800.0,
+                child: CupertinoSegmentedControl<int>(
+                  key: const ValueKey<String>('Segmented Control'),
+                  children: children,
+                  onValueChanged: (int newValue) {},
+                  groupValue: currentValue,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    final TestGesture gesture = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      pointer: 1,
+    );
+    await gesture.addPointer(location: const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.basic,
+    );
+
+    final Offset firstChild = tester.getCenter(find.text('A'));
+    await gesture.moveTo(firstChild);
+    await tester.pumpAndSettle();
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      kIsWeb ? SystemMouseCursors.click : SystemMouseCursors.basic,
+    );
+  });
+
+  testWidgets('Tap on disabled segment should not change its state', (WidgetTester tester) async {
+    final children = <int, Widget>{
+      0: const Text('Child 1'),
+      1: const Text('Child 2'),
+      2: const Text('Child 3'),
+    };
+
+    final disabledChildren = <int>{1};
+
+    var sharedValue = 0;
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              key: const ValueKey<String>('Segmented Control'),
+              children: children,
+              disabledChildren: disabledChildren,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            ),
+          );
+        },
+      ),
+    );
+
+    expect(sharedValue, 0);
+
+    await tester.tap(find.text('Child 2'));
+    await tester.pumpAndSettle();
+
+    expect(sharedValue, 0);
+  });
+
+  testWidgets('Background color of disabled segment should be different than enabled segment', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{0: const Text('Child 1'), 1: const Text('Child 2')};
+    var sharedValue = 0;
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              children: children,
+              disabledChildren: const <int>{0},
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            ),
+          );
+        },
+      ),
+    );
+
+    // Colors are different for disabled and enabled segments in initial state.
+    // By default, the first segment is selected (and also is disabled in this test),
+    // it should have a blue background (selected color) with 50% opacity
+    expect(
+      getBackgroundColor(tester, 0),
+      isSameColorAs(CupertinoColors.systemBlue.withOpacity(0.5)),
+    );
+    expect(getBackgroundColor(tester, 1), isSameColorAs(CupertinoColors.white));
+
+    // Tap on disabled segment should not change its color
+    await tester.tap(find.text('Child 1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      getBackgroundColor(tester, 0),
+      isSameColorAs(CupertinoColors.systemBlue.withOpacity(0.5)),
+    );
+
+    // When tapping on another enabled segment, the first disabled segment is not selected anymore,
+    // it should have a white background (same to unselected color).
+    await tester.tap(find.text('Child 2'));
+    await tester.pumpAndSettle();
+
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.white));
+  });
+
+  testWidgets('Custom disabled color of disabled segment is showing as desired', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{
+      0: const Text('Child 1'),
+      1: const Text('Child 2'),
+      2: const Text('Child 3'),
+    };
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              children: children,
+              disabledChildren: const <int>{0},
+              onValueChanged: (int newValue) {},
+              disabledColor: CupertinoColors.systemGrey2,
+            ),
+          );
+        },
+      ),
+    );
+
+    expect(getBackgroundColor(tester, 0), isSameColorAs(CupertinoColors.systemGrey2));
+  });
+
+  testWidgets('Segmented control can use arrow keys', (WidgetTester tester) async {
+    final children = <int, Widget>{};
+    children[0] = const Text('Child 1');
+    children[1] = const Text('Child 2');
+    children[2] = const Text('Child 3');
+
+    var sharedValue = 0;
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              children: children,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+            ),
+          );
+        },
+      ),
+    );
+
+    expect(sharedValue, 0);
+
+    await tester.tap(find.text('Child 1'));
+    await tester.pumpAndSettle();
+    expect(sharedValue, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 2);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 2);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 1);
+  });
+
+  testWidgets('Segmented control skips disabled segments with keyboard', (
+    WidgetTester tester,
+  ) async {
+    final children = <int, Widget>{};
+    children[0] = const Text('Child 1');
+    children[1] = const Text('Child 2');
+    children[2] = const Text('Child 3');
+
+    var sharedValue = 0;
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return boilerplate(
+            child: CupertinoSegmentedControl<int>(
+              children: children,
+              onValueChanged: (int newValue) {
+                setState(() {
+                  sharedValue = newValue;
+                });
+              },
+              groupValue: sharedValue,
+              disabledChildren: const <int>{1},
+            ),
+          );
+        },
+      ),
+    );
+
+    expect(sharedValue, 0);
+
+    await tester.tap(find.text('Child 1'));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 2);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sharedValue, 0);
+  });
+
+  testWidgets('CupertinoSegmentedControl does not crash at zero area', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Center(
+          child: SizedBox.shrink(
+            child: CupertinoSegmentedControl<int>(
+              onValueChanged: (_) {},
+              children: const <int, Widget>{1: Text('X'), 2: Text('Y')},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(CupertinoSegmentedControl<int>)), Size.zero);
   });
 }

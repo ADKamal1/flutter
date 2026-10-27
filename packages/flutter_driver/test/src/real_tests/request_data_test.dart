@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 import 'package:flutter_driver/flutter_driver.dart';
 
 import '../../common.dart';
 
 void main() {
-  test('RequestData does not insert "null" string when no message is provided', () {
-    const RequestData data = RequestData(null);
+  group('RequestData', () {
+    test('does not insert "null" string when no message is provided', () {
+      const data = RequestData(null);
 
-    expect(data.serialize(), <String, String>{'command': 'request_data'});
+      expect(data.serialize(), <String, String>{'command': 'request_data'});
+    });
+
+    test('serializes and deserializes', () {
+      const data = RequestData('hello');
+      final roundTrip = RequestData.deserialize(data.serialize());
+      expect(roundTrip.message, 'hello');
+    });
   });
 }

@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "Бүгдийг сонгох",
   "tabSemanticsLabel": "$tabCount-н $tabIndex-р таб",
   "modalBarrierDismissLabel": "Үл хэрэгсэх",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Хайх",
+  "noSpellCheckReplacementsLabel": "Ямар ч орлуулалт олдсонгүй",
+  "menuDismissLabel": "Цэсийг хаах",
+  "lookUpButtonLabel": "Дээшээ харах",
+  "searchWebButtonLabel": "Вебээс хайх",
+  "shareButtonLabel": "Хуваалцах...",
+  "clearButtonLabel": "Арилгах",
+  "cancelButtonLabel": "Цуцлах",
+  "backButtonLabel": "Буцах",
+  "expansionTileExpandedHint": "хураахын тулд хоёр товшино уу",
+  "expansionTileCollapsedHint": "дэлгэхийн тулд хоёр товшино уу",
+  "expansionTileExpandedTapHint": "Хураах",
+  "expansionTileCollapsedTapHint": "Илүү дэлгэрэнгүй авах бол дэлгэнэ үү",
+  "expandedHint": "Хураасан",
+  "collapsedHint": "Дэлгэсэн"
 }

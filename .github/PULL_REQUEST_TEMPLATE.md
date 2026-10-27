@@ -1,47 +1,45 @@
-## Description
+<!--
+Thanks for filing a pull request!
+Reviewers are typically assigned within a week of filing a request.
+To learn more about code review, see our documentation on Tree Hygiene: https://github.com/flutter/flutter/blob/main/docs/contributing/Tree-hygiene.md
+-->
 
-*Replace this paragraph with a description of what this PR is doing. If you're modifying existing behavior, describe the existing behavior, how this PR is changing it, and what motivated the change. If you're changing visual properties, consider including before/after screenshots (and runnable code snippets to reproduce them).*
+*Replace this paragraph with a description of what this PR is changing or adding, and why. Consider including before/after screenshots.*
 
-## Related Issues
+*List which issues are fixed by this PR. You must list at least one issue. An issue is not required if the PR fixes something trivial like a typo.*
 
-*Replace this paragraph with a list of issues related to this PR from our [issue database]. Indicate, which of these issues are resolved or fixed by this PR. There should be at least one issue listed here.*
+*If you had to change anything in the [flutter/tests] repo, include a link to the migration guide as per the [breaking change policy].*
 
-## Tests
-
-I added the following tests:
-
-*Replace this with a list of the tests that you added as part of this PR. A change in behavior with no test covering it
-will likely get reverted accidentally sooner or later. PRs must include tests for all changed/updated/fixed behaviors. See [Test Coverage].*
-
-## Checklist
-
-Before you create this PR, confirm that it meets all requirements listed below by checking the relevant checkboxes (`[x]`). This will ensure a smooth and quick review process.
+## Pre-launch Checklist
 
 - [ ] I read the [Contributor Guide] and followed the process outlined there for submitting PRs.
-- [ ] I signed the [CLA].
-- [ ] I read and followed the [Flutter Style Guide], including [Features we expect every widget to implement].
+- [ ] I read the [AI contribution guidelines] and understand my responsibilities, or I am not using AI tools.
 - [ ] I read the [Tree Hygiene] wiki page, which explains my responsibilities.
-- [ ] I updated/added relevant documentation (doc comments with `///`).
+- [ ] I read and followed the [Flutter Style Guide], including [Features we expect every widget to implement].
+- [ ] I signed the [CLA].
+- [ ] I listed at least one issue that this PR fixes in the description above.
+- [ ] I updated/added relevant in-code documentation (doc comments with `///`).
+- [ ] If this PR introduces a new feature or capability, I created and linked a website documentation issue or PR in [flutter/website] (or verified none is needed).
+- [ ] I added new tests to check the change I am making, or this PR is [test-exempt].
+- [ ] I followed the [breaking change policy] and added [Data Driven Fixes] where supported.
 - [ ] All existing and new tests are passing.
-- [ ] The analyzer (`flutter analyze --flutter-repo`) does not report any problems on my PR.
-- [ ] I am willing to follow-up on review comments in a timely manner.
 
-## Breaking Change
+If you need help, consider asking for advice on the #hackers-new channel on [Discord].
 
-Did any tests fail when you ran them? Please read [Handling breaking changes].
+If this change needs to override an active code freeze, provide a comment explaining why. The code freeze workflow can be overridden by code reviewers. See pinned issues for any active code freezes with guidance.
 
-- [ ] No, no existing tests failed, so this is *not* a breaking change.
-- [ ] Yes, this is a breaking change. *If not, delete the remainder of this section.*
-   - [ ] I wrote a design doc: https://flutter.dev/go/template *Replace this with a link to your design doc's short link*
-   - [ ] I got input from the developer relations team, specifically from: *Replace with the names of who gave advice*
-   - [ ] I wrote a migration guide: https://flutter.dev/go/breaking-changes-template *Replace this with a link to a pull request that adds the migration guide to https://flutter.dev/docs/release/breaking-changes*
+**Note**: The Flutter team is currently trialing the use of [Gemini Code Assist for GitHub](https://developers.google.com/gemini-code-assist/docs/review-github-code). Comments from the `gemini-code-assist` bot should not be taken as authoritative feedback from the Flutter team. If you find its comments useful you can update your code accordingly, but if you are unsure or disagree with the feedback, please feel free to wait for a Flutter team member's review for guidance on which automated comments should be addressed.
 
 <!-- Links -->
-[issue database]: https://github.com/flutter/flutter/issues
-[Contributor Guide]: https://github.com/flutter/flutter/wiki/Tree-hygiene#overview
-[Test Coverage]: https://github.com/flutter/flutter/wiki/Test-coverage-for-package%3Aflutter
-[Flutter Style Guide]: https://github.com/flutter/flutter/wiki/Style-guide-for-Flutter-repo
-[Features we expect every widget to implement]: https://github.com/flutter/flutter/wiki/Style-guide-for-Flutter-repo#features-we-expect-every-widget-to-implement
+[Contributor Guide]: https://github.com/flutter/flutter/blob/main/docs/contributing/Tree-hygiene.md#overview
+[AI contribution guidelines]: https://github.com/flutter/flutter/blob/main/CONTRIBUTING.ai.md
+[Tree Hygiene]: https://github.com/flutter/flutter/blob/main/docs/contributing/Tree-hygiene.md
+[test-exempt]: https://github.com/flutter/flutter/blob/main/docs/contributing/Tree-hygiene.md#tests
+[Flutter Style Guide]: https://github.com/flutter/flutter/blob/main/docs/contributing/Style-guide-for-Flutter-repo.md
+[Features we expect every widget to implement]: https://github.com/flutter/flutter/blob/main/docs/contributing/Style-guide-for-Flutter-repo.md#features-we-expect-every-widget-to-implement
 [CLA]: https://cla.developers.google.com/
-[Tree Hygiene]: https://github.com/flutter/flutter/wiki/Tree-hygiene
-[Handling breaking changes]: https://github.com/flutter/flutter/wiki/Tree-hygiene#handling-breaking-changes
+[flutter/tests]: https://github.com/flutter/tests
+[flutter/website]: https://github.com/flutter/website
+[breaking change policy]: https://github.com/flutter/flutter/blob/main/docs/contributing/Tree-hygiene.md#handling-breaking-changes
+[Discord]: https://github.com/flutter/flutter/blob/main/docs/contributing/Chat.md
+[Data Driven Fixes]: https://github.com/flutter/flutter/blob/main/docs/contributing/Data-driven-Fixes.md

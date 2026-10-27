@@ -4,9 +4,9 @@
 
 import 'dart:async';
 
-Future<void> testExecutable(FutureOr<void> testMain()) async {
-  await runZoned<dynamic>(testMain, zoneValues: <Type, dynamic>{
-    String: '/test_config/nested_config',
-    int: 123,
-  });
+Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  await runZoned<dynamic>(
+    testMain,
+    zoneValues: <Type, dynamic>{String: '/test_config/nested_config', int: 123},
+  );
 }

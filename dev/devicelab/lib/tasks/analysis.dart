@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
 import '../framework/task_result.dart';
 import '../framework/utils.dart';
+
+const _kHeartbeatInterval = Duration(seconds: 30);
 
 /// Run each benchmark this many times and compute average, min, max.
 ///
@@ -24,10 +27,11 @@ Future<TaskResult> analyzerBenchmarkTask() async {
   await inDirectory<void>(flutterDirectory, () async {
     rmTree(_megaGalleryDirectory);
     mkdirs(_megaGalleryDirectory);
+    await flutter('update-packages');
     await dart(<String>['dev/tools/mega_gallery.dart', '--out=${_megaGalleryDirectory.path}']);
   });
 
-  final Map<String, dynamic> data = <String, dynamic>{
+  final data = <String, dynamic>{
     ...(await _run(_FlutterRepoBenchmark())).asMap('flutter_repo', 'batch'),
     ...(await _run(_FlutterRepoBenchmark(watch: true))).asMap('flutter_repo', 'watch'),
     ...(await _run(_MegaGalleryBenchmark())).asMap('mega_gallery', 'batch'),
@@ -56,7 +60,7 @@ class _BenchmarkResult {
 }
 
 abstract class _Benchmark {
-  _Benchmark({ this.watch = false });
+  _Benchmark({this.watch = false});
 
   final bool watch;
 
@@ -64,26 +68,30 @@ abstract class _Benchmark {
 
   Directory get directory;
 
-  List<String> get options => <String>[
-    '--benchmark',
-    if (watch) '--watch',
-  ];
+  List<String> get options => <String>['--benchmark', '--no-plugins', if (watch) '--watch'];
 
   Future<double> execute(int iteration, int targetIterations) async {
     section('Analyze $title ${watch ? 'with watcher' : ''} - ${iteration + 1} / $targetIterations');
-    final Stopwatch stopwatch = Stopwatch();
-    await inDirectory<void>(directory, () async {
-      stopwatch.start();
-      await flutter('analyze', options: options);
-      stopwatch.stop();
+    final stopwatch = Stopwatch();
+    final heartbeatTimer = Timer.periodic(_kHeartbeatInterval, (Timer _) {
+      print('Analysis in progress (${stopwatch.elapsed.inSeconds}s)...');
     });
+    try {
+      await inDirectory<void>(directory, () async {
+        stopwatch.start();
+        await flutter('analyze', options: options);
+        stopwatch.stop();
+      });
+    } finally {
+      heartbeatTimer.cancel();
+    }
     return stopwatch.elapsedMicroseconds / (1000.0 * 1000.0);
   }
 }
 
 /// Times how long it takes to analyze the Flutter repository.
 class _FlutterRepoBenchmark extends _Benchmark {
-  _FlutterRepoBenchmark({ bool watch = false }) : super(watch: watch);
+  _FlutterRepoBenchmark({super.watch});
 
   @override
   String get title => 'Flutter repo';
@@ -93,14 +101,13 @@ class _FlutterRepoBenchmark extends _Benchmark {
 
   @override
   List<String> get options {
-    return super.options
-      ..add('--flutter-repo');
+    return super.options..add('--flutter-repo');
   }
 }
 
 /// Times how long it takes to analyze the generated "mega_gallery" app.
 class _MegaGalleryBenchmark extends _Benchmark {
-  _MegaGalleryBenchmark({ bool watch = false }) : super(watch: watch);
+  _MegaGalleryBenchmark({super.watch});
 
   @override
   String get title => 'mega gallery';
@@ -111,8 +118,8 @@ class _MegaGalleryBenchmark extends _Benchmark {
 
 /// Runs `benchmark` several times and reports the results.
 Future<_BenchmarkResult> _run(_Benchmark benchmark) async {
-  final List<double> results = <double>[];
-  for (int i = 0; i < _kRunsPerBenchmark; i += 1) {
+  final results = <double>[];
+  for (var i = 0; i < _kRunsPerBenchmark; i += 1) {
     // Delete cached analysis results.
     rmTree(dir('${Platform.environment['HOME']}/.dartServer'));
     results.add(await benchmark.execute(i, _kRunsPerBenchmark));

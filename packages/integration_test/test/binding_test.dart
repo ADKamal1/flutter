@@ -5,11 +5,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-
-import 'package:integration_test/integration_test.dart';
-import 'package:integration_test/common.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
+import 'package:integration_test/common.dart';
+import 'package:integration_test/integration_test.dart';
 import 'package:vm_service/vm_service.dart' as vm;
 
 vm.Timeline _kTimelines = vm.Timeline(
@@ -19,50 +17,68 @@ vm.Timeline _kTimelines = vm.Timeline(
 );
 
 Future<void> main() async {
-  Future<Map<String, dynamic>> request;
+  Future<Map<String, dynamic>>? request;
 
   group('Test Integration binding', () {
-    final WidgetsBinding binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-    assert(binding is IntegrationTestWidgetsFlutterBinding);
-    final IntegrationTestWidgetsFlutterBinding integrationBinding = binding as IntegrationTestWidgetsFlutterBinding;
+    final IntegrationTestWidgetsFlutterBinding binding =
+        IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-    MockVM mockVM;
-    final List<int> clockTimes = <int>[100, 200];
+    FakeVM? fakeVM;
 
     setUp(() {
-      request = integrationBinding.callback(<String, String>{
-        'command': 'request_data',
-      });
-      mockVM = MockVM();
-      when(mockVM.getVMTimeline(
-        timeOriginMicros: anyNamed('timeOriginMicros'),
-        timeExtentMicros: anyNamed('timeExtentMicros'),
-      )).thenAnswer((_) => Future<vm.Timeline>.value(_kTimelines));
-      when(mockVM.getVMTimelineMicros()).thenAnswer(
-        (_) => Future<vm.Timestamp>.value(vm.Timestamp(timestamp: clockTimes.removeAt(0))),
-      );
+      request = binding.callback(<String, String>{'command': 'request_data'});
+      fakeVM = FakeVM(timeline: _kTimelines);
     });
 
     testWidgets('Run Integration app', (WidgetTester tester) async {
-      runApp(const MaterialApp(
-        home: Text('Test'),
-      ));
-      expect(tester.binding, integrationBinding);
-      integrationBinding.reportData = <String, dynamic>{'answer': 42};
+      runApp(const MaterialApp(home: Text('Test')));
+      expect(tester.binding, binding);
+      binding.reportData = <String, dynamic>{'answer': 42};
+      await tester.pump();
+    });
+
+    testWidgets('hitTesting works when using setSurfaceSize', (WidgetTester tester) async {
+      var invocations = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: GestureDetector(
+              onTap: () {
+                invocations++;
+              },
+              child: const Text('Test'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(Text));
+      await tester.pump();
+      expect(invocations, 1);
+
+      await tester.binding.setSurfaceSize(const Size(200, 300));
+      await tester.pump();
+      await tester.tap(find.byType(Text));
+      await tester.pump();
+      expect(invocations, 2);
+
+      await tester.binding.setSurfaceSize(null);
+      await tester.pump();
+      await tester.tap(find.byType(Text));
+      await tester.pump();
+      expect(invocations, 3);
     });
 
     testWidgets('setSurfaceSize works', (WidgetTester tester) async {
       await tester.pumpWidget(const MaterialApp(home: Center(child: Text('Test'))));
 
-      final Size windowCenter = tester.binding.window.physicalSize /
-          tester.binding.window.devicePixelRatio /
-          2;
-      final double windowCenterX = windowCenter.width;
-      final double windowCenterY = windowCenter.height;
+      final Size viewCenter = tester.view.physicalSize / tester.view.devicePixelRatio / 2;
+      final double viewCenterX = viewCenter.width;
+      final double viewCenterY = viewCenter.height;
 
       Offset widgetCenter = tester.getRect(find.byType(Text)).center;
-      expect(widgetCenter.dx, windowCenterX);
-      expect(widgetCenter.dy, windowCenterY);
+      expect(widgetCenter.dx, viewCenterX);
+      expect(widgetCenter.dy, viewCenterY);
 
       await tester.binding.setSurfaceSize(const Size(200, 300));
       await tester.pump();
@@ -73,32 +89,78 @@ Future<void> main() async {
       await tester.binding.setSurfaceSize(null);
       await tester.pump();
       widgetCenter = tester.getRect(find.byType(Text)).center;
-      expect(widgetCenter.dx, windowCenterX);
-      expect(widgetCenter.dy, windowCenterY);
+      expect(widgetCenter.dx, viewCenterX);
+      expect(widgetCenter.dy, viewCenterY);
     });
 
     testWidgets('Test traceAction', (WidgetTester tester) async {
-      await integrationBinding.enableTimeline(vmService: mockVM);
-      await integrationBinding.traceAction(() async {});
-      expect(integrationBinding.reportData, isNotNull);
-      expect(integrationBinding.reportData.containsKey('timeline'), true);
-      expect(
-        json.encode(integrationBinding.reportData['timeline']),
-        json.encode(_kTimelines),
-      );
+      await binding.enableTimeline(vmService: fakeVM);
+      await binding.traceAction(() async {});
+      expect(binding.reportData, isNotNull);
+      expect(binding.reportData!.containsKey('timeline'), true);
+      expect(json.encode(binding.reportData!['timeline']), json.encode(_kTimelines));
+    });
+
+    group('defaultTestTimeout', () {
+      final Timeout originalTimeout = binding.defaultTestTimeout;
+      tearDown(() {
+        binding.defaultTestTimeout = originalTimeout;
+      });
+
+      test('can be configured', () {
+        const newTimeout = Timeout(Duration(seconds: 17));
+        binding.defaultTestTimeout = newTimeout;
+        expect(binding.defaultTestTimeout, newTimeout);
+      });
+    });
+
+    // Regression test for https://github.com/flutter/flutter/issues/66006.
+    testWidgets('root view reports correct dimensions', (WidgetTester tester) async {
+      await tester.pumpWidget(const Placeholder());
+
+      expect(tester.binding.renderView.paintBounds, const Rect.fromLTWH(0, 0, 2400, 1800));
+    });
+
+    testWidgets('integration test has no label', (WidgetTester tester) async {
+      expect(binding.label, null);
     });
   });
 
   tearDownAll(() async {
-    // This part is outside the group so that `request` has been compeleted as
-    // part of the `tearDownAll` registerred in the group during
+    // This part is outside the group so that `request` has been completed as
+    // part of the `tearDownAll` registered in the group during
     // `IntegrationTestWidgetsFlutterBinding` initialization.
-    final Map<String, dynamic> response =
-        (await request)['response'] as Map<String, dynamic>;
-    final String message = response['message'] as String;
+    final response = (await request)!['response'] as Map<String, dynamic>;
+    final message = response['message'] as String;
     final Response result = Response.fromJson(message);
-    assert(result.data['answer'] == 42);
+    assert(result.data!['answer'] == 42);
   });
 }
 
-class MockVM extends Mock implements vm.VmService {}
+class FakeVM extends Fake implements vm.VmService {
+  FakeVM({required this.timeline});
+
+  vm.Timeline timeline;
+
+  @override
+  Future<vm.Timeline> getVMTimeline({int? timeOriginMicros, int? timeExtentMicros}) async {
+    return timeline;
+  }
+
+  int lastTimeStamp = 0;
+  @override
+  Future<vm.Timestamp> getVMTimelineMicros() async {
+    lastTimeStamp += 100;
+    return vm.Timestamp(timestamp: lastTimeStamp);
+  }
+
+  @override
+  Future<vm.Success> setVMTimelineFlags(List<String> recordedStreams) async {
+    return vm.Success();
+  }
+
+  @override
+  Future<vm.Success> clearVMTimeline() async {
+    return vm.Success();
+  }
+}

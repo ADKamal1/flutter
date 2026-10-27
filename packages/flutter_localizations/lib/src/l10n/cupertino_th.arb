@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "เลือกทั้งหมด",
   "tabSemanticsLabel": "แท็บที่ $tabIndex จาก $tabCount",
   "modalBarrierDismissLabel": "ปิด",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "ค้นหา",
+  "noSpellCheckReplacementsLabel": "ไม่พบรายการแทนที่",
+  "menuDismissLabel": "ปิดเมนู",
+  "lookUpButtonLabel": "ค้นหา",
+  "searchWebButtonLabel": "ค้นหาบนอินเทอร์เน็ต",
+  "shareButtonLabel": "แชร์...",
+  "clearButtonLabel": "ล้าง",
+  "cancelButtonLabel": "ยกเลิก",
+  "backButtonLabel": "กลับ",
+  "expansionTileExpandedHint": "แตะสองครั้งเพื่อยุบ",
+  "expansionTileCollapsedHint": "แตะสองครั้งเพื่อขยาย",
+  "expansionTileExpandedTapHint": "ยุบ",
+  "expansionTileCollapsedTapHint": "ขยายเพื่อดูรายละเอียดเพิ่มเติม",
+  "expandedHint": "ยุบ",
+  "collapsedHint": "ขยาย"
 }

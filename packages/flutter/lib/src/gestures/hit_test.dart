@@ -2,55 +2,70 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/rendering.dart';
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import 'events.dart';
 
-/// An object that can hit-test pointers.
-abstract class HitTestable {
-  // This class is intended to be used as an interface, and should not be
-  // extended directly; this constructor prevents instantiation and extension.
-  HitTestable._();
+export 'dart:ui' show Offset;
 
-  /// Check whether the given position hits this object.
-  ///
-  /// If this given position hits this object, consider adding a [HitTestEntry]
-  /// to the given hit test result.
+export 'package:vector_math/vector_math_64.dart' show Matrix4;
+
+export 'events.dart' show PointerEvent;
+
+/// An object that can hit-test pointers.
+abstract interface class HitTestable {
+  /// Deprecated. Use [hitTestInView] instead.
+  @Deprecated(
+    'Use hitTestInView and specify the view to hit test. '
+    'This feature was deprecated after v3.11.0-20.0.pre.',
+  )
   void hitTest(HitTestResult result, Offset position);
+
+  /// Fills the provided [HitTestResult] with [HitTestEntry]s for objects that
+  /// are hit at the given `position` in the view identified by `viewId`.
+  void hitTestInView(HitTestResult result, Offset position, int viewId);
 }
 
 /// An object that can dispatch events.
-abstract class HitTestDispatcher {
-  // This class is intended to be used as an interface, and should not be
-  // extended directly; this constructor prevents instantiation and extension.
-  HitTestDispatcher._();
-
+abstract interface class HitTestDispatcher {
   /// Override this method to dispatch events.
   void dispatchEvent(PointerEvent event, HitTestResult result);
 }
 
 /// An object that can handle events.
-abstract class HitTestTarget {
-  // This class is intended to be used as an interface, and should not be
-  // extended directly; this constructor prevents instantiation and extension.
-  HitTestTarget._();
-
+///
+/// The type must implement [NativeHitTestTarget] if it represents a platform view.
+// TODO(hellohuanlin): Make RenderAndroidView and RenderAppKitView to extend NativeHitTestTarget.
+// See: https://github.com/flutter/flutter/issues/184440.
+abstract interface class HitTestTarget {
   /// Override this method to receive events.
-  void handleEvent(PointerEvent event, HitTestEntry entry);
+  void handleEvent(PointerEvent event, HitTestEntry<HitTestTarget> entry);
 }
+
+/// A mixin that represents a hit test target backed by a platform view.
+///
+/// See also:
+///
+///   * [HitTestTarget].
+// TODO(hellohuanlin): Make RenderAndroidView and RenderAppKitView to extend NativeHitTestTarget.
+// See: https://github.com/flutter/flutter/issues/184440.
+mixin NativeHitTestTarget {}
 
 /// Data collected during a hit test about a specific [HitTestTarget].
 ///
 /// Subclass this object to pass additional information from the hit test phase
 /// to the event propagation phase.
-class HitTestEntry {
+@optionalTypeArgs
+class HitTestEntry<T extends HitTestTarget> {
   /// Creates a hit test entry.
   HitTestEntry(this.target);
 
   /// The [HitTestTarget] encountered during the hit test.
-  final HitTestTarget target;
+  final T target;
 
   @override
   String toString() => '${describeIdentity(this)}($target)';
@@ -90,7 +105,7 @@ class _MatrixTransformPart extends _TransformPart {
 
   @override
   Matrix4 multiply(Matrix4 rhs) {
-    return matrix * rhs as Matrix4;
+    return matrix.multiplied(rhs);
   }
 }
 
@@ -101,7 +116,7 @@ class _OffsetTransformPart extends _TransformPart {
 
   @override
   Matrix4 multiply(Matrix4 rhs) {
-    return rhs.clone()..leftTranslate(offset.dx, offset.dy);
+    return rhs.clone()..leftTranslateByDouble(offset.dx, offset.dy, 0, 1);
   }
 }
 
@@ -109,9 +124,9 @@ class _OffsetTransformPart extends _TransformPart {
 class HitTestResult {
   /// Creates an empty hit test result.
   HitTestResult()
-     : _path = <HitTestEntry>[],
-       _transforms = <Matrix4>[Matrix4.identity()],
-       _localTransforms = <_TransformPart>[];
+    : _path = <HitTestEntry>[],
+      _transforms = <Matrix4>[Matrix4.identity()],
+      _localTransforms = <_TransformPart>[];
 
   /// Wraps `result` (usually a subtype of [HitTestResult]) to create a
   /// generic [HitTestResult].
@@ -120,9 +135,9 @@ class HitTestResult {
   /// added to the wrapped `result` (both share the same underlying data
   /// structure to store [HitTestEntry]s).
   HitTestResult.wrap(HitTestResult result)
-     : _path = result._path,
-       _transforms = result._transforms,
-       _localTransforms = result._localTransforms;
+    : _path = result._path,
+      _transforms = result._transforms,
+      _localTransforms = result._localTransforms;
 
   /// An unmodifiable list of [HitTestEntry] objects recorded during the hit test.
   ///
@@ -208,15 +223,14 @@ class HitTestResult {
   ///    around this function for hit testing on [RenderBox]s.
   @protected
   void pushTransform(Matrix4 transform) {
-    assert(transform != null);
     assert(
       _debugVectorMoreOrLessEquals(transform.getRow(2), Vector4(0, 0, 1, 0)) &&
-      _debugVectorMoreOrLessEquals(transform.getColumn(2), Vector4(0, 0, 1, 0)),
+          _debugVectorMoreOrLessEquals(transform.getColumn(2), Vector4(0, 0, 1, 0)),
       'The third row and third column of a transform matrix for pointer '
       'events must be Vector4(0, 0, 1, 0) to ensure that a transformed '
       'point is directly under the pointing device. Did you forget to run the paint '
       'matrix through PointerEvent.removePerspectiveTransform? '
-      'The provided matrix is:\n$transform'
+      'The provided matrix is:\n$transform',
     );
     _localTransforms.add(_MatrixTransformPart(transform));
   }
@@ -248,7 +262,6 @@ class HitTestResult {
   ///    around this function for hit testing on [RenderSliver]s.
   @protected
   void pushOffset(Offset offset) {
-    assert(offset != null);
     _localTransforms.add(_OffsetTransformPart(offset));
   }
 
@@ -267,15 +280,20 @@ class HitTestResult {
   ///    function pair in more details.
   @protected
   void popTransform() {
-    if (_localTransforms.isNotEmpty)
+    if (_localTransforms.isNotEmpty) {
       _localTransforms.removeLast();
-    else
+    } else {
       _transforms.removeLast();
+    }
     assert(_transforms.isNotEmpty);
   }
 
-  bool _debugVectorMoreOrLessEquals(Vector4 a, Vector4 b, { double epsilon = precisionErrorTolerance }) {
-    bool result = true;
+  bool _debugVectorMoreOrLessEquals(
+    Vector4 a,
+    Vector4 b, {
+    double epsilon = precisionErrorTolerance,
+  }) {
+    var result = true;
     assert(() {
       final Vector4 difference = a - b;
       result = difference.storage.every((double component) => component.abs() < epsilon);

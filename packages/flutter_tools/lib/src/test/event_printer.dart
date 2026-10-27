@@ -3,42 +3,40 @@
 // found in the LICENSE file.
 
 import '../convert.dart';
-import '../globals.dart' as globals;
+
+import 'test_device.dart';
 import 'watcher.dart';
 
 /// Prints JSON events when running a test in --machine mode.
 class EventPrinter extends TestWatcher {
-  EventPrinter({StringSink out, TestWatcher parent})
-    : _out = out ?? globals.stdio.stdout,
-      _parent = parent;
+  EventPrinter({required this._out, this._parent});
 
   final StringSink _out;
-  final TestWatcher _parent;
+  final TestWatcher? _parent;
 
   @override
-  void handleStartedProcess(ProcessEvent event) {
-    _sendEvent('test.startedProcess',
-        <String, dynamic>{'observatoryUri': event.observatoryUri.toString()});
-    _parent?.handleStartedProcess(event);
+  void handleStartedDevice(Uri? vmServiceUri) {
+    _sendEvent('test.startedProcess', <String, dynamic>{'vmServiceUri': vmServiceUri?.toString()});
+    _parent?.handleStartedDevice(vmServiceUri);
   }
 
   @override
-  Future<void> handleTestCrashed(ProcessEvent event) async {
-    return _parent?.handleTestCrashed(event);
+  Future<void> handleTestCrashed(TestDevice testDevice) async {
+    return _parent?.handleTestCrashed(testDevice);
   }
 
   @override
-  Future<void> handleTestTimedOut(ProcessEvent event) async {
-    return _parent?.handleTestTimedOut(event);
+  Future<void> handleTestTimedOut(TestDevice testDevice) async {
+    return _parent?.handleTestTimedOut(testDevice);
   }
 
   @override
-  Future<void> handleFinishedTest(ProcessEvent event) async {
-    return _parent?.handleFinishedTest(event);
+  Future<void> handleFinishedTest(TestDevice testDevice) async {
+    return _parent?.handleFinishedTest(testDevice);
   }
 
-  void _sendEvent(String name, [ dynamic params ]) {
-    final Map<String, dynamic> map = <String, dynamic>{'event': name};
+  void _sendEvent(String name, [dynamic params]) {
+    final map = <String, dynamic>{'event': name};
     if (params != null) {
       map['params'] = params;
     }

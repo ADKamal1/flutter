@@ -3,145 +3,349 @@
 // found in the LICENSE file.
 
 import 'package:file/memory.dart';
+import 'package:flutter_tools/src/artifacts.dart';
+import 'package:flutter_tools/src/base/config.dart';
+import 'package:flutter_tools/src/base/dds.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/io.dart';
+import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/build_info.dart';
+import 'package:flutter_tools/src/build_system/tools/shader_compiler.dart';
 import 'package:flutter_tools/src/compile.dart';
+import 'package:flutter_tools/src/devfs.dart';
 import 'package:flutter_tools/src/device.dart';
 import 'package:flutter_tools/src/resident_runner.dart';
 import 'package:flutter_tools/src/run_cold.dart';
+import 'package:flutter_tools/src/tracing.dart';
 import 'package:flutter_tools/src/vmservice.dart';
-import 'package:meta/meta.dart';
-import 'package:mockito/mockito.dart';
+import 'package:test/fake.dart';
+import 'package:vm_service/vm_service.dart';
 
 import '../src/common.dart';
 import '../src/context.dart';
-import '../src/mocks.dart';
+import '../src/fakes.dart';
+import 'resident_runner_helpers.dart' show createColdRunner;
 
 void main() {
-  testUsingContext('Exits with code 2 when when HttpException is thrown '
-    'during VM service connection', () async {
-    final MockResidentCompiler residentCompiler = MockResidentCompiler();
-    final MockDevice mockDevice = MockDevice();
-    when(mockDevice.supportsHotReload).thenReturn(true);
-    when(mockDevice.supportsHotRestart).thenReturn(false);
-    when(mockDevice.targetPlatform).thenAnswer((Invocation _) async => TargetPlatform.tester);
-    when(mockDevice.sdkNameAndVersion).thenAnswer((Invocation _) async => 'Android 10');
+  testUsingContext('Exits with code 2 when HttpException is thrown '
+      'during VM service connection', () async {
+    final residentCompiler = FakeResidentCompiler();
+    final device = FakeDevice()
+      ..supportsHotReload = true
+      ..supportsHotRestart = false;
 
-    final List<FlutterDevice> devices = <FlutterDevice>[
+    final devices = <FlutterDevice>[
       TestFlutterDevice(
-        device: mockDevice,
+        device: device,
         generator: residentCompiler,
-        exception: const HttpException('Connection closed before full header was received, '
-            'uri = http://127.0.0.1:63394/5ZmLv8A59xY=/ws'),
+        exception: const HttpException(
+          'Connection closed before full header was received, '
+          'uri = http://127.0.0.1:63394/5ZmLv8A59xY=/ws',
+        ),
+        vmServiceUri: Future<Uri>.value(Uri.parse('http://127.0.0.1:63394/5ZmLv8A59xY=/ws')),
       ),
     ];
 
-    final int exitCode = await ColdRunner(devices,
+    final int exitCode = await createColdRunner(
+      devices,
       debuggingOptions: DebuggingOptions.enabled(BuildInfo.debug),
+      target: 'main.dart',
     ).attach();
     expect(exitCode, 2);
   });
 
   group('cleanupAtFinish()', () {
-    MockFlutterDevice mockFlutterDeviceFactory(Device device) {
-      final MockFlutterDevice mockFlutterDevice = MockFlutterDevice();
-      when(mockFlutterDevice.stopEchoingDeviceLog()).thenAnswer((Invocation invocation) => Future<void>.value(null));
-      when(mockFlutterDevice.device).thenReturn(device);
-      return mockFlutterDevice;
-    }
-
     testUsingContext('disposes each device', () async {
-      final MockDevice mockDevice1 = MockDevice();
-      final MockDevice mockDevice2 = MockDevice();
-      final MockFlutterDevice mockFlutterDevice1 = mockFlutterDeviceFactory(mockDevice1);
-      final MockFlutterDevice mockFlutterDevice2 = mockFlutterDeviceFactory(mockDevice2);
+      final device1 = FakeDevice();
+      final device2 = FakeDevice();
+      final flutterDevice1 = FakeFlutterDevice(device1);
+      final flutterDevice2 = FakeFlutterDevice(device2);
 
-      final List<FlutterDevice> devices = <FlutterDevice>[mockFlutterDevice1, mockFlutterDevice2];
+      final devices = <FlutterDevice>[flutterDevice1, flutterDevice2];
 
-      await ColdRunner(devices,
+      await createColdRunner(
+        devices,
         debuggingOptions: DebuggingOptions.enabled(BuildInfo.debug),
+        target: 'main.dart',
       ).cleanupAtFinish();
 
-      verify(mockDevice1.dispose());
-      verify(mockFlutterDevice1.stopEchoingDeviceLog());
-      verify(mockDevice2.dispose());
-      verify(mockFlutterDevice2.stopEchoingDeviceLog());
+      expect(flutterDevice1.stopEchoingDeviceLogCount, 1);
+      expect(flutterDevice2.stopEchoingDeviceLogCount, 1);
+      expect(device2.wasDisposed, true);
+      expect(device1.wasDisposed, true);
     });
   });
 
   group('cold run', () {
-    testUsingContext('returns 1 if not prebuilt mode & mainPath does not exist', () async {
-      final MockDevice mockDevice = MockDevice();
-      final MockFlutterDevice mockFlutterDevice = MockFlutterDevice();
-      when(mockFlutterDevice.device).thenReturn(mockDevice);
-      final List<FlutterDevice> devices = <FlutterDevice>[mockFlutterDevice];
-      final int result = await ColdRunner(
-        devices,
-        debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
-      ).run();
+    late MemoryFileSystem memoryFileSystem;
+    late FakePlatform fakePlatform;
 
-      expect(result, 1);
-      expect(testLogger.errorText, matches(r'Tried to run .*, but that file does not exist\.'));
-      expect(testLogger.errorText, matches(r'Consider using the -t option to specify the Dart file to start\.'));
+    setUp(() {
+      memoryFileSystem = MemoryFileSystem();
+      fakePlatform = FakePlatform(environment: <String, String>{});
     });
 
     testUsingContext('calls runCold on attached device', () async {
-      final MockDevice mockDevice = MockDevice();
-      final MockFlutterDevice mockFlutterDevice = MockFlutterDevice();
-      when(mockFlutterDevice.device).thenReturn(mockDevice);
-      when(mockFlutterDevice.runCold(
-          coldRunner: anyNamed('coldRunner'),
-          route: anyNamed('route')
-      )).thenAnswer((Invocation invocation) => Future<int>.value(1));
-      final List<FlutterDevice> devices = <FlutterDevice>[mockFlutterDevice];
+      final device = FakeDevice();
+      final flutterDevice = FakeFlutterDevice(device)..runColdCode = 1;
+      final devices = <FlutterDevice>[flutterDevice];
       final File applicationBinary = MemoryFileSystem.test().file('binary');
-      final int result = await ColdRunner(
+      final int result = await createColdRunner(
         devices,
         applicationBinary: applicationBinary,
         debuggingOptions: DebuggingOptions.enabled(BuildInfo.debug),
+        target: 'main.dart',
       ).run();
 
       expect(result, 1);
-      verify(mockFlutterDevice.runCold(
-          coldRunner: anyNamed('coldRunner'),
-          route: anyNamed('route'),
-      ));
     });
+
+    testUsingContext(
+      'with traceStartup, no env variable',
+      () async {
+        final device = FakeDevice();
+        final flutterDevice = FakeFlutterDevice(device);
+        final devices = <FlutterDevice>[flutterDevice];
+        final File applicationBinary = MemoryFileSystem.test().file('binary');
+        final int result = await createColdRunner(
+          devices,
+          applicationBinary: applicationBinary,
+          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+          target: 'main.dart',
+          traceStartup: true,
+        ).run();
+
+        expect(result, 0);
+        expect(
+          memoryFileSystem
+              .directory(getBuildDirectory(Config.test(), memoryFileSystem))
+              .childFile('start_up_info.json')
+              .existsSync(),
+          true,
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => memoryFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+        Platform: () => fakePlatform,
+      },
+    );
+
+    testUsingContext(
+      'with traceStartup, env variable',
+      () async {
+        fakePlatform.environment[kFlutterTestOutputsDirEnvName] = 'test_output_dir';
+
+        final device = FakeDevice();
+        final flutterDevice = FakeFlutterDevice(device);
+        final devices = <FlutterDevice>[flutterDevice];
+        final File applicationBinary = MemoryFileSystem.test().file('binary');
+        final int result = await createColdRunner(
+          devices,
+          applicationBinary: applicationBinary,
+          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+          target: 'main.dart',
+          traceStartup: true,
+        ).run();
+
+        expect(result, 0);
+        expect(
+          memoryFileSystem
+              .directory('test_output_dir')
+              .childFile('start_up_info.json')
+              .existsSync(),
+          true,
+        );
+      },
+      overrides: <Type, Generator>{
+        FileSystem: () => memoryFileSystem,
+        ProcessManager: () => FakeProcessManager.any(),
+        Platform: () => fakePlatform,
+      },
+    );
   });
 }
 
-class MockFlutterDevice extends Mock implements FlutterDevice {}
-class MockDevice extends Mock implements Device {
-  MockDevice() {
-    when(isSupported()).thenReturn(true);
+class FakeFlutterDevice extends Fake implements FlutterDevice {
+  FakeFlutterDevice(this.device);
+
+  @override
+  Future<Uri>? get vmServiceUri => null;
+
+  @override
+  final Device device;
+
+  int stopEchoingDeviceLogCount = 0;
+
+  @override
+  Future<void> stopEchoingDeviceLog() async {
+    stopEchoingDeviceLogCount += 1;
   }
+
+  @override
+  FlutterVmService get vmService => FakeFlutterVmService();
+
+  int runColdCode = 0;
+
+  @override
+  Future<int> runCold({ColdRunner? coldRunner, String? route}) async {
+    return runColdCode;
+  }
+}
+
+class FakeDevice extends Fake implements Device {
+  @override
+  Future<bool> isSupported() async => true;
+
+  @override
+  bool supportsHotReload = false;
+
+  @override
+  bool supportsHotRestart = false;
+
+  @override
+  Future<String> get sdkNameAndVersion async => 'Android 10';
+
+  @override
+  String get name => 'test';
+
+  @override
+  String get displayName => name;
+
+  @override
+  Future<TargetPlatform> get targetPlatform async => TargetPlatform.tester;
+
+  @override
+  DartDevelopmentService get dds => FakeDartDevelopmentService();
+
+  bool wasDisposed = false;
+
+  @override
+  Future<void> dispose() async {
+    wasDisposed = true;
+  }
+}
+
+class FakeDartDevelopmentService extends Fake implements DartDevelopmentService {
+  @override
+  late Future<void> done;
+
+  @override
+  Uri? uri;
+
+  @override
+  Uri? devToolsUri;
+
+  @override
+  Uri? dtdUri;
+
+  @override
+  Future<void> startDartDevelopmentService(
+    Uri vmServiceUri, {
+    Artifacts? artifacts,
+    String? appName = 'Fake App',
+    int? ddsPort,
+    FlutterDevice? device,
+    bool? ipv6,
+    bool? disableServiceAuthCodes,
+    bool enableDevTools = false,
+    bool cacheStartupProfile = false,
+    String? google3WorkspaceRoot,
+    Uri? devToolsServerAddress,
+  }) async {}
+
+  @override
+  Future<void> shutdown() async {}
 }
 
 class TestFlutterDevice extends FlutterDevice {
   TestFlutterDevice({
-    @required Device device,
-    @required this.exception,
-    @required ResidentCompiler generator,
-  })  : assert(exception != null),
-        super(device, buildInfo: BuildInfo.debug, generator: generator);
+    required Device device,
+    required this.exception,
+    required ResidentCompiler generator,
+    Future<Uri>? vmServiceUri,
+  }) : super(
+         device,
+         toolContext: DelegatingToolContext(artifacts: Artifacts.test()),
+         targetPlatform: .unsupported,
+         buildInfo: BuildInfo.debug,
+         generator: generator,
+         developmentShaderCompiler: const FakeShaderCompiler(),
+       ) {
+    this.vmServiceUri = vmServiceUri;
+  }
 
   /// The exception to throw when the connect method is called.
   final Exception exception;
 
   @override
   Future<void> connect({
-    ReloadSources reloadSources,
-    Restart restart,
-    CompileExpression compileExpression,
-    GetSkSLMethod getSkSLMethod,
-    PrintStructuredErrorLogMethod printStructuredErrorLogMethod,
-    bool disableDds = false,
-    bool disableServiceAuthCodes = false,
-    int hostVmServicePort,
-    int ddsPort,
-    bool ipv6 = false,
+    required Uri vmServiceUri,
+    ReloadSources? reloadSources,
+    Restart? restart,
+    CompileExpression? compileExpression,
+    PrintStructuredErrorLogMethod? printStructuredErrorLogMethod,
+    required DebuggingOptions debuggingOptions,
   }) async {
     throw exception;
   }
+}
+
+class FakeResidentCompiler extends Fake implements ResidentCompiler {}
+
+class FakeFlutterVmService extends Fake implements FlutterVmService {
+  @override
+  VmService get service => FakeVmService();
+
+  @override
+  Future<List<FlutterView>> getFlutterViews({
+    bool returnEarly = false,
+    Duration delay = const Duration(milliseconds: 50),
+  }) async {
+    return <FlutterView>[];
+  }
+
+  @override
+  Future<bool> flutterAlreadyPaintedFirstUsefulFrame({String? isolateId}) async => true;
+
+  @override
+  Future<Response?> getTimeline() async {
+    return Response.parse(<String, dynamic>{
+      'traceEvents': <dynamic>[
+        <String, dynamic>{'name': kFlutterEngineMainEnterEventName, 'ts': 123},
+        <String, dynamic>{'name': kFirstFrameBuiltEventName, 'ts': 124},
+        <String, dynamic>{'name': kFirstFrameRasterizedEventName, 'ts': 124},
+      ],
+    });
+  }
+
+  @override
+  Future<void> setTimelineFlags(List<String> recordedStreams) async {}
+}
+
+class FakeVmService extends Fake implements VmService {
+  @override
+  Future<Success> streamListen(String streamId) async => Success();
+
+  @override
+  Stream<Event> get onExtensionEvent {
+    return Stream<Event>.fromIterable(<Event>[
+      Event(kind: 'Extension', extensionKind: 'Flutter.FirstFrame', timestamp: 1),
+    ]);
+  }
+}
+
+class FakeShaderCompiler implements DevelopmentShaderCompiler {
+  const FakeShaderCompiler();
+
+  @override
+  void configureCompiler(TargetPlatform? platform) {}
+
+  @override
+  Future<DevFSContent> recompileShader(DevFSContent inputShader) {
+    throw UnimplementedError();
+  }
+
+  @override
+  bool areDependenciesModified(DevFSContent shaderContent) => false;
 }

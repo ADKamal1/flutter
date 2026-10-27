@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../../gallery/demo.dart';
 
 class ModalBottomSheetDemo extends StatelessWidget {
+  const ModalBottomSheetDemo({super.key});
+
   static const String routeName = '/material/modal-bottom-sheet';
 
   @override
@@ -20,20 +22,22 @@ class ModalBottomSheetDemo extends StatelessWidget {
         child: ElevatedButton(
           child: const Text('SHOW BOTTOM SHEET'),
           onPressed: () {
-            showModalBottomSheet<void>(context: context, builder: (BuildContext context) {
-              return Container(
-                child: Padding(
+            showModalBottomSheet<void>(
+              context: context,
+              builder: (BuildContext context) {
+                return Padding(
                   padding: const EdgeInsets.all(32.0),
-                  child: Text('This is the modal bottom sheet. Slide down to dismiss.',
+                  child: Text(
+                    'This is the modal bottom sheet. Slide down to dismiss.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Theme.of(context).accentColor,
+                      color: Theme.of(context).colorScheme.secondary,
                       fontSize: 24.0,
                     ),
                   ),
-                ),
-              );
-            });
+                );
+              },
+            );
           },
         ),
       ),

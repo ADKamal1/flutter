@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:meta/meta.dart';
+import 'dart:async';
+
+import 'package:flutter_tools_core/flutter_tools_core.dart';
 import 'package:process/process.dart';
 
 import '../base/common.dart';
@@ -12,60 +14,92 @@ import '../base/io.dart';
 import '../base/logger.dart';
 import '../base/os.dart';
 import '../base/platform.dart';
+import '../base/process.dart';
 import '../base/user_messages.dart';
 import '../base/version.dart';
 import '../convert.dart';
-import '../doctor.dart';
+import '../doctor_validator.dart';
 import '../features.dart';
-import '../globals.dart' as globals;
 import 'android_sdk.dart';
-import 'android_studio.dart';
+import 'gradle_utils.dart' as gradle_utils;
+import 'java.dart';
 
-const int kAndroidSdkMinVersion = 29;
-final Version kAndroidJavaMinVersion = Version(1, 8, 0);
-final Version kAndroidSdkBuildToolsMinVersion = Version(28, 0, 3);
+AndroidWorkflow? get androidWorkflow => context.get<AndroidWorkflow>();
+AndroidValidator? get androidValidator => context.get<AndroidValidator>();
+AndroidLicenseValidator? get androidLicenseValidator => context.get<AndroidLicenseValidator>();
 
-AndroidWorkflow get androidWorkflow => context.get<AndroidWorkflow>();
-AndroidValidator get androidValidator => context.get<AndroidValidator>();
-AndroidLicenseValidator get androidLicenseValidator => context.get<AndroidLicenseValidator>();
+enum LicensesAccepted { none, some, all, unknown }
 
-enum LicensesAccepted {
-  none,
-  some,
-  all,
-  unknown,
-}
-
-final RegExp licenseCounts = RegExp(r'(\d+) of (\d+) SDK package licenses? not accepted.');
-final RegExp licenseNotAccepted = RegExp(r'licenses? not accepted', caseSensitive: false);
-final RegExp licenseAccepted = RegExp(r'All SDK package licenses accepted.');
+final licenseCounts = RegExp(r'(\d+) of (\d+) SDK package licenses? not accepted.');
+final licenseNotAccepted = RegExp(r'licenses? not accepted', caseSensitive: false);
+final licenseAccepted = RegExp(r'All SDK package licenses accepted.');
+final licensesNoLongerNeeded = RegExp(
+  r'--licenses option is no longer needed',
+  caseSensitive: false,
+);
 
 class AndroidWorkflow implements Workflow {
-  AndroidWorkflow({
-    @required AndroidSdk androidSdk,
-    @required FeatureFlags featureFlags,
-  }) : _androidSdk = androidSdk,
-       _featureFlags = featureFlags;
+  AndroidWorkflow({required this._androidSdkBuilder, required this._featureFlags});
 
-  final AndroidSdk _androidSdk;
+  final AndroidSdk? Function() _androidSdkBuilder;
+  late final AndroidSdk? _androidSdk = _androidSdkBuilder();
   final FeatureFlags _featureFlags;
 
   @override
   bool get appliesToHostPlatform => _featureFlags.isAndroidEnabled;
 
   @override
-  bool get canListDevices => _androidSdk != null
-    && _androidSdk.adbPath != null;
+  bool get canListDevices =>
+      appliesToHostPlatform && _androidSdk != null && _androidSdk.adbPath != null;
 
   @override
-  bool get canLaunchDevices => _androidSdk != null
-    && _androidSdk.adbPath != null
-    && _androidSdk.validateSdkWellFormed().isEmpty;
+  bool get canLaunchDevices =>
+      appliesToHostPlatform &&
+      _androidSdk != null &&
+      _androidSdk.adbPath != null &&
+      _androidSdk.validateSdkWellFormed().isEmpty;
 
   @override
-  bool get canListEmulators => _androidSdk != null
-    && _androidSdk.adbPath != null
-    && _androidSdk.emulatorPath != null;
+  bool get canListEmulators => canListDevices && _androidSdk?.emulatorPath != null;
+}
+
+Future<String?> getEmulatorVersion(AndroidSdk androidSdk, ProcessManager processManager) async {
+  try {
+    if (!processManager.canRun(androidSdk.emulatorPath)) {
+      return null;
+    }
+
+    final ProcessResult result = await processManager.run(<Object>[
+      androidSdk.emulatorPath!,
+      '-version',
+    ]);
+
+    if (result.exitCode != 0) {
+      return null;
+    }
+
+    final String output = result.stdout.toString().trim();
+
+    final String versionLine = output
+        .split('\n')
+        .firstWhere((String line) => line.contains('Android emulator version'), orElse: () => '');
+
+    if (versionLine.isNotEmpty) {
+      final regex = RegExp(r'Android emulator version\s+(.*)');
+      final Match? match = regex.firstMatch(versionLine);
+      if (match != null && match.groupCount >= 1) {
+        return match.group(1)?.trim();
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  } on Exception catch (_) {
+    return null;
+  } on Error catch (_) {
+    return null;
+  }
 }
 
 /// A validator that checks if the Android SDK and Java SDK are available and
@@ -77,239 +111,320 @@ class AndroidWorkflow implements Workflow {
 /// Android Studio.
 class AndroidValidator extends DoctorValidator {
   AndroidValidator({
-    @required AndroidSdk androidSdk,
-    @required AndroidStudio androidStudio,
-    @required FileSystem fileSystem,
-    @required Logger logger,
-    @required Platform platform,
-    @required ProcessManager processManager,
-    @required UserMessages userMessages,
-  }) : _androidSdk = androidSdk,
-       _androidStudio = androidStudio,
-       _fileSystem = fileSystem,
-       _logger = logger,
-       _operatingSystemUtils = OperatingSystemUtils(
-         fileSystem: fileSystem,
-         logger: logger,
-         platform: platform,
-         processManager: processManager,
-       ),
-       _platform = platform,
-       _processManager = processManager,
-       _userMessages = userMessages,
-       super('Android toolchain - develop for Android devices');
+    required this._java,
+    required this._androidSdk,
+    required this._logger,
+    required this._platform,
+    required this._userMessages,
+    required this._processManager,
+    required this._osUtils,
+  }) : super('Android toolchain - develop for Android devices');
 
-  final AndroidSdk _androidSdk;
-  final AndroidStudio _androidStudio;
-  final FileSystem _fileSystem;
+  final Java? _java;
+  final AndroidSdk? _androidSdk;
   final Logger _logger;
-  final OperatingSystemUtils _operatingSystemUtils;
   final Platform _platform;
-  final ProcessManager _processManager;
   final UserMessages _userMessages;
+  final ProcessManager _processManager;
+  final OperatingSystemUtils _osUtils;
 
   @override
   String get slowWarning => '${_task ?? 'This'} is taking a long time...';
-  String _task;
+  String? _task;
 
-  /// Finds the semantic version anywhere in a text.
-  static final RegExp _javaVersionPattern = RegExp(r'(\d+)(\.(\d+)(\.(\d+))?)?');
+  String androidCantRunJavaBinary(String javaBinary) =>
+      'Cannot execute $javaBinary to determine the version';
 
-  /// `java -version` response is not only a number, but also includes other
-  /// information eg. `openjdk version "1.7.0_212"`.
-  /// This method extracts only the semantic version from from that response.
-  static String _extractJavaVersion(String text) {
-    final Match match = _javaVersionPattern.firstMatch(text ?? '');
-    return text?.substring(match.start, match.end);
-  }
+  String get androidUnknownJavaVersion => 'Could not determine java version';
+
+  String androidJavaVersion(String javaVersion) => 'Java version $javaVersion';
+  String androidJavaMinimumVersion(String javaVersion) =>
+      'Java version $javaVersion is older than the minimum recommended version of ${gradle_utils.warnJavaMinVersionAndroid}';
+
+  String get _androidMissingJdk =>
+      'No Java Development Kit (JDK) found; You must have the environment '
+      'variable JAVA_HOME set and the java binary in your PATH. '
+      'You can download the JDK from https://www.oracle.com/technetwork/java/javase/downloads/.';
 
   /// Returns false if we cannot determine the Java version or if the version
-  /// is older that the minimum allowed version of 1.8.
-  Future<bool> _checkJavaVersion(String javaBinary, List<ValidationMessage> messages) async {
+  /// is older that the minimum allowed version.
+  Future<bool> _checkJavaVersion(List<ValidationMessage> messages) async {
     _task = 'Checking Java status';
     try {
-      if (!_processManager.canRun(javaBinary)) {
-        messages.add(ValidationMessage.error(_userMessages.androidCantRunJavaBinary(javaBinary)));
+      if (_java?.binaryPath == null) {
+        messages.add(ValidationMessage.error(_androidMissingJdk));
         return false;
       }
-      String javaVersionText;
+      messages.add(
+        ValidationMessage(_androidJdkLocationMessage(_java!.binaryPath, _java.javaSource)),
+      );
+      if (!_java.canRun()) {
+        messages.add(ValidationMessage.error(androidCantRunJavaBinary(_java.binaryPath)));
+        return false;
+      }
+      Version? javaVersion;
       try {
-        _logger.printTrace('java -version');
-        final ProcessResult result = await _processManager.run(<String>[javaBinary, '-version']);
-        if (result.exitCode == 0) {
-          final List<String> versionLines = (result.stderr as String).split('\n');
-          javaVersionText = versionLines.length >= 2 ? versionLines[1] : versionLines[0];
-        }
+        javaVersion = _java.version;
       } on Exception catch (error) {
         _logger.printTrace(error.toString());
       }
-      if (javaVersionText == null || javaVersionText.isEmpty) {
+      if (javaVersion == null) {
         // Could not determine the java version.
-        messages.add(ValidationMessage.error(_userMessages.androidUnknownJavaVersion));
+        messages.add(ValidationMessage.error(androidUnknownJavaVersion));
         return false;
       }
-      final Version javaVersion = Version.parse(_extractJavaVersion(javaVersionText));
-      if (javaVersion < kAndroidJavaMinVersion) {
-        messages.add(ValidationMessage.error(_userMessages.androidJavaMinimumVersion(javaVersionText)));
+      // Should this be modified to be evaluated based on gradle version used?
+      if (javaVersion < gradle_utils.errorJavaMinVersionAndroid) {
+        messages.add(ValidationMessage.error(androidJavaMinimumVersion(javaVersion.toString())));
         return false;
       }
-      messages.add(ValidationMessage(_userMessages.androidJavaVersion(javaVersionText)));
+      if (javaVersion < gradle_utils.warnJavaMinVersionAndroid) {
+        messages.add(ValidationMessage.hint(androidJavaMinimumVersion(javaVersion.toString())));
+        return true;
+      }
+      messages.add(ValidationMessage(androidJavaVersion(javaVersion.toString())));
       return true;
     } finally {
       _task = null;
     }
   }
 
-  @override
-  Future<ValidationResult> validate() async {
-    final List<ValidationMessage> messages = <ValidationMessage>[];
+  String _androidSdkLocation(String directory) => 'Android SDK at $directory';
 
-    if (_androidSdk == null) {
+  String _androidSdkPlatformToolsVersion(String platform, String tools) =>
+      'Platform $platform, build-tools $tools';
+
+  @override
+  Future<ValidationResult> validateImpl() async {
+    final messages = <ValidationMessage>[];
+    final AndroidSdk? androidSdk = _androidSdk;
+    if (androidSdk == null) {
       // No Android SDK found.
       if (_platform.environment.containsKey(kAndroidHome)) {
-        final String androidHomeDir = _platform.environment[kAndroidHome];
-        messages.add(ValidationMessage.error(_userMessages.androidBadSdkDir(kAndroidHome, androidHomeDir)));
+        final String androidHomeDir = _platform.environment[kAndroidHome]!;
+        messages.add(
+          ValidationMessage.error(_userMessages.androidBadSdkDir(kAndroidHome, androidHomeDir)),
+        );
       } else {
         // Instruct user to set [kAndroidSdkRoot] and not deprecated [kAndroidHome]
         // See https://github.com/flutter/flutter/issues/39301
-        messages.add(ValidationMessage.error(_userMessages.androidMissingSdkInstructions(_platform)));
+        messages.add(
+          ValidationMessage.error(_userMessages.androidMissingSdkInstructions(_platform)),
+        );
       }
       return ValidationResult(ValidationType.missing, messages);
     }
 
-    if (_androidSdk.licensesAvailable && !_androidSdk.platformToolsAvailable) {
+    messages.add(ValidationMessage(_androidSdkLocation(androidSdk.directory.path)));
+    messages.add(
+      ValidationMessage(
+        'Emulator version ${await getEmulatorVersion(androidSdk, _processManager) ?? 'unknown'}',
+      ),
+    );
+
+    _task = 'Validating Android SDK command line tools are available';
+    if (!androidSdk.cmdlineToolsAvailable) {
+      messages.add(
+        const ValidationMessage.error(
+          'cmdline-tools component is missing.\n'
+          'Try installing or updating Android Studio.\n'
+          'Alternatively, download the tools from https://developer.android.com/studio#command-line-tools-only '
+          'and make sure to set the ANDROID_HOME environment variable.\n'
+          'See https://developer.android.com/studio/command-line for more details.',
+        ),
+      );
+      return ValidationResult(ValidationType.missing, messages);
+    }
+
+    _task = 'Validating Android SDK licenses';
+    if (androidSdk.licensesAvailable && !androidSdk.platformToolsAvailable) {
       messages.add(ValidationMessage.hint(_userMessages.androidSdkLicenseOnly(kAndroidHome)));
       return ValidationResult(ValidationType.partial, messages);
     }
 
-    messages.add(ValidationMessage(_userMessages.androidSdkLocation(_androidSdk.directory)));
-
-    String sdkVersionText;
-    if (_androidSdk.latestVersion != null) {
-      if (_androidSdk.latestVersion.sdkLevel < kAndroidSdkMinVersion || _androidSdk.latestVersion.buildToolsVersion < kAndroidSdkBuildToolsMinVersion) {
-        messages.add(ValidationMessage.error(
-          _userMessages.androidSdkBuildToolsOutdated(
-            _androidSdk.sdkManagerPath,
-            kAndroidSdkMinVersion,
-            kAndroidSdkBuildToolsMinVersion.toString(),
-            _platform,
-          )),
+    String? sdkVersionText;
+    final AndroidSdkVersion? androidSdkLatestVersion = androidSdk.latestVersion;
+    if (androidSdkLatestVersion != null) {
+      if (androidSdkLatestVersion.sdkLevel < gradle_utils.compileSdkVersionInt ||
+          androidSdkLatestVersion.buildToolsVersion < gradle_utils.minBuildToolsVersion) {
+        messages.add(
+          ValidationMessage.error(
+            _userMessages.androidSdkBuildToolsOutdated(
+              gradle_utils.compileSdkVersionInt,
+              gradle_utils.minBuildToolsVersion.toString(),
+              _platform,
+            ),
+          ),
         );
         return ValidationResult(ValidationType.missing, messages);
       }
-      sdkVersionText = _userMessages.androidStatusInfo(_androidSdk.latestVersion.buildToolsVersionName);
+      sdkVersionText = _userMessages.androidStatusInfo(
+        androidSdkLatestVersion.buildToolsVersionName,
+      );
 
-      messages.add(ValidationMessage(_userMessages.androidSdkPlatformToolsVersion(
-        _androidSdk.latestVersion.platformName,
-        _androidSdk.latestVersion.buildToolsVersionName)));
+      messages.add(
+        ValidationMessage(
+          _androidSdkPlatformToolsVersion(
+            androidSdkLatestVersion.platformName,
+            androidSdkLatestVersion.buildToolsVersionName,
+          ),
+        ),
+      );
     } else {
       messages.add(ValidationMessage.error(_userMessages.androidMissingSdkInstructions(_platform)));
     }
 
     if (_platform.environment.containsKey(kAndroidHome)) {
-      final String androidHomeDir = _platform.environment[kAndroidHome];
+      final String androidHomeDir = _platform.environment[kAndroidHome]!;
       messages.add(ValidationMessage('$kAndroidHome = $androidHomeDir'));
     }
     if (_platform.environment.containsKey(kAndroidSdkRoot)) {
-      final String androidSdkRoot = _platform.environment[kAndroidSdkRoot];
+      final String androidSdkRoot = _platform.environment[kAndroidSdkRoot]!;
       messages.add(ValidationMessage('$kAndroidSdkRoot = $androidSdkRoot'));
     }
 
-    final List<String> validationResult = _androidSdk.validateSdkWellFormed();
+    _task = 'Validating Android SDK';
+    final List<String> validationResult = androidSdk.validateSdkWellFormed();
 
     if (validationResult.isNotEmpty) {
       // Android SDK is not functional.
-      messages.addAll(validationResult.map<ValidationMessage>((String message) {
-        return ValidationMessage.error(message);
-      }));
+      messages.addAll(
+        validationResult.map<ValidationMessage>((String message) {
+          return ValidationMessage.error(message);
+        }),
+      );
       messages.add(ValidationMessage(_userMessages.androidSdkInstallHelp(_platform)));
       return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
     }
 
-    // Now check for the JDK.
-    final String javaBinary = AndroidSdk.findJavaBinary(
-      androidStudio: _androidStudio,
-      fileSystem: _fileSystem,
-      operatingSystemUtils: _operatingSystemUtils,
-      platform: _platform,
-    );
-    if (javaBinary == null) {
-      messages.add(ValidationMessage.error(_userMessages.androidMissingJdk));
-      return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
+    _task = 'Checking for multiple ADB binaries';
+    final List<File> adbCandidates = _osUtils.whichAll('adb');
+    final String? sdkAdbPath = androidSdk.adbPath;
+    final uniqueAdbPaths = <String>{};
+
+    void addAdbPath(String path, FileSystem fs) {
+      try {
+        uniqueAdbPaths.add(fs.file(path).resolveSymbolicLinksSync());
+      } on Exception catch (_) {
+        uniqueAdbPaths.add(path);
+      }
     }
-    messages.add(ValidationMessage(_userMessages.androidJdkLocation(javaBinary)));
+
+    if (sdkAdbPath != null) {
+      addAdbPath(sdkAdbPath, androidSdk.directory.fileSystem);
+    }
+    for (final adbFile in adbCandidates) {
+      addAdbPath(adbFile.path, adbFile.fileSystem);
+    }
+
+    if (uniqueAdbPaths.length > 1) {
+      final warningMessage = StringBuffer(
+        'Multiple adb binaries found. This can cause conflicts '
+        'and device detection issues:\n',
+      );
+      for (final adbPath in uniqueAdbPaths) {
+        warningMessage.write('  - $adbPath\n');
+      }
+      messages.add(ValidationMessage.hint(warningMessage.toString().trim()));
+    }
+
+    _task = 'Finding Java binary';
 
     // Check JDK version.
-    if (! await _checkJavaVersion(javaBinary, messages)) {
+    if (!await _checkJavaVersion(messages)) {
       return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
     }
 
     // Success.
-    return ValidationResult(ValidationType.installed, messages, statusInfo: sdkVersionText);
+    return ValidationResult(ValidationType.success, messages, statusInfo: sdkVersionText);
   }
 }
 
 /// A subvalidator that checks if the licenses within the detected Android
 /// SDK have been accepted.
 class AndroidLicenseValidator extends DoctorValidator {
-  AndroidLicenseValidator() : super('Android license subvalidator',);
+  AndroidLicenseValidator({
+    required this._java,
+    required this._androidSdk,
+    required this._platform,
+    required this._processManager,
+    required this._logger,
+    required this._stdio,
+    required this._userMessages,
+  }) : super('Android license subvalidator');
+
+  final Java? _java;
+  final AndroidSdk? _androidSdk;
+  final Stdio _stdio;
+  final Platform _platform;
+  final ProcessManager _processManager;
+  final Logger _logger;
+  final UserMessages _userMessages;
 
   @override
   String get slowWarning => 'Checking Android licenses is taking an unexpectedly long time...';
 
+  String get _androidLicensesAll => 'All Android licenses accepted.';
+
+  String get _androidLicensesSome =>
+      'Some Android licenses not accepted. To resolve this, run: flutter doctor --android-licenses';
+
+  String get _androidLicensesNone =>
+      'Android licenses not accepted. To resolve this, run: flutter doctor --android-licenses';
+
+  String get _androidSdkShort => 'Unable to locate Android SDK.';
+
   @override
-  Future<ValidationResult> validate() async {
-    final List<ValidationMessage> messages = <ValidationMessage>[];
+  Future<ValidationResult> validateImpl() async {
+    final messages = <ValidationMessage>[];
 
     // Match pre-existing early termination behavior
-    if (globals.androidSdk == null || globals.androidSdk.latestVersion == null ||
-        globals.androidSdk.validateSdkWellFormed().isNotEmpty ||
-        ! await _checkJavaVersionNoOutput()) {
+    if (_androidSdk == null ||
+        _androidSdk.latestVersion == null ||
+        _androidSdk.validateSdkWellFormed().isNotEmpty ||
+        !await _checkJavaVersionNoOutput()) {
       return ValidationResult(ValidationType.missing, messages);
     }
 
-    final String sdkVersionText = userMessages.androidStatusInfo(globals.androidSdk.latestVersion.buildToolsVersionName);
+    final String sdkVersionText = _userMessages.androidStatusInfo(
+      _androidSdk.latestVersion!.buildToolsVersionName,
+    );
 
     // Check for licenses.
     switch (await licensesAccepted) {
       case LicensesAccepted.all:
-        messages.add(ValidationMessage(userMessages.androidLicensesAll));
-        break;
+        messages.add(ValidationMessage(_androidLicensesAll));
       case LicensesAccepted.some:
-        messages.add(ValidationMessage.hint(userMessages.androidLicensesSome));
+        messages.add(ValidationMessage.hint(_androidLicensesSome));
         return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
       case LicensesAccepted.none:
-        messages.add(ValidationMessage.error(userMessages.androidLicensesNone));
+        messages.add(ValidationMessage.error(_androidLicensesNone));
         return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
       case LicensesAccepted.unknown:
-        messages.add(ValidationMessage.error(userMessages.androidLicensesUnknown(globals.platform)));
+        messages.add(ValidationMessage.error(_userMessages.androidLicensesUnknown(_platform)));
         return ValidationResult(ValidationType.partial, messages, statusInfo: sdkVersionText);
     }
-    return ValidationResult(ValidationType.installed, messages, statusInfo: sdkVersionText);
+    return ValidationResult(ValidationType.success, messages, statusInfo: sdkVersionText);
   }
 
   Future<bool> _checkJavaVersionNoOutput() async {
-    final String javaBinary = AndroidSdk.findJavaBinary(
-      androidStudio: globals.androidStudio,
-      fileSystem: globals.fs,
-      operatingSystemUtils: globals.os,
-      platform: globals.platform,
-    );
+    final String? javaBinary = _java?.binaryPath;
+
     if (javaBinary == null) {
       return false;
     }
-    if (!globals.processManager.canRun(javaBinary)) {
+    if (!_processManager.canRun(javaBinary)) {
       return false;
     }
-    String javaVersion;
+    String? javaVersion;
     try {
-      final ProcessResult result = await globals.processManager.run(<String>[javaBinary, '-version']);
+      final ProcessResult result = await _processManager.run(<String>[javaBinary, '-version']);
       if (result.exitCode == 0) {
         final List<String> versionLines = (result.stderr as String).split('\n');
         javaVersion = versionLines.length >= 2 ? versionLines[1] : versionLines[0];
       }
     } on Exception catch (error) {
-      globals.printTrace(error.toString());
+      _logger.printTrace(error.toString());
     }
     if (javaVersion == null) {
       // Could not determine the java version.
@@ -319,12 +434,13 @@ class AndroidLicenseValidator extends DoctorValidator {
   }
 
   Future<LicensesAccepted> get licensesAccepted async {
-    LicensesAccepted status;
+    LicensesAccepted? status;
+    var sawNewCliLicensesMessage = false;
 
-    void _handleLine(String line) {
+    void handleLine(String line) {
       if (licenseCounts.hasMatch(line)) {
-        final Match match = licenseCounts.firstMatch(line);
-        if (match.group(1) != match.group(2)) {
+        final Match? match = licenseCounts.firstMatch(line);
+        if (match?.group(1) != match?.group(2)) {
           status = LicensesAccepted.some;
         } else {
           status = LicensesAccepted.none;
@@ -336,6 +452,8 @@ class AndroidLicenseValidator extends DoctorValidator {
         status = LicensesAccepted.none;
       } else if (licenseAccepted.hasMatch(line)) {
         status ??= LicensesAccepted.all;
+      } else if (licensesNoLongerNeeded.hasMatch(line)) {
+        sawNewCliLicensesMessage = true;
       }
     }
 
@@ -344,86 +462,174 @@ class AndroidLicenseValidator extends DoctorValidator {
     }
 
     try {
-      final Process process = await globals.processUtils.start(
-        <String>[globals.androidSdk.sdkManagerPath, '--licenses'],
-        environment: globals.androidSdk.sdkManagerEnv,
-      );
-      process.stdin.write('n\n');
+      final Process process = await _processManager.start(<String>[
+        _androidSdk!.sdkManagerPath!,
+        '--licenses',
+      ], environment: _java?.environment);
+      await ProcessUtils.writelnToStdinUnsafe(stdin: process.stdin, line: 'n');
       // We expect logcat streams to occasionally contain invalid utf-8,
       // see: https://github.com/flutter/flutter/pull/8864.
       final Future<void> output = process.stdout
-        .transform<String>(const Utf8Decoder(reportErrors: false))
-        .transform<String>(const LineSplitter())
-        .listen(_handleLine)
-        .asFuture<void>(null);
+          .transform<String>(const Utf8Decoder(reportErrors: false))
+          .transform<String>(const LineSplitter())
+          .listen(handleLine)
+          .asFuture<void>();
       final Future<void> errors = process.stderr
-        .transform<String>(const Utf8Decoder(reportErrors: false))
-        .transform<String>(const LineSplitter())
-        .listen(_handleLine)
-        .asFuture<void>(null);
+          .transform<String>(const Utf8Decoder(reportErrors: false))
+          .transform<String>(const LineSplitter())
+          .listen(handleLine)
+          .asFuture<void>();
       await Future.wait<void>(<Future<void>>[output, errors]);
-      return status ?? LicensesAccepted.unknown;
-    } on ProcessException catch (e) {
-      globals.printTrace('Failed to run Android sdk manager: $e');
+      if (status != null) {
+        return status!;
+      }
+      if (sawNewCliLicensesMessage) {
+        return _licensesAcceptedFromDisk();
+      }
+      return LicensesAccepted.unknown;
+    } on IOException catch (e) {
+      _logger.printTrace('Failed to run Android sdk manager: $e');
+      return LicensesAccepted.unknown;
+    }
+  }
+
+  /// Fallback license check for Android cmdline-tools versions where
+  /// `sdkmanager --licenses` no longer prints a parseable status
+  /// (see https://github.com/flutter/flutter/issues/191487).
+  LicensesAccepted _licensesAcceptedFromDisk() {
+    if (_androidSdk == null || !_androidSdk.licensesAvailable) {
+      return LicensesAccepted.none;
+    }
+    final Directory licensesDir = _androidSdk.directory.childDirectory('licenses');
+    try {
+      final bool hasAcceptedLicense = licensesDir.listSync().whereType<File>().any(
+        (File file) => !file.basename.startsWith('.') && file.lengthSync() > 0,
+      );
+      return hasAcceptedLicense ? LicensesAccepted.all : LicensesAccepted.none;
+    } on FileSystemException {
       return LicensesAccepted.unknown;
     }
   }
 
   /// Run the Android SDK manager tool in order to accept SDK licenses.
-  static Future<bool> runLicenseManager() async {
-    if (globals.androidSdk == null) {
-      globals.printStatus(userMessages.androidSdkShort);
+  Future<bool> runLicenseManager() async {
+    if (_androidSdk == null) {
+      _logger.printStatus(_androidSdkShort);
       return false;
     }
 
     if (!_canRunSdkManager()) {
-      throwToolExit(userMessages.androidMissingSdkManager(globals.androidSdk.sdkManagerPath, globals.platform));
+      throwToolExit(
+        'Android sdkmanager not found. Update to the latest Android SDK and ensure that '
+        'the cmdline-tools are installed to resolve this.',
+      );
     }
 
     try {
-      final Process process = await globals.processUtils.start(
-        <String>[globals.androidSdk.sdkManagerPath, '--licenses'],
-        environment: globals.androidSdk.sdkManagerEnv,
-      );
+      final Process process = await _processManager.start(<String>[
+        _androidSdk.sdkManagerPath!,
+        '--licenses',
+      ], environment: _java?.environment);
 
       // The real stdin will never finish streaming. Pipe until the child process
       // finishes.
-      unawaited(process.stdin.addStream(globals.stdio.stdin)
-        // If the process exits unexpectedly with an error, that will be
-        // handled by the caller.
-        .catchError((dynamic err, StackTrace stack) {
-          globals.printTrace('Echoing stdin to the licenses subprocess failed:');
-          globals.printTrace('$err\n$stack');
-        }
-      ));
+      unawaited(
+        process.stdin
+            .addStream(_stdio.stdin)
+            // If the process exits unexpectedly with an error, that will be
+            // handled by the caller.
+            .then(
+              (Object? socket) => socket,
+              onError: (dynamic err, StackTrace stack) {
+                _logger.printTrace('Echoing stdin to the licenses subprocess failed:');
+                _logger.printTrace('$err\n$stack');
+              },
+            ),
+      );
 
+      final stderrLines = <String>[];
       // Wait for stdout and stderr to be fully processed, because process.exitCode
       // may complete first.
       try {
         await Future.wait<void>(<Future<void>>[
-          globals.stdio.addStdoutStream(process.stdout),
-          globals.stdio.addStderrStream(process.stderr),
+          _stdio.addStdoutStream(process.stdout),
+          process.stderr.forEach((List<int> event) {
+            _stdio.stderr.add(event);
+            stderrLines.add(utf8.decode(event));
+          }),
         ]);
       } on Exception catch (err, stack) {
-        globals.printTrace('Echoing stdout or stderr from the license subprocess failed:');
-        globals.printTrace('$err\n$stack');
+        _logger.printTrace('Echoing stdout or stderr from the license subprocess failed:');
+        _logger.printTrace('$err\n$stack');
       }
 
       final int exitCode = await process.exitCode;
-      return exitCode == 0;
+      if (exitCode != 0) {
+        throwToolExit(_messageForSdkManagerError(stderrLines, exitCode));
+      }
+      return true;
     } on ProcessException catch (e) {
-      throwToolExit(userMessages.androidCannotRunSdkManager(
-        globals.androidSdk.sdkManagerPath,
-        e.toString(),
-        globals.platform,
-      ));
-      return false;
+      throwToolExit(
+        _userMessages.androidCannotRunSdkManager(
+          _androidSdk.sdkManagerPath ?? '',
+          e.toString(),
+          _platform,
+        ),
+      );
     }
   }
 
-  static bool _canRunSdkManager() {
-    assert(globals.androidSdk != null);
-    final String sdkManagerPath = globals.androidSdk.sdkManagerPath;
-    return globals.processManager.canRun(sdkManagerPath);
+  bool _canRunSdkManager() {
+    final String? sdkManagerPath = _androidSdk?.sdkManagerPath;
+    if (sdkManagerPath == null) {
+      return false;
+    }
+    return _processManager.canRun(sdkManagerPath);
   }
+
+  String _messageForSdkManagerError(List<String> androidSdkStderr, int exitCode) {
+    final String sdkManagerPath = _androidSdk!.sdkManagerPath!;
+
+    final bool failedDueToJdkIncompatibility = androidSdkStderr.join().contains(
+      RegExp(
+        r'java\.lang\.UnsupportedClassVersionError.*SdkManagerCli '
+        r'has been compiled by a more recent version of the Java Runtime',
+      ),
+    );
+
+    if (failedDueToJdkIncompatibility) {
+      return 'Android sdkmanager tool was found, but failed to run ($sdkManagerPath): "exited code $exitCode".\n'
+          'It appears the version of the Java binary used (${_java!.binaryPath}) is '
+          'too out-of-date and is incompatible with the Android sdkmanager tool.\n'
+          'If the Java binary came bundled with Android Studio, consider updating '
+          'your installation of Android studio. Alternatively, you can uninstall '
+          'the Android SDK command-line tools and install an earlier version. ';
+    }
+
+    return _userMessages.androidCannotRunSdkManager(
+      sdkManagerPath,
+      'exited code $exitCode',
+      _platform,
+    );
+  }
+}
+
+String _androidJdkLocationMessage(String location, JavaSource source) {
+  final String setWithConfigBreadcrumb = switch (source) {
+    JavaSource.androidStudio || JavaSource.path || JavaSource.javaHome =>
+      'To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.',
+    JavaSource.flutterConfig =>
+      'To change the current JDK, run: `flutter config --jdk-dir="path/to/jdk"`.',
+  };
+  final String sourceMessagePart = switch (source) {
+    JavaSource.androidStudio =>
+      'This is the JDK bundled with the latest Android Studio installation on this machine.',
+    JavaSource.javaHome => 'This JDK is specified by the JAVA_HOME environment variable.',
+    JavaSource.path => 'This JDK was found in the system PATH.',
+    JavaSource.flutterConfig => 'This JDK is specified in your Flutter configuration.',
+  };
+
+  return 'Java binary at: $location\n'
+      '$sourceMessagePart\n'
+      '$setWithConfigBreadcrumb';
 }

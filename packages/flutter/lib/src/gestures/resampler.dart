@@ -6,6 +6,8 @@ import 'dart:collection';
 
 import 'events.dart';
 
+export 'events.dart' show PointerEvent;
+
 /// A callback used by [PointerEventResampler.sample] and
 /// [PointerEventResampler.stop] to process a resampled `event`.
 typedef HandleEventCallback = void Function(PointerEvent event);
@@ -42,14 +44,17 @@ class PointerEventResampler {
   bool _isTracked = false;
   bool _isDown = false;
   int _pointerIdentifier = 0;
+  int _hasButtons = 0;
 
   PointerEvent _toHoverEvent(
     PointerEvent event,
     Offset position,
     Offset delta,
     Duration timeStamp,
+    int buttons,
   ) {
     return PointerHoverEvent(
+      viewId: event.viewId,
       timeStamp: timeStamp,
       kind: event.kind,
       device: event.device,
@@ -79,15 +84,17 @@ class PointerEventResampler {
     Offset delta,
     int pointerIdentifier,
     Duration timeStamp,
+    int buttons,
   ) {
     return PointerMoveEvent(
+      viewId: event.viewId,
       timeStamp: timeStamp,
       pointer: pointerIdentifier,
       kind: event.kind,
       device: event.device,
       position: position,
       delta: delta,
-      buttons: event.buttons,
+      buttons: buttons,
       obscured: event.obscured,
       pressure: event.pressure,
       pressureMin: event.pressureMin,
@@ -113,9 +120,11 @@ class PointerEventResampler {
     int pointerIdentifier,
     Duration timeStamp,
     bool isDown,
+    int buttons,
   ) {
-    return isDown ? _toMoveEvent(event, position, delta, pointerIdentifier, timeStamp)
-                  : _toHoverEvent(event, position, delta, timeStamp);
+    return isDown
+        ? _toMoveEvent(event, position, delta, pointerIdentifier, timeStamp, buttons)
+        : _toHoverEvent(event, position, delta, timeStamp, buttons);
   }
 
   Offset _positionAt(Duration sampleTime) {
@@ -163,11 +172,11 @@ class PointerEventResampler {
   }
 
   void _dequeueAndSampleNonHoverOrMovePointerEventsUntil(
-      Duration sampleTime,
-      Duration nextSampleTime,
-      HandleEventCallback callback,
+    Duration sampleTime,
+    Duration nextSampleTime,
+    HandleEventCallback callback,
   ) {
-    Duration endTime = sampleTime;
+    var endTime = sampleTime;
     // Scan queued events to determine end time.
     final Iterator<PointerEvent> it = _queuedEvents.iterator;
     while (it.moveNext()) {
@@ -205,10 +214,12 @@ class PointerEventResampler {
 
       final bool wasTracked = _isTracked;
       final bool wasDown = _isDown;
+      final int hadButtons = _hasButtons;
 
       // Update pointer state.
       _isTracked = event is! PointerRemovedEvent;
       _isDown = event.down;
+      _hasButtons = event.buttons;
 
       // Position at `sampleTime`.
       final Offset position = _positionAt(sampleTime);
@@ -230,30 +241,40 @@ class PointerEventResampler {
       // generated when the position has changed.
       if (event is! PointerMoveEvent && event is! PointerHoverEvent) {
         // Add synthetics `move` or `hover` event if position has changed.
-        // Note: Devices without `hover` events are expected to always have
+        //
+        // Devices without `hover` events are expected to always have
         // `add` and `down` events with the same position and this logic will
-        // therefor never produce `hover` events.
+        // therefore never produce `hover` events.
         if (position != _position) {
           final Offset delta = position - _position;
-          callback(_toMoveOrHoverEvent(event, position, delta, _pointerIdentifier, sampleTime, wasDown));
+          callback(
+            _toMoveOrHoverEvent(
+              event,
+              position,
+              delta,
+              _pointerIdentifier,
+              sampleTime,
+              wasDown,
+              hadButtons,
+            ),
+          );
           _position = position;
         }
-        callback(event.copyWith(
-          position: position,
-          delta: Offset.zero,
-          pointer: pointerIdentifier,
-          timeStamp: sampleTime,
-        ));
+        callback(
+          event.copyWith(
+            position: position,
+            delta: Offset.zero,
+            pointer: pointerIdentifier,
+            timeStamp: sampleTime,
+          ),
+        );
       }
 
       _queuedEvents.removeFirst();
     }
   }
 
-  void _samplePointerPosition(
-      Duration sampleTime,
-      HandleEventCallback callback,
-  ) {
+  void _samplePointerPosition(Duration sampleTime, HandleEventCallback callback) {
     // Position at `sampleTime`.
     final Offset position = _positionAt(sampleTime);
 
@@ -261,7 +282,17 @@ class PointerEventResampler {
     final PointerEvent? next = _next;
     if (position != _position && next != null) {
       final Offset delta = position - _position;
-      callback(_toMoveOrHoverEvent(next, position, delta, _pointerIdentifier, sampleTime, _isDown));
+      callback(
+        _toMoveOrHoverEvent(
+          next,
+          position,
+          delta,
+          _pointerIdentifier,
+          sampleTime,
+          _isDown,
+          _hasButtons,
+        ),
+      );
       _position = position;
     }
   }
@@ -282,11 +313,7 @@ class PointerEventResampler {
   /// Positive value for `nextSampleTime` allow early processing of
   /// up and removed events. This improves resampling of these events,
   /// which is important for fling animations.
-  void sample(
-    Duration sampleTime,
-    Duration nextSampleTime,
-    HandleEventCallback callback,
-  ) {
+  void sample(Duration sampleTime, Duration nextSampleTime, HandleEventCallback callback) {
     _processPointerEvents(sampleTime);
 
     // Dequeue and sample pointer events until `sampleTime`.

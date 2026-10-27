@@ -3,29 +3,25 @@
 // found in the LICENSE file.
 
 import 'package:flutter/material.dart';
-
-import '../flutter_test_alternative.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 const List<int> primaryKeys = <int>[50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
 const List<int> accentKeys = <int>[100, 200, 400, 700];
 
 void main() {
   test('MaterialColor basic functionality', () {
-    const MaterialColor color = MaterialColor(
-      500,
-      <int, Color>{
-         50: Color(0x00000050),
-        100: Color(0x00000100),
-        200: Color(0x00000200),
-        300: Color(0x00000300),
-        400: Color(0x00000400),
-        500: Color(0x00000500),
-        600: Color(0x00000600),
-        700: Color(0x00000700),
-        800: Color(0x00000800),
-        900: Color(0x00000900),
-      },
-    );
+    const color = MaterialColor(500, <int, Color>{
+      50: Color(0x00000050),
+      100: Color(0x00000100),
+      200: Color(0x00000200),
+      300: Color(0x00000300),
+      400: Color(0x00000400),
+      500: Color(0x00000500),
+      600: Color(0x00000600),
+      700: Color(0x00000700),
+      800: Color(0x00000800),
+      900: Color(0x00000900),
+    });
 
     expect(color.value, 500);
 
@@ -53,13 +49,18 @@ void main() {
   });
 
   test('Colors swatches do not contain duplicates', () {
-    for (final MaterialColor color in Colors.primaries)
+    for (final MaterialColor color in Colors.primaries) {
       expect(primaryKeys.map<Color>((int key) => color[key]!).toSet().length, primaryKeys.length);
+    }
 
-    expect(primaryKeys.map<Color>((int key) => Colors.grey[key]!).toSet().length, primaryKeys.length);
+    expect(
+      primaryKeys.map<Color>((int key) => Colors.grey[key]!).toSet().length,
+      primaryKeys.length,
+    );
 
-    for (final MaterialAccentColor color in Colors.accents)
+    for (final MaterialAccentColor color in Colors.accents) {
       expect(accentKeys.map<Color>((int key) => color[key]!).toSet().length, accentKeys.length);
+    }
   });
 
   test('All color swatch colors are opaque and equal their primary color', () {
@@ -82,5 +83,4 @@ void main() {
       }
     }
   });
-
 }

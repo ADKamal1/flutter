@@ -2,17 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   runApp(
-    DecoratedBox(
-      decoration: const BoxDecoration(color: Colors.white),
+    const DecoratedBox(
+      decoration: BoxDecoration(color: Colors.white),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           textDirection: TextDirection.ltr,
-          children: const <Widget>[
+          children: <Widget>[
             FlutterLogo(size: 48),
             Padding(
               padding: EdgeInsets.all(32),

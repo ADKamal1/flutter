@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// This file is run as part of a reduced test set in CI on Mac and Windows
+// machines.
+@Tags(<String>['reduced-test-set'])
+library;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final Key blockKey = UniqueKey();
@@ -23,11 +27,7 @@ void main() {
                 expandedHeight: expandedAppbarHeight,
                 pinned: true,
                 stretch: true,
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Container(
-                    key: finderKey,
-                  ),
-                ),
+                flexibleSpace: FlexibleSpaceBar(background: Container(key: finderKey)),
               ),
               SliverToBoxAdapter(child: Container(height: 10000.0)),
             ],
@@ -49,6 +49,7 @@ void main() {
   testWidgets('FlexibleSpaceBar stretch mode blurBackground', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(useMaterial3: false),
         home: Scaffold(
           body: CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -61,13 +62,11 @@ void main() {
                 flexibleSpace: RepaintBoundary(
                   child: FlexibleSpaceBar(
                     stretchModes: const <StretchMode>[StretchMode.blurBackground],
-                    background: Container(
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(child: Container(color: Colors.red)),
-                          Expanded(child:Container(color: Colors.blue)),
-                        ],
-                      )
+                    background: Row(
+                      children: <Widget>[
+                        Expanded(child: Container(color: Colors.red)),
+                        Expanded(child: Container(color: Colors.blue)),
+                      ],
                     ),
                   ),
                 ),
@@ -101,10 +100,7 @@ void main() {
                 stretch: true,
                 flexibleSpace: FlexibleSpaceBar(
                   stretchModes: const <StretchMode>[StretchMode.fadeTitle],
-                  title: Text(
-                    'Title',
-                    key: finderKey,
-                  ),
+                  title: Text('Title', key: finderKey),
                 ),
               ),
               SliverToBoxAdapter(child: Container(height: 10000.0)),
@@ -115,23 +111,19 @@ void main() {
     );
     await slowDrag(tester, blockKey, const Offset(0.0, 10.0));
     Opacity opacityWidget = tester.widget<Opacity>(
-      find.ancestor(
-        of: find.text('Title'),
-        matching: find.byType(Opacity),
-      ).first,
+      find.ancestor(of: find.text('Title'), matching: find.byType(Opacity)).first,
     );
     expect(opacityWidget.opacity.round(), equals(1));
     await slowDrag(tester, blockKey, const Offset(0.0, 100.0));
     opacityWidget = tester.widget<Opacity>(
-      find.ancestor(
-        of: find.text('Title'),
-        matching: find.byType(Opacity),
-      ).first,
+      find.ancestor(of: find.text('Title'), matching: find.byType(Opacity)).first,
     );
     expect(opacityWidget.opacity, equals(0.0));
   });
 
-  testWidgets('FlexibleSpaceBar stretch mode ignored for non-overscroll physics', (WidgetTester tester) async {
+  testWidgets('FlexibleSpaceBar stretch mode ignored for non-overscroll physics', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -145,9 +137,7 @@ void main() {
                 pinned: true,
                 flexibleSpace: FlexibleSpaceBar(
                   stretchModes: const <StretchMode>[StretchMode.blurBackground],
-                  background: Container(
-                    key: finderKey,
-                  ),
+                  background: Container(key: finderKey),
                 ),
               ),
               SliverToBoxAdapter(child: Container(height: 10000.0)),

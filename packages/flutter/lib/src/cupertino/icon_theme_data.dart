@@ -4,20 +4,24 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+
 import 'colors.dart';
 
 /// An [IconThemeData] subclass that automatically resolves its [color] when retrieved
 /// using [IconTheme.of].
 class CupertinoIconThemeData extends IconThemeData with Diagnosticable {
   /// Creates a [CupertinoIconThemeData].
-  ///
-  /// The opacity applies to both explicit and default icon colors. The value
-  /// is clamped between 0.0 and 1.0.
   const CupertinoIconThemeData({
-    Color? color,
-    double? opacity,
-    double? size,
-  }) : super(color: color, opacity: opacity, size: size);
+    super.size,
+    super.fill,
+    super.weight,
+    super.grade,
+    super.opticalSize,
+    super.color,
+    super.opacity,
+    super.shadows,
+    super.applyTextScaling,
+  });
 
   /// Called by [IconTheme.of] to resolve [color] against the given [BuildContext].
   @override
@@ -29,11 +33,27 @@ class CupertinoIconThemeData extends IconThemeData with Diagnosticable {
   /// Creates a copy of this icon theme but with the given fields replaced with
   /// the new values.
   @override
-  CupertinoIconThemeData copyWith({ Color? color, double? opacity, double? size }) {
+  CupertinoIconThemeData copyWith({
+    double? size,
+    double? fill,
+    double? weight,
+    double? grade,
+    double? opticalSize,
+    Color? color,
+    double? opacity,
+    List<Shadow>? shadows,
+    bool? applyTextScaling,
+  }) {
     return CupertinoIconThemeData(
+      size: size ?? this.size,
+      fill: fill ?? this.fill,
+      weight: weight ?? this.weight,
+      grade: grade ?? this.grade,
+      opticalSize: opticalSize ?? this.opticalSize,
       color: color ?? this.color,
       opacity: opacity ?? this.opacity,
-      size: size ?? this.size,
+      shadows: shadows ?? this.shadows,
+      applyTextScaling: applyTextScaling ?? this.applyTextScaling,
     );
   }
 

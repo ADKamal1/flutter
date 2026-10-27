@@ -5,35 +5,48 @@
 import 'dart:async';
 
 import 'package:process/process.dart';
+import 'package:unified_analytics/unified_analytics.dart';
 
+import 'android/android_builder.dart';
 import 'android/android_sdk.dart';
 import 'android/android_studio.dart';
 import 'android/android_workflow.dart';
+import 'android/gradle.dart';
 import 'android/gradle_utils.dart';
+import 'android/java.dart';
 import 'application_package.dart';
 import 'artifacts.dart';
 import 'asset.dart';
+import 'base/bot_detector.dart';
 import 'base/config.dart';
 import 'base/context.dart';
 import 'base/error_handling_io.dart';
+import 'base/file_system.dart';
 import 'base/io.dart';
 import 'base/logger.dart';
 import 'base/os.dart';
+import 'base/platform.dart';
 import 'base/process.dart';
+import 'base/signals.dart';
+import 'base/terminal.dart';
 import 'base/time.dart';
 import 'base/user_messages.dart';
-import 'build_info.dart';
 import 'build_system/build_system.dart';
 import 'cache.dart';
+import 'context/tool_context.dart';
+import 'custom_devices/custom_devices_config.dart';
 import 'dart/pub.dart';
 import 'devfs.dart';
-import 'device.dart';
+import 'devtools_launcher.dart';
 import 'doctor.dart';
 import 'emulator.dart';
 import 'features.dart';
-import 'fuchsia/fuchsia_device.dart' show FuchsiaDeviceTools;
-import 'fuchsia/fuchsia_sdk.dart' show FuchsiaSdk, FuchsiaArtifacts;
-import 'fuchsia/fuchsia_workflow.dart' show FuchsiaWorkflow, fuchsiaWorkflow;
+import 'flutter_application_package.dart';
+import 'flutter_cache.dart';
+import 'flutter_features.dart';
+import 'flutter_features_config.dart';
+import 'flutter_manifest.dart';
+import 'git.dart';
 import 'globals.dart' as globals;
 import 'ios/ios_workflow.dart';
 import 'ios/iproxy.dart';
@@ -42,10 +55,16 @@ import 'ios/xcodeproj.dart';
 import 'macos/cocoapods.dart';
 import 'macos/cocoapods_validator.dart';
 import 'macos/macos_workflow.dart';
+import 'macos/xcdevice.dart';
 import 'macos/xcode.dart';
 import 'mdns_discovery.dart';
+import 'native_assets.dart';
 import 'persistent_tool_state.dart';
-import 'reporting/reporting.dart';
+import 'pre_run_validator.dart';
+import 'project.dart';
+import 'reporting/crash_reporting.dart';
+import 'reporting/unified_analytics.dart';
+import 'resident_runner.dart';
 import 'run_hot.dart';
 import 'runner/local_engine.dart';
 import 'version.dart';
@@ -54,76 +73,199 @@ import 'windows/visual_studio.dart';
 import 'windows/visual_studio_validator.dart';
 import 'windows/windows_workflow.dart';
 
-Future<T> runInContext<T>(
-  FutureOr<T> runner(), {
-  Map<Type, Generator> overrides,
-}) async {
+/// A [ToolContext] that delegates to [globals] for legacy callers.
+class GlobalToolContext implements ToolContext {
+  const GlobalToolContext();
 
+  @override
+  Artifacts get artifacts => globals.artifacts!;
+
+  @override
+  BotDetector get botDetector => globals.botDetector;
+
+  @override
+  Cache get cache => globals.cache;
+
+  @override
+  Config get config => globals.config;
+
+  @override
+  CustomDevicesConfig get customDevicesConfig => globals.customDevicesConfig;
+
+  @override
+  FileSystemUtils get fileSystemUtils => globals.fsUtils;
+
+  @override
+  FlutterVersion get flutterVersion => globals.flutterVersion;
+
+  @override
+  FileSystem get fs => globals.fs;
+
+  @override
+  Git get git => globals.git;
+
+  @override
+  LocalEngineLocator get localEngineLocator => globals.localEngineLocator!;
+
+  @override
+  Logger get logger => globals.logger;
+
+  @override
+  TestCompilerNativeAssetsBuilder? get nativeAssetsBuilder => globals.nativeAssetsBuilder;
+
+  @override
+  OperatingSystemUtils get os => globals.os;
+
+  @override
+  OutputPreferences get outputPreferences => globals.outputPreferences;
+
+  @override
+  PersistentToolState get persistentToolState => globals.persistentToolState!;
+
+  @override
+  Platform get platform => globals.platform;
+
+  @override
+  PreRunValidator get preRunValidator => globals.preRunValidator;
+
+  @override
+  ProcessInfo get processInfo => globals.processInfo;
+
+  @override
+  ProcessManager get processManager => globals.processManager;
+
+  @override
+  ProcessUtils get processUtils => globals.processUtils;
+
+  @override
+  FlutterProjectFactory get projectFactory => globals.projectFactory;
+
+  @override
+  ShutdownHooks get shutdownHooks => globals.shutdownHooks;
+
+  @override
+  Signals get signals => globals.signals;
+
+  @override
+  Stdio get stdio => globals.stdio;
+
+  @override
+  SystemClock get systemClock => globals.systemClock;
+
+  @override
+  AnsiTerminal get terminal => globals.terminal;
+
+  @override
+  UserMessages get userMessages => globals.userMessages;
+}
+
+Future<T> runInContext<T>(FutureOr<T> Function() runner, {Map<Type, Generator>? overrides}) async {
   // Wrap runner with any asynchronous initialization that should run with the
   // overrides and callbacks.
-  bool runningOnBot;
+  late bool runningOnBot;
   FutureOr<T> runnerWrapper() async {
     runningOnBot = await globals.isRunningOnBot;
     return runner();
   }
 
-  return await context.run<T>(
+  // TODO(ianh): We should split this into two, one for tests (which should be
+  // in test/), and one for production (which should be in executable.dart).
+  return context.run<T>(
     name: 'global fallbacks',
     body: runnerWrapper,
     overrides: overrides,
     fallbacks: <Type, Generator>{
-      AndroidLicenseValidator: () => AndroidLicenseValidator(),
-      AndroidSdk: AndroidSdk.locateAndroidSdk,
-      AndroidStudio: AndroidStudio.latestValid,
-      AndroidValidator: () => AndroidValidator(
+      Analytics: () => getAnalytics(
+        runningOnBot: runningOnBot,
+        flutterVersion: globals.flutterVersion,
+        environment: globals.platform.environment,
+        clientIde: globals.platform.environment['FLUTTER_HOST'],
+        config: globals.config,
+      ),
+      AndroidBuilder: () => AndroidGradleBuilder(
+        java: globals.java,
+        logger: globals.logger,
+        processManager: globals.processManager,
+        fileSystem: globals.fs,
+        artifacts: globals.artifacts!,
+        analytics: globals.analytics,
+        gradleUtils: globals.gradleUtils!,
+        platform: globals.platform,
         androidStudio: globals.androidStudio,
         androidSdk: globals.androidSdk,
-        fileSystem: globals.fs,
+        toolContext: const GlobalToolContext(),
+      ),
+      AndroidLicenseValidator: () => AndroidLicenseValidator(
+        platform: globals.platform,
+        userMessages: globals.userMessages,
+        processManager: globals.processManager,
+        java: globals.java,
+        androidSdk: globals.androidSdk,
+        logger: globals.logger,
+        stdio: globals.stdio,
+      ),
+      AndroidSdk: () => AndroidSdk.locateAndroidSdk(toolContext: const GlobalToolContext()),
+      AndroidStudio: () => AndroidStudio.latestValid(
+        plistParser: globals.plistParser,
+        toolContext: const GlobalToolContext(),
+      ),
+      AndroidValidator: () => AndroidValidator(
+        java: globals.java,
+        androidSdk: globals.androidSdk,
         logger: globals.logger,
         platform: globals.platform,
-        processManager: globals.processManager,
-        userMessages: globals.userMessages,
-      ),
-      AndroidWorkflow: () => AndroidWorkflow(
-        androidSdk: globals.androidSdk,
-        featureFlags: featureFlags,
-      ),
-      ApplicationPackageFactory: () => ApplicationPackageFactory(
         userMessages: globals.userMessages,
         processManager: globals.processManager,
-        logger: globals.logger,
-        fileSystem: globals.fs,
+        osUtils: globals.os,
+      ),
+      AndroidWorkflow: () =>
+          AndroidWorkflow(androidSdkBuilder: () => globals.androidSdk, featureFlags: featureFlags),
+      ApplicationPackageFactory: () => FlutterApplicationPackageFactory(
         androidSdk: globals.androidSdk,
+        toolContext: const GlobalToolContext(),
       ),
       Artifacts: () => CachedArtifacts(
         fileSystem: globals.fs,
         cache: globals.cache,
         platform: globals.platform,
+        operatingSystemUtils: globals.os,
       ),
-      AssetBundleFactory: () => AssetBundleFactory.defaultInstance,
+      AssetBundleFactory: () {
+        return AssetBundleFactory.defaultInstance(
+          logger: globals.logger,
+          fileSystem: globals.fs,
+          platform: globals.platform,
+        );
+      },
       BuildSystem: () => FlutterBuildSystem(
         fileSystem: globals.fs,
         logger: globals.logger,
         platform: globals.platform,
       ),
-      Cache: () => Cache(
+      Cache: () => FlutterCache(
         fileSystem: globals.fs,
         logger: globals.logger,
         platform: globals.platform,
+        osUtils: globals.os,
+        projectFactory: globals.projectFactory,
+        stdio: globals.stdio,
       ),
       CocoaPods: () => CocoaPods(
         fileSystem: globals.fs,
         processManager: globals.processManager,
         logger: globals.logger,
         platform: globals.platform,
-        xcodeProjectInterpreter: globals.xcodeProjectInterpreter,
+        xcodeProjectInterpreter: globals.xcodeProjectInterpreter!,
+        analytics: globals.analytics,
       ),
-      CocoaPodsValidator: () => CocoaPodsValidator(
-        globals.cocoaPods,
-        globals.userMessages,
-      ),
+      CocoaPodsValidator: () => CocoaPodsValidator(globals.cocoaPods!, globals.userMessages),
       Config: () => Config(
         Config.kFlutterSettings,
+        fileSystem: globals.fs,
+        logger: globals.logger,
+        platform: globals.platform,
+      ),
+      CustomDevicesConfig: () => CustomDevicesConfig(
         fileSystem: globals.fs,
         logger: globals.logger,
         platform: globals.platform,
@@ -132,170 +274,157 @@ Future<T> runInContext<T>(
         fileSystem: globals.fs,
         logger: globals.logger,
         flutterProjectFactory: globals.projectFactory,
-        client: globals.httpClientFactory?.call() ?? HttpClient(),
       ),
       DevFSConfig: () => DevFSConfig(),
-      DeviceManager: () => FlutterDeviceManager(
-        logger: globals.logger,
+      DevtoolsLauncher: () => DevtoolsServerLauncher(
         processManager: globals.processManager,
-        platform: globals.platform,
-        androidSdk: globals.androidSdk,
-        iosSimulatorUtils: globals.iosSimulatorUtils,
-        featureFlags: featureFlags,
-        fileSystem: globals.fs,
-        iosWorkflow: globals.iosWorkflow,
-        artifacts: globals.artifacts,
-        flutterVersion: globals.flutterVersion,
-        androidWorkflow: androidWorkflow,
-        config: globals.config,
-        fuchsiaWorkflow: fuchsiaWorkflow,
-        xcDevice: globals.xcdevice,
-        userMessages: globals.userMessages,
-        windowsWorkflow: windowsWorkflow,
-        macOSWorkflow: MacOSWorkflow(
-          platform: globals.platform,
-          featureFlags: featureFlags,
-        ),
-        operatingSystemUtils: globals.os,
-        terminal: globals.terminal,
+        artifacts: globals.artifacts!,
+        logger: globals.logger,
+        botDetector: globals.botDetector,
       ),
-      Doctor: () => Doctor(logger: globals.logger),
+      Doctor: () => Doctor(logger: globals.logger, clock: globals.systemClock),
       DoctorValidatorsProvider: () => DoctorValidatorsProvider.defaultInstance,
       EmulatorManager: () => EmulatorManager(
-        androidSdk: globals.androidSdk,
-        processManager: globals.processManager,
-        logger: globals.logger,
-        fileSystem: globals.fs,
-        androidWorkflow: androidWorkflow,
+        androidWorkflow: androidWorkflow!,
+        iosWorkflow: globals.iosWorkflow,
+        javaBuilder: () => globals.java,
+        toolContext: const GlobalToolContext(),
+        xcode: globals.xcode,
+        androidSdkBuilder: () => globals.androidSdk,
       ),
-      FeatureFlags: () => const FlutterFeatureFlags(),
-      FlutterVersion: () => FlutterVersion(const SystemClock()),
-      FuchsiaArtifacts: () => FuchsiaArtifacts.find(),
-      FuchsiaDeviceTools: () => FuchsiaDeviceTools(),
-      FuchsiaSdk: () => FuchsiaSdk(),
-      FuchsiaWorkflow: () => FuchsiaWorkflow(
-        featureFlags: featureFlags,
+      FeatureFlags: () => FlutterFeatureFlags(
+        flutterVersion: globals.flutterVersion,
+        featuresConfig: FlutterFeaturesConfig(
+          globalConfig: globals.config,
+          platform: globals.platform,
+          projectManifest: FlutterManifest.createFromPath(
+            globals.fs.path.join(
+              findProjectRoot(globals.fs) ?? globals.fs.currentDirectory.path,
+              'pubspec.yaml',
+            ),
+            fileSystem: globals.fs,
+            logger: globals.logger,
+          ),
+        ),
         platform: globals.platform,
-        fuchsiaArtifacts: globals.fuchsiaArtifacts,
       ),
-      GradleUtils: () => GradleUtils(),
+      FlutterVersion: () =>
+          FlutterVersion(fs: globals.fs, flutterRoot: Cache.flutterRoot!, git: globals.git),
+      Git: () => Git(currentPlatform: globals.platform, runProcessWith: globals.processUtils),
+      GradleUtils: () => GradleUtils(
+        operatingSystemUtils: globals.os,
+        logger: globals.logger,
+        platform: globals.platform,
+        cache: globals.cache,
+      ),
       HotRunnerConfig: () => HotRunnerConfig(),
       IOSSimulatorUtils: () => IOSSimulatorUtils(
-        logger: globals.logger,
-        processManager: globals.processManager,
-        xcode: globals.xcode,
+        analytics: globals.analytics,
+        plistParser: globals.plistParser,
+        toolContext: const GlobalToolContext(),
+        xcode: globals.xcode!,
       ),
       IOSWorkflow: () => IOSWorkflow(
         featureFlags: featureFlags,
-        xcode: globals.xcode,
+        xcode: globals.xcode!,
         platform: globals.platform,
       ),
+      Java: () => Java.find(
+        androidStudioBuilder: () => globals.androidStudio,
+        config: globals.config,
+        fileSystem: globals.fs,
+        logger: globals.logger,
+        platform: globals.platform,
+        processManager: globals.processManager,
+      ),
       LocalEngineLocator: () => LocalEngineLocator(
-        userMessages: userMessages,
+        userMessages: globals.userMessages,
         logger: globals.logger,
         platform: globals.platform,
         fileSystem: globals.fs,
-        flutterRoot: Cache.flutterRoot,
+        flutterRoot: Cache.flutterRoot!,
       ),
       Logger: () => globals.platform.isWindows
-        ? WindowsStdoutLogger(
-            terminal: globals.terminal,
-            stdio: globals.stdio,
-            outputPreferences: globals.outputPreferences,
-          )
-        : StdoutLogger(
-            terminal: globals.terminal,
-            stdio: globals.stdio,
-            outputPreferences: globals.outputPreferences,
-          ),
-      MacOSWorkflow: () => MacOSWorkflow(
-        featureFlags: featureFlags,
+          ? WindowsStdoutLogger(
+              terminal: globals.terminal,
+              stdio: globals.stdio,
+              outputPreferences: globals.outputPreferences,
+            )
+          : StdoutLogger(
+              terminal: globals.terminal,
+              stdio: globals.stdio,
+              outputPreferences: globals.outputPreferences,
+            ),
+      MacOSWorkflow: () => MacOSWorkflow(featureFlags: featureFlags, platform: globals.platform),
+      MDnsVmServiceDiscovery: () => MDnsVmServiceDiscovery(
+        logger: globals.logger,
+        analytics: globals.analytics,
         platform: globals.platform,
       ),
-      MDnsObservatoryDiscovery: () => MDnsObservatoryDiscovery(),
       OperatingSystemUtils: () => OperatingSystemUtils(
         fileSystem: globals.fs,
         logger: globals.logger,
         platform: globals.platform,
         processManager: globals.processManager,
       ),
+      OutputPreferences: () => OutputPreferences(
+        wrapText: globals.stdio.hasTerminal,
+        showColor: globals.platform.stdoutSupportsAnsi,
+        stdio: globals.stdio,
+      ),
       PersistentToolState: () => PersistentToolState(
         fileSystem: globals.fs,
         logger: globals.logger,
         platform: globals.platform,
       ),
-      ProcessInfo: () => ProcessInfo(),
+      ProcessInfo: () => ProcessInfo(globals.fs),
       ProcessManager: () => ErrorHandlingProcessManager(
         delegate: const LocalProcessManager(),
         platform: globals.platform,
+        analytics: () => globals.analytics,
       ),
-      ProcessUtils: () => ProcessUtils(
-        processManager: globals.processManager,
-        logger: globals.logger,
-      ),
+      ProcessUtils: () =>
+          ProcessUtils(processManager: globals.processManager, logger: globals.logger),
       Pub: () => Pub(
         fileSystem: globals.fs,
         logger: globals.logger,
         processManager: globals.processManager,
         botDetector: globals.botDetector,
         platform: globals.platform,
-        usage: globals.flutterUsage,
       ),
-      ShutdownHooks: () => ShutdownHooks(logger: globals.logger),
       Stdio: () => Stdio(),
       SystemClock: () => const SystemClock(),
-      Usage: () => Usage(
-        runningOnBot: runningOnBot,
-      ),
       UserMessages: () => UserMessages(),
       VisualStudioValidator: () => VisualStudioValidator(
         userMessages: globals.userMessages,
-        visualStudio: VisualStudio(
-          fileSystem: globals.fs,
-          platform: globals.platform,
-          logger: globals.logger,
-          processManager: globals.processManager,
-        )
+        visualStudio: VisualStudio(toolContext: const GlobalToolContext()),
       ),
-      WebWorkflow: () => WebWorkflow(
-        featureFlags: featureFlags,
-        platform: globals.platform,
-      ),
-      WindowsWorkflow: () => WindowsWorkflow(
-        featureFlags: featureFlags,
-        platform: globals.platform,
-      ),
+      WebWorkflow: () => WebWorkflow(featureFlags: featureFlags, platform: globals.platform),
+      WindowsWorkflow: () =>
+          WindowsWorkflow(featureFlags: featureFlags, platform: globals.platform),
       Xcode: () => Xcode(
         logger: globals.logger,
         processManager: globals.processManager,
         platform: globals.platform,
         fileSystem: globals.fs,
-        xcodeProjectInterpreter: globals.xcodeProjectInterpreter,
+        xcodeProjectInterpreter: globals.xcodeProjectInterpreter!,
+        userMessages: globals.userMessages,
       ),
       XCDevice: () => XCDevice(
-        processManager: globals.processManager,
-        logger: globals.logger,
-        artifacts: globals.artifacts,
-        cache: globals.cache,
-        platform: globals.platform,
-        xcode: globals.xcode,
+        analytics: globals.analytics,
         iproxy: IProxy(
-          iproxyPath: globals.artifacts.getArtifactPath(
-            Artifact.iproxy,
-            platform: TargetPlatform.ios,
-          ),
+          artifacts: globals.artifacts!,
           logger: globals.logger,
           processManager: globals.processManager,
           dyLdLibEntry: globals.cache.dyLdLibEntry,
         ),
+        templateRenderer: globals.templateRenderer,
+        toolContext: const GlobalToolContext(),
+        xcode: globals.xcode!,
       ),
       XcodeProjectInterpreter: () => XcodeProjectInterpreter(
-        logger: globals.logger,
-        processManager: globals.processManager,
-        platform: globals.platform,
-        fileSystem: globals.fs,
-        terminal: globals.terminal,
-        usage: globals.flutterUsage,
+        analytics: globals.analytics,
+        toolContext: const GlobalToolContext(),
       ),
     },
   );

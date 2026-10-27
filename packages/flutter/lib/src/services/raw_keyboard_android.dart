@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'hardware_keyboard.dart';
+library;
 
 import 'package:flutter/foundation.dart';
 
-import 'keyboard_key.dart';
-import 'keyboard_maps.dart';
+import 'keyboard_maps.g.dart';
 import 'raw_keyboard.dart';
+
+export 'package:flutter/foundation.dart' show DiagnosticPropertiesBuilder;
+
+export 'keyboard_key.g.dart' show LogicalKeyboardKey, PhysicalKeyboardKey;
 
 // Android sets the 0x80000000 bit on a character to indicate that it is a
 // combining character, so we use this mask to remove that bit to make it a
@@ -16,17 +21,25 @@ const int _kCombiningCharacterMask = 0x7fffffff;
 
 /// Platform-specific key event data for Android.
 ///
+/// This class is deprecated and will be removed. Platform specific key event
+/// data will no longer be available. See [KeyEvent] for what is available.
+///
 /// This object contains information about key events obtained from Android's
 /// `KeyEvent` interface.
 ///
 /// See also:
 ///
-///  * [RawKeyboard], which uses this interface to expose key data.
+/// * [RawKeyboard], which uses this interface to expose key data.
+@Deprecated(
+  'Platform specific key event data is no longer available. See KeyEvent for what is available. '
+  'This feature was deprecated after v3.18.0-2.0.pre.',
+)
 class RawKeyEventDataAndroid extends RawKeyEventData {
   /// Creates a key event data structure specific for Android.
-  ///
-  /// The [flags], [codePoint], [keyCode], [scanCode], and [metaState] arguments
-  /// must not be null.
+  @Deprecated(
+    'Platform specific key event data is no longer available. See KeyEvent for what is available. '
+    'This feature was deprecated after v3.18.0-2.0.pre.',
+  )
   const RawKeyEventDataAndroid({
     this.flags = 0,
     this.codePoint = 0,
@@ -39,11 +52,7 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
     this.productId = 0,
     this.deviceId = 0,
     this.repeatCount = 0,
-  }) : assert(flags != null),
-       assert(codePoint != null),
-       assert(keyCode != null),
-       assert(scanCode != null),
-       assert(metaState != null);
+  });
 
   /// The current set of additional flags for this event.
   ///
@@ -97,7 +106,7 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
   /// The modifiers that were present when the key event occurred.
   ///
   /// See <https://developer.android.com/reference/android/view/KeyEvent.html#getMetaState()>
-  /// for the numerical values of the `metaState`. Many of these constants are
+  /// for the numerical values of the [metaState]. Many of these constants are
   /// also replicated as static constants in this class.
   ///
   /// See also:
@@ -121,13 +130,13 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
   /// The vendor ID of the device that produced the event.
   ///
   /// See <https://developer.android.com/reference/android/view/InputDevice.html#getVendorId()>
-  /// for the numerical values of the `vendorId`.
+  /// for the numerical values of the [vendorId].
   final int vendorId;
 
   /// The product ID of the device that produced the event.
   ///
   /// See <https://developer.android.com/reference/android/view/InputDevice.html#getProductId()>
-  /// for the numerical values of the `productId`.
+  /// for the numerical values of the [productId].
   final int productId;
 
   /// The ID of the device that produced the event.
@@ -147,12 +156,13 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
 
   // Android only reports a single code point for the key label.
   @override
-  String get keyLabel => plainCodePoint == 0 ? '' : String.fromCharCode(plainCodePoint & _kCombiningCharacterMask);
+  String get keyLabel =>
+      plainCodePoint == 0 ? '' : String.fromCharCode(plainCodePoint & _kCombiningCharacterMask);
 
   @override
   PhysicalKeyboardKey get physicalKey {
     if (kAndroidToPhysicalKey.containsKey(scanCode)) {
-      return kAndroidToPhysicalKey[scanCode] ?? PhysicalKeyboardKey.none;
+      return kAndroidToPhysicalKey[scanCode]!;
     }
 
     // Android sends DPAD_UP, etc. as the keyCode for joystick DPAD events, but
@@ -174,7 +184,7 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
         return PhysicalKeyboardKey.arrowRight;
       }
     }
-    return PhysicalKeyboardKey.none;
+    return PhysicalKeyboardKey(LogicalKeyboardKey.androidPlane + scanCode);
   }
 
   @override
@@ -193,69 +203,65 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
     // plane.
     if (keyLabel.isNotEmpty && !LogicalKeyboardKey.isControlCharacter(keyLabel)) {
       final int combinedCodePoint = plainCodePoint & _kCombiningCharacterMask;
-      final int keyId = LogicalKeyboardKey.unicodePlane | (combinedCodePoint & LogicalKeyboardKey.valueMask);
-      return LogicalKeyboardKey.findKeyByKeyId(keyId) ?? LogicalKeyboardKey(
-        keyId,
-        keyLabel: keyLabel,
-        debugName: kReleaseMode ? null : 'Key ${keyLabel.toUpperCase()}',
-      );
+      final int keyId =
+          LogicalKeyboardKey.unicodePlane | (combinedCodePoint & LogicalKeyboardKey.valueMask);
+      return LogicalKeyboardKey.findKeyByKeyId(keyId) ?? LogicalKeyboardKey(keyId);
     }
 
     // Look to see if the keyCode is one we know about and have a mapping for.
-    LogicalKeyboardKey? newKey = kAndroidToLogicalKey[keyCode];
+    final LogicalKeyboardKey? newKey = kAndroidToLogicalKey[keyCode];
     if (newKey != null) {
       return newKey;
     }
 
-    // This is a non-printable key that we don't know about, so we mint a new
-    // code with the autogenerated bit set.
-    const int androidKeyIdPlane = 0x00200000000;
-    newKey ??= LogicalKeyboardKey(
-      androidKeyIdPlane | keyCode | LogicalKeyboardKey.autogeneratedMask,
-      debugName: kReleaseMode ? null : 'Unknown Android key code $keyCode',
-    );
-    return newKey;
+    return LogicalKeyboardKey(keyCode | LogicalKeyboardKey.androidPlane);
   }
 
   bool _isLeftRightModifierPressed(KeyboardSide side, int anyMask, int leftMask, int rightMask) {
     if (metaState & anyMask == 0) {
       return false;
     }
-    switch (side) {
-      case KeyboardSide.any:
-        return true;
-      case KeyboardSide.all:
-        return metaState & leftMask != 0 && metaState & rightMask != 0;
-      case KeyboardSide.left:
-        return metaState & leftMask != 0;
-      case KeyboardSide.right:
-        return metaState & rightMask != 0;
-    }
+    return switch (side) {
+      KeyboardSide.any => true,
+      KeyboardSide.all => (metaState & leftMask != 0) && (metaState & rightMask != 0),
+      KeyboardSide.left => metaState & leftMask != 0,
+      KeyboardSide.right => metaState & rightMask != 0,
+    };
   }
 
   @override
-  bool isModifierPressed(ModifierKey key, { KeyboardSide side = KeyboardSide.any }) {
-    assert(side != null);
-    switch (key) {
-      case ModifierKey.controlModifier:
-        return _isLeftRightModifierPressed(side, modifierControl, modifierLeftControl, modifierRightControl);
-      case ModifierKey.shiftModifier:
-        return _isLeftRightModifierPressed(side, modifierShift, modifierLeftShift, modifierRightShift);
-      case ModifierKey.altModifier:
-        return _isLeftRightModifierPressed(side, modifierAlt, modifierLeftAlt, modifierRightAlt);
-      case ModifierKey.metaModifier:
-        return _isLeftRightModifierPressed(side, modifierMeta, modifierLeftMeta, modifierRightMeta);
-      case ModifierKey.capsLockModifier:
-        return metaState & modifierCapsLock != 0;
-      case ModifierKey.numLockModifier:
-        return metaState & modifierNumLock != 0;
-      case ModifierKey.scrollLockModifier:
-        return metaState & modifierScrollLock != 0;
-      case ModifierKey.functionModifier:
-        return metaState & modifierFunction != 0;
-      case ModifierKey.symbolModifier:
-        return metaState & modifierSym != 0;
-    }
+  bool isModifierPressed(ModifierKey key, {KeyboardSide side = KeyboardSide.any}) {
+    return switch (key) {
+      ModifierKey.controlModifier => _isLeftRightModifierPressed(
+        side,
+        modifierControl,
+        modifierLeftControl,
+        modifierRightControl,
+      ),
+      ModifierKey.shiftModifier => _isLeftRightModifierPressed(
+        side,
+        modifierShift,
+        modifierLeftShift,
+        modifierRightShift,
+      ),
+      ModifierKey.altModifier => _isLeftRightModifierPressed(
+        side,
+        modifierAlt,
+        modifierLeftAlt,
+        modifierRightAlt,
+      ),
+      ModifierKey.metaModifier => _isLeftRightModifierPressed(
+        side,
+        modifierMeta,
+        modifierLeftMeta,
+        modifierRightMeta,
+      ),
+      ModifierKey.capsLockModifier => metaState & modifierCapsLock != 0,
+      ModifierKey.numLockModifier => metaState & modifierNumLock != 0,
+      ModifierKey.scrollLockModifier => metaState & modifierScrollLock != 0,
+      ModifierKey.functionModifier => metaState & modifierFunction != 0,
+      ModifierKey.symbolModifier => metaState & modifierSym != 0,
+    };
   }
 
   @override
@@ -296,6 +302,37 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
         return KeyboardSide.all;
     }
   }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<int>('flags', flags));
+    properties.add(DiagnosticsProperty<int>('codePoint', codePoint));
+    properties.add(DiagnosticsProperty<int>('plainCodePoint', plainCodePoint));
+    properties.add(DiagnosticsProperty<int>('keyCode', keyCode));
+    properties.add(DiagnosticsProperty<int>('scanCode', scanCode));
+    properties.add(DiagnosticsProperty<int>('metaState', metaState));
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other.runtimeType != runtimeType) {
+      return false;
+    }
+    return other is RawKeyEventDataAndroid &&
+        other.flags == flags &&
+        other.codePoint == codePoint &&
+        other.plainCodePoint == plainCodePoint &&
+        other.keyCode == keyCode &&
+        other.scanCode == scanCode &&
+        other.metaState == metaState;
+  }
+
+  @override
+  int get hashCode => Object.hash(flags, codePoint, plainCodePoint, keyCode, scanCode, metaState);
 
   // Modifier key masks.
 
@@ -441,11 +478,4 @@ class RawKeyEventDataAndroid extends RawKeyEventData {
   /// it's much easier to use [isModifierPressed] if you just want to know if
   /// a modifier is pressed.
   static const int modifierScrollLock = 0x400000;
-
-  @override
-  String toString() {
-    return '${objectRuntimeType(this, 'RawKeyEventDataAndroid')}(keyLabel: $keyLabel flags: $flags, codePoint: $codePoint, '
-      'keyCode: $keyCode, scanCode: $scanCode, metaState: $metaState, '
-      'modifiers down: $modifiersPressed)';
-  }
 }

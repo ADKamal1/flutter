@@ -2,135 +2,166 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:unified_analytics/unified_analytics.dart';
+
 import '../base/common.dart';
+import '../base/config.dart';
+import '../base/file_system.dart';
 import '../build_info.dart';
-import '../bundle.dart';
+import '../build_system/build_system.dart';
+import '../bundle_builder.dart';
+import '../context/tool_context.dart';
 import '../features.dart';
-import '../globals.dart' as globals;
+import '../isolated/build_targets.dart';
 import '../project.dart';
-import '../reporting/reporting.dart';
-import '../runner/flutter_command.dart' show FlutterCommandResult;
+import '../runner/flutter_command.dart';
 import 'build.dart';
 
 class BuildBundleCommand extends BuildSubCommand {
-  BuildBundleCommand({bool verboseHelp = false, this.bundleBuilder}) {
-    addTreeShakeIconsFlag();
-    usesTargetOption();
-    usesFilesystemOptions(hide: !verboseHelp);
-    usesBuildNumberOption();
-    addBuildModeFlags(verboseHelp: verboseHelp);
-    usesExtraDartFlagOptions();
+  BuildBundleCommand({
+    required this.buildSystem,
+    required this.featureFlags,
+    required ToolContext super.toolContext,
+    required super.verboseHelp,
+    this._bundleBuilder,
+  }) : super(logger: toolContext.logger) {
+    final ToolContext(:Config config, :FileSystem fs) = toolContext;
+    registerOptionBundles(const <OptionBundle>[
+      FilesystemOptionsBundle(),
+      BuildModeOptionsBundle(defaultToRelease: false),
+    ]);
+    argParser.addDescriptors(const <OptionDescriptor<Object?>>[
+      CommonOptions.target,
+      CommonOptions.buildNumber,
+      CommonOptions.dartDefines,
+      CommonOptions.dartDefineFromFile,
+      BuildInfoOptions.extraFrontEndOptions,
+      BuildInfoOptions.extraGenSnapshotOptions,
+      CommonOptions.pub,
+      BuildInfoOptions.trackWidgetCreation,
+    ], verboseHelp: verboseHelp);
     argParser
-      ..addFlag(
-        'precompiled',
-        negatable: false,
+      ..addOption(
+        'depfile',
+        defaultsTo: fs.path.join(getBuildDirectory(config, fs), 'snapshot_blob.bin.d'),
         help:
-          'If not provided, then '
-          'a debug build is always provided, regardless of build mode. If provided '
-          'then release is the default mode.',
+            'A file path where a depfile will be written. '
+            'This contains all build inputs and outputs in a Make-style syntax.',
       )
-      // This option is still referenced by the iOS build scripts. We should
-      // remove it once we've updated those build scripts.
-      ..addOption('asset-base', help: 'Ignored. Will be removed.', hide: !verboseHelp)
-      ..addOption('manifest', defaultsTo: defaultManifestPath)
-      ..addOption('private-key', defaultsTo: defaultPrivateKeyPath)
-      ..addOption('depfile', defaultsTo: defaultDepfilePath)
-      ..addOption('target-platform',
+      ..addOption(
+        'target-platform',
         defaultsTo: 'android-arm',
         allowed: const <String>[
           'android-arm',
           'android-arm64',
-          'android-x86',
           'android-x64',
           'ios',
-          'darwin-x64',
+          'darwin',
           'linux-x64',
+          'linux-arm64',
+          'linux-riscv64',
           'windows-x64',
+          'windows-arm64',
         ],
+        help: 'The architecture for which to build the application.',
       )
-      ..addOption('asset-dir', defaultsTo: getAssetBuildDirectory())
-      ..addFlag('report-licensed-packages',
-        help: 'Whether to report the names of all the packages that are included '
-              "in the application's LICENSE file.",
-        defaultsTo: false);
-    usesPubOption();
-    usesTrackWidgetCreation(verboseHelp: verboseHelp);
-
-    bundleBuilder ??= BundleBuilder();
+      ..addOption(
+        'asset-dir',
+        defaultsTo: getAssetBuildDirectory(config, fs),
+        help:
+            'The output directory for the kernel_blob.bin file, the native snapshot, the assets, etc. '
+            'Can be used to redirect the output when driving the Flutter toolchain from another build system.',
+      )
+      ..addFlag(
+        'tree-shake-icons',
+        hide: !verboseHelp,
+        help: '(deprecated) Icon font tree shaking is not supported by this command.',
+      );
   }
 
-  BundleBuilder bundleBuilder;
+  final BuildSystem buildSystem;
+  final BundleBuilder? _bundleBuilder;
+  final FeatureFlags featureFlags;
 
   @override
-  final String name = 'bundle';
+  ToolContext get toolContext => super.toolContext!;
 
   @override
-  final String description = 'Build the Flutter assets directory from your app.';
+  final name = 'bundle';
 
   @override
-  final String usageFooter = 'The Flutter assets directory contains your '
+  final description = 'Build the Flutter assets directory from your app.';
+
+  @override
+  final usageFooter =
+      'The Flutter assets directory contains your '
       'application code and resources; they are used by some Flutter Android and'
       ' iOS runtimes.';
 
   @override
-  Future<Map<CustomDimensions, String>> get usageValues async {
-    final String projectDir = globals.fs.file(targetFile).parent.parent.path;
-    final FlutterProject flutterProject = FlutterProject.fromPath(projectDir);
-    if (flutterProject == null) {
-      return const <CustomDimensions, String>{};
+  Future<Event> unifiedAnalyticsUsageValues(String commandPath) async {
+    final ToolContext(:FileSystem fs, :FlutterProjectFactory projectFactory) = toolContext;
+    final String projectDir = fs.file(targetFile).parent.parent.path;
+    final FlutterProject flutterProject = projectFactory.fromDirectory(fs.directory(projectDir));
+    return Event.commandUsageValues(
+      workflow: commandPath,
+      commandHasTerminal: hasTerminal,
+      buildBundleTargetPlatform: stringArg('target-platform'),
+      buildBundleIsModule: flutterProject.isModule,
+    );
+  }
+
+  @override
+  Future<void> validateCommand() async {
+    if (boolArg('tree-shake-icons')) {
+      throwToolExit(
+        'The "--tree-shake-icons" flag is deprecated for "build bundle" and will be removed in a future version of Flutter.',
+      );
     }
-    return <CustomDimensions, String>{
-      CustomDimensions.commandBuildBundleTargetPlatform: stringArg('target-platform'),
-      CustomDimensions.commandBuildBundleIsModule: '${flutterProject.isModule}',
-    };
+    return super.validateCommand();
   }
 
   @override
   Future<FlutterCommandResult> runCommand() async {
-    final String targetPlatform = stringArg('target-platform');
-    final TargetPlatform platform = getTargetPlatformForName(targetPlatform);
-    if (platform == null) {
-      throwToolExit('Unknown platform: $targetPlatform');
-    }
+    final String targetPlatform = stringArg('target-platform')!;
+    final platform = TargetPlatform.fromName(targetPlatform);
     // Check for target platforms that are only allowed via feature flags.
-    switch (platform) {
-      case TargetPlatform.darwin_x64:
+    switch (platform.os) {
+      case .macos:
         if (!featureFlags.isMacOSEnabled) {
           throwToolExit('macOS is not a supported target platform.');
         }
-        break;
-      case TargetPlatform.windows_x64:
+      case .windows:
         if (!featureFlags.isWindowsEnabled) {
           throwToolExit('Windows is not a supported target platform.');
         }
-        break;
-      case TargetPlatform.linux_x64:
+      case .linux:
         if (!featureFlags.isLinuxEnabled) {
           throwToolExit('Linux is not a supported target platform.');
         }
+      case .android || .fuchsia || .ios || .tester || .web:
         break;
-      default:
-        break;
+      case .unsupported:
+        TargetPlatform.throwUnsupportedTarget();
     }
 
-    final BuildInfo buildInfo = getBuildInfo();
+    final BuildInfo buildInfo = await getBuildInfo();
+    final BundleBuilder bundleBuilder =
+        _bundleBuilder ??
+        BundleBuilder(
+          analytics: analytics,
+          buildSystem: buildSystem,
+          buildTargets: const BuildTargetsImpl(),
+          toolContext: toolContext,
+        );
 
     await bundleBuilder.build(
-      platform: platform,
       buildInfo: buildInfo,
-      mainPath: targetFile,
-      manifestPath: stringArg('manifest'),
-      depfilePath: stringArg('depfile'),
-      privateKeyPath: stringArg('private-key'),
+      platform: platform,
       assetDirPath: stringArg('asset-dir'),
-      precompiledSnapshot: boolArg('precompiled'),
-      reportLicensedPackages: boolArg('report-licensed-packages'),
-      trackWidgetCreation: boolArg('track-widget-creation'),
-      extraFrontEndOptions: buildInfo.extraFrontEndOptions,
-      extraGenSnapshotOptions: buildInfo.extraGenSnapshotOptions,
-      fileSystemScheme: stringArg('filesystem-scheme'),
-      fileSystemRoots: stringsArg('filesystem-root'),
-      treeShakeIcons: buildInfo.treeShakeIcons,
+      buildSystem: buildSystem,
+      depfilePath: stringArg('depfile'),
+      mainPath: targetFile,
     );
     return FlutterCommandResult.success();
   }

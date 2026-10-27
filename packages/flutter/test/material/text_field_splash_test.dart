@@ -5,37 +5,24 @@
 import 'package:flutter/gestures.dart' show kPressTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/rendering.dart';
 
 bool confirmCalled = false;
 bool cancelCalled = false;
 
 class TestInkSplash extends InkSplash {
   TestInkSplash({
-    required MaterialInkController controller,
-    required RenderBox referenceBox,
-    Offset? position,
-    required Color color,
-    bool containedInkWell = false,
-    RectCallback? rectCallback,
-    BorderRadius? borderRadius,
-    ShapeBorder? customBorder,
-    double? radius,
-    VoidCallback? onRemoved,
-    required TextDirection textDirection,
-  }) : super(
-    controller: controller,
-    referenceBox: referenceBox,
-    position: position,
-    color: color,
-    containedInkWell: containedInkWell,
-    rectCallback: rectCallback,
-    borderRadius: borderRadius,
-    customBorder: customBorder,
-    radius: radius,
-    onRemoved: onRemoved,
-    textDirection: textDirection,
-  );
+    required super.controller,
+    required super.referenceBox,
+    super.position,
+    required super.color,
+    super.containedInkWell,
+    super.rectCallback,
+    super.borderRadius,
+    super.customBorder,
+    super.radius,
+    super.onRemoved,
+    required super.textDirection,
+  });
 
   @override
   void confirm() {
@@ -96,7 +83,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Theme(
-          data: ThemeData.light().copyWith(splashFactory: const TestInkSplashFactory()),
+          data: ThemeData(splashFactory: const TestInkSplashFactory()),
           child: Material(
             child: Container(
               alignment: Alignment.topLeft,
@@ -104,15 +91,11 @@ void main() {
                 children: <Widget>[
                   TextField(
                     key: textField1,
-                    decoration: const InputDecoration(
-                      labelText: 'label',
-                    ),
+                    decoration: const InputDecoration(labelText: 'label'),
                   ),
                   TextField(
                     key: textField2,
-                    decoration: const InputDecoration(
-                      labelText: 'label',
-                    ),
+                    decoration: const InputDecoration(labelText: 'label'),
                   ),
                 ],
               ),
@@ -152,24 +135,13 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Theme(
-          data: ThemeData.light().copyWith(splashFactory: const TestInkSplashFactory()),
+          data: ThemeData(splashFactory: const TestInkSplashFactory()),
           child: Material(
             child: ListView(
               children: <Widget>[
-                const TextField(
-                  decoration: InputDecoration(
-                    labelText: 'label1',
-                  ),
-                ),
-                const TextField(
-                  decoration: InputDecoration(
-                    labelText: 'label2',
-                  ),
-                ),
-                Container(
-                  height: 1000.0,
-                  color: const Color(0xFF00FF00),
-                ),
+                const TextField(decoration: InputDecoration(labelText: 'label1')),
+                const TextField(decoration: InputDecoration(labelText: 'label2')),
+                Container(height: 1000.0, color: const Color(0xFF00FF00)),
               ],
             ),
           ),

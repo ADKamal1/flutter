@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "Vali kõik",
   "tabSemanticsLabel": "$tabIndex. vaheleht $tabCount-st",
   "modalBarrierDismissLabel": "Loobu",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Otsige",
+  "noSpellCheckReplacementsLabel": "Asendusi ei leitud",
+  "menuDismissLabel": "Sulge menüü",
+  "lookUpButtonLabel": "Look Up",
+  "searchWebButtonLabel": "Otsi veebist",
+  "shareButtonLabel": "Jaga …",
+  "clearButtonLabel": "Kustutamine",
+  "cancelButtonLabel": "Tühista",
+  "backButtonLabel": "Tagasi",
+  "expansionTileExpandedHint": "topeltpuudutage ahendamiseks",
+  "expansionTileCollapsedHint": "topeltpuudutage laiendamiseks",
+  "expansionTileExpandedTapHint": "Ahenda",
+  "expansionTileCollapsedTapHint": "Laiendage lisateabe nägemiseks",
+  "expandedHint": "Ahendatud",
+  "collapsedHint": "Laiendatud"
 }

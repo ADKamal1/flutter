@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/widgets.dart';
+///
+/// @docImport 'sliver_fixed_extent_list.dart';
+/// @docImport 'sliver_list.dart';
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +18,16 @@ import 'sliver.dart';
 import 'sliver_multi_box_adaptor.dart';
 
 /// Describes the placement of a child in a [RenderSliverGrid].
+///
+/// This class is similar to [Rect], in that it gives a two-dimensional position
+/// and a two-dimensional dimension, but is direction-agnostic.
+///
+/// {@tool dartpad}
+/// This example shows how a custom [SliverGridLayout] uses [SliverGridGeometry]
+/// to lay out the children.
+///
+/// ** See code in examples/api/lib/widgets/scroll_view/grid_view.0.dart **
+/// {@end-tool}
 ///
 /// See also:
 ///
@@ -60,7 +76,7 @@ class SliverGridGeometry {
   double get trailingScrollOffset => scrollOffset + mainAxisExtent;
 
   /// Returns a tight [BoxConstraints] that forces the child to have the
-  /// required size.
+  /// required size, given a [SliverConstraints].
   BoxConstraints getBoxConstraints(SliverConstraints constraints) {
     return constraints.asBoxConstraints(
       minExtent: mainAxisExtent,
@@ -71,7 +87,7 @@ class SliverGridGeometry {
 
   @override
   String toString() {
-    final List<String> properties = <String>[
+    final properties = <String>[
       'scrollOffset: $scrollOffset',
       'crossAxisOffset: $crossAxisOffset',
       'mainAxisExtent: $mainAxisExtent',
@@ -83,13 +99,22 @@ class SliverGridGeometry {
 
 /// The size and position of all the tiles in a [RenderSliverGrid].
 ///
-/// Rather that providing a grid with a [SliverGridLayout] directly, you instead
-/// provide the grid a [SliverGridDelegate], which can compute a
-/// [SliverGridLayout] given the current [SliverConstraints].
+/// Rather that providing a grid with a [SliverGridLayout] directly, the grid is
+/// provided a [SliverGridDelegate], which computes a [SliverGridLayout] given a
+/// set of [SliverConstraints]. This allows the algorithm to dynamically respond
+/// to changes in the environment (e.g. the user rotating the device).
 ///
 /// The tiles can be placed arbitrarily, but it is more efficient to place tiles
-/// in roughly in order by scroll offset because grids reify a contiguous
-/// sequence of children.
+/// roughly in order by scroll offset because grids reify a contiguous sequence
+/// of children.
+///
+/// {@tool dartpad}
+/// This example shows how to construct a custom [SliverGridLayout] to lay tiles
+/// in a grid form with some cells stretched to fit the entire width of the
+/// grid (sometimes called "hero tiles").
+///
+/// ** See code in examples/api/lib/widgets/scroll_view/grid_view.0.dart **
+/// {@end-tool}
 ///
 /// See also:
 ///
@@ -146,8 +171,8 @@ abstract class SliverGridLayout {
 class SliverGridRegularTileLayout extends SliverGridLayout {
   /// Creates a layout that uses equally sized and spaced tiles.
   ///
-  /// All of the arguments must not be null and must not be negative. The
-  /// `crossAxisCount` argument must be greater than zero.
+  /// All of the arguments must not be negative. The `crossAxisCount` argument
+  /// must be greater than zero.
   const SliverGridRegularTileLayout({
     required this.crossAxisCount,
     required this.mainAxisStride,
@@ -155,12 +180,11 @@ class SliverGridRegularTileLayout extends SliverGridLayout {
     required this.childMainAxisExtent,
     required this.childCrossAxisExtent,
     required this.reverseCrossAxis,
-  }) : assert(crossAxisCount != null && crossAxisCount > 0),
-       assert(mainAxisStride != null && mainAxisStride >= 0),
-       assert(crossAxisStride != null && crossAxisStride >= 0),
-       assert(childMainAxisExtent != null && childMainAxisExtent >= 0),
-       assert(childCrossAxisExtent != null && childCrossAxisExtent >= 0),
-       assert(reverseCrossAxis != null);
+  }) : assert(crossAxisCount > 0),
+       assert(mainAxisStride >= 0),
+       assert(crossAxisStride >= 0),
+       assert(childMainAxisExtent >= 0),
+       assert(childCrossAxisExtent >= 0);
 
   /// The number of children in the cross axis.
   final int crossAxisCount;
@@ -194,7 +218,9 @@ class SliverGridRegularTileLayout extends SliverGridLayout {
 
   @override
   int getMinChildIndexForScrollOffset(double scrollOffset) {
-    return mainAxisStride > 0.0 ? crossAxisCount * (scrollOffset ~/ mainAxisStride) : 0;
+    return mainAxisStride > precisionErrorTolerance
+        ? crossAxisCount * (scrollOffset ~/ mainAxisStride)
+        : 0;
   }
 
   @override
@@ -207,8 +233,12 @@ class SliverGridRegularTileLayout extends SliverGridLayout {
   }
 
   double _getOffsetFromStartInCrossAxis(double crossAxisStart) {
-    if (reverseCrossAxis)
-      return crossAxisCount * crossAxisStride - crossAxisStart - childCrossAxisExtent - (crossAxisStride - childCrossAxisExtent);
+    if (reverseCrossAxis) {
+      return crossAxisCount * crossAxisStride -
+          crossAxisStart -
+          childCrossAxisExtent -
+          (crossAxisStride - childCrossAxisExtent);
+    }
     return crossAxisStart;
   }
 
@@ -225,7 +255,11 @@ class SliverGridRegularTileLayout extends SliverGridLayout {
 
   @override
   double computeMaxScrollOffset(int childCount) {
-    assert(childCount != null);
+    if (childCount == 0) {
+      // There are no children in the grid. The max scroll offset should be
+      // zero.
+      return 0.0;
+    }
     final int mainAxisCount = ((childCount - 1) ~/ crossAxisCount) + 1;
     final double mainAxisSpacing = mainAxisStride - childMainAxisExtent;
     return mainAxisStride * mainAxisCount - mainAxisSpacing;
@@ -236,8 +270,15 @@ class SliverGridRegularTileLayout extends SliverGridLayout {
 ///
 /// Given the current constraints on the grid, a [SliverGridDelegate] computes
 /// the layout for the tiles in the grid. The tiles can be placed arbitrarily,
-/// but it is more efficient to place tiles in roughly in order by scroll offset
+/// but it is more efficient to place tiles roughly in order by scroll offset
 /// because grids reify a contiguous sequence of children.
+///
+/// {@tool dartpad}
+/// This example shows how a [SliverGridDelegate] returns a [SliverGridLayout]
+/// configured based on the provided [SliverConstraints] in [getLayout].
+///
+/// ** See code in examples/api/lib/widgets/scroll_view/grid_view.0.dart **
+/// {@end-tool}
 ///
 /// See also:
 ///
@@ -275,6 +316,22 @@ abstract class SliverGridDelegate {
 ///
 /// This delegate creates grids with equally sized and spaced tiles.
 ///
+/// {@tool dartpad}
+/// Here is an example using the [childAspectRatio] property. On a device with a
+/// screen width of 800.0, it creates a GridView with each tile with a width of
+/// 200.0 and a height of 100.0.
+///
+/// ** See code in examples/api/lib/rendering/sliver_grid/sliver_grid_delegate_with_fixed_cross_axis_count.0.dart **
+/// {@end-tool}
+///
+/// {@tool dartpad}
+/// Here is an example using the [mainAxisExtent] property. On a device with a
+/// screen width of 800.0, it creates a GridView with each tile with a width of
+/// 200.0 and a height of 150.0.
+///
+/// ** See code in examples/api/lib/rendering/sliver_grid/sliver_grid_delegate_with_fixed_cross_axis_count.1.dart **
+/// {@end-tool}
+///
 /// See also:
 ///
 ///  * [SliverGridDelegateWithMaxCrossAxisExtent], which creates a layout with
@@ -290,18 +347,20 @@ class SliverGridDelegateWithFixedCrossAxisCount extends SliverGridDelegate {
   /// Creates a delegate that makes grid layouts with a fixed number of tiles in
   /// the cross axis.
   ///
-  /// All of the arguments must not be null. The `mainAxisSpacing` and
-  /// `crossAxisSpacing` arguments must not be negative. The `crossAxisCount`
-  /// and `childAspectRatio` arguments must be greater than zero.
+  /// The `mainAxisSpacing`, `mainAxisExtent` and `crossAxisSpacing` arguments
+  /// must not be negative. The `crossAxisCount` and `childAspectRatio`
+  /// arguments must be greater than zero.
   const SliverGridDelegateWithFixedCrossAxisCount({
     required this.crossAxisCount,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
     this.childAspectRatio = 1.0,
-  }) : assert(crossAxisCount != null && crossAxisCount > 0),
-       assert(mainAxisSpacing != null && mainAxisSpacing >= 0),
-       assert(crossAxisSpacing != null && crossAxisSpacing >= 0),
-       assert(childAspectRatio != null && childAspectRatio > 0);
+    this.mainAxisExtent,
+  }) : assert(crossAxisCount > 0),
+       assert(mainAxisSpacing >= 0),
+       assert(crossAxisSpacing >= 0),
+       assert(childAspectRatio > 0),
+       assert(mainAxisExtent == null || mainAxisExtent >= 0);
 
   /// The number of children in the cross axis.
   final int crossAxisCount;
@@ -315,6 +374,12 @@ class SliverGridDelegateWithFixedCrossAxisCount extends SliverGridDelegate {
   /// The ratio of the cross-axis to the main-axis extent of each child.
   final double childAspectRatio;
 
+  /// The extent of each tile in the main axis. If provided it would define the
+  /// logical pixels taken by each tile in the main-axis.
+  ///
+  /// If null, [childAspectRatio] is used instead.
+  final double? mainAxisExtent;
+
   bool _debugAssertIsValid() {
     assert(crossAxisCount > 0);
     assert(mainAxisSpacing >= 0.0);
@@ -326,10 +391,12 @@ class SliverGridDelegateWithFixedCrossAxisCount extends SliverGridDelegate {
   @override
   SliverGridLayout getLayout(SliverConstraints constraints) {
     assert(_debugAssertIsValid());
-    final double usableCrossAxisExtent = math.max(0.0,
-        constraints.crossAxisExtent - crossAxisSpacing * (crossAxisCount - 1));
+    final double usableCrossAxisExtent = math.max(
+      0.0,
+      constraints.crossAxisExtent - crossAxisSpacing * (crossAxisCount - 1),
+    );
     final double childCrossAxisExtent = usableCrossAxisExtent / crossAxisCount;
-    final double childMainAxisExtent = childCrossAxisExtent / childAspectRatio;
+    final double childMainAxisExtent = mainAxisExtent ?? childCrossAxisExtent / childAspectRatio;
     return SliverGridRegularTileLayout(
       crossAxisCount: crossAxisCount,
       mainAxisStride: childMainAxisExtent + mainAxisSpacing,
@@ -342,10 +409,11 @@ class SliverGridDelegateWithFixedCrossAxisCount extends SliverGridDelegate {
 
   @override
   bool shouldRelayout(SliverGridDelegateWithFixedCrossAxisCount oldDelegate) {
-    return oldDelegate.crossAxisCount != crossAxisCount
-        || oldDelegate.mainAxisSpacing != mainAxisSpacing
-        || oldDelegate.crossAxisSpacing != crossAxisSpacing
-        || oldDelegate.childAspectRatio != childAspectRatio;
+    return oldDelegate.crossAxisCount != crossAxisCount ||
+        oldDelegate.mainAxisSpacing != mainAxisSpacing ||
+        oldDelegate.crossAxisSpacing != crossAxisSpacing ||
+        oldDelegate.childAspectRatio != childAspectRatio ||
+        oldDelegate.mainAxisExtent != mainAxisExtent;
   }
 }
 
@@ -378,18 +446,20 @@ class SliverGridDelegateWithMaxCrossAxisExtent extends SliverGridDelegate {
   /// Creates a delegate that makes grid layouts with tiles that have a maximum
   /// cross-axis extent.
   ///
-  /// All of the arguments must not be null. The [maxCrossAxisExtent] and
-  /// [mainAxisSpacing], and [crossAxisSpacing] arguments must not be negative.
+  /// The [maxCrossAxisExtent], [mainAxisExtent], [mainAxisSpacing],
+  /// and [crossAxisSpacing] arguments must not be negative.
   /// The [childAspectRatio] argument must be greater than zero.
   const SliverGridDelegateWithMaxCrossAxisExtent({
     required this.maxCrossAxisExtent,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
     this.childAspectRatio = 1.0,
-  }) : assert(maxCrossAxisExtent != null && maxCrossAxisExtent >= 0),
-       assert(mainAxisSpacing != null && mainAxisSpacing >= 0),
-       assert(crossAxisSpacing != null && crossAxisSpacing >= 0),
-       assert(childAspectRatio != null && childAspectRatio > 0);
+    this.mainAxisExtent,
+  }) : assert(maxCrossAxisExtent > 0),
+       assert(mainAxisSpacing >= 0),
+       assert(crossAxisSpacing >= 0),
+       assert(childAspectRatio > 0),
+       assert(mainAxisExtent == null || mainAxisExtent >= 0);
 
   /// The maximum extent of tiles in the cross axis.
   ///
@@ -413,6 +483,12 @@ class SliverGridDelegateWithMaxCrossAxisExtent extends SliverGridDelegate {
   /// The ratio of the cross-axis to the main-axis extent of each child.
   final double childAspectRatio;
 
+  /// The extent of each tile in the main axis. If provided it would define the
+  /// logical pixels taken by each tile in the main-axis.
+  ///
+  /// If null, [childAspectRatio] is used instead.
+  final double? mainAxisExtent;
+
   bool _debugAssertIsValid(double crossAxisExtent) {
     assert(crossAxisExtent > 0.0);
     assert(maxCrossAxisExtent > 0.0);
@@ -425,11 +501,17 @@ class SliverGridDelegateWithMaxCrossAxisExtent extends SliverGridDelegate {
   @override
   SliverGridLayout getLayout(SliverConstraints constraints) {
     assert(_debugAssertIsValid(constraints.crossAxisExtent));
-    final int crossAxisCount = (constraints.crossAxisExtent / (maxCrossAxisExtent + crossAxisSpacing)).ceil();
-    final double usableCrossAxisExtent = math.max(0.0,
-        constraints.crossAxisExtent - crossAxisSpacing * (crossAxisCount - 1));
+    int crossAxisCount = (constraints.crossAxisExtent / (maxCrossAxisExtent + crossAxisSpacing))
+        .ceil();
+    // Ensure a minimum count of 1, can be zero and result in an infinite extent
+    // below when the window size is 0.
+    crossAxisCount = math.max(1, crossAxisCount);
+    final double usableCrossAxisExtent = math.max(
+      0.0,
+      constraints.crossAxisExtent - crossAxisSpacing * (crossAxisCount - 1),
+    );
     final double childCrossAxisExtent = usableCrossAxisExtent / crossAxisCount;
-    final double childMainAxisExtent = childCrossAxisExtent / childAspectRatio;
+    final double childMainAxisExtent = mainAxisExtent ?? childCrossAxisExtent / childAspectRatio;
     return SliverGridRegularTileLayout(
       crossAxisCount: crossAxisCount,
       mainAxisStride: childMainAxisExtent + mainAxisSpacing,
@@ -442,10 +524,11 @@ class SliverGridDelegateWithMaxCrossAxisExtent extends SliverGridDelegate {
 
   @override
   bool shouldRelayout(SliverGridDelegateWithMaxCrossAxisExtent oldDelegate) {
-    return oldDelegate.maxCrossAxisExtent != maxCrossAxisExtent
-        || oldDelegate.mainAxisSpacing != mainAxisSpacing
-        || oldDelegate.crossAxisSpacing != crossAxisSpacing
-        || oldDelegate.childAspectRatio != childAspectRatio;
+    return oldDelegate.maxCrossAxisExtent != maxCrossAxisExtent ||
+        oldDelegate.mainAxisSpacing != mainAxisSpacing ||
+        oldDelegate.crossAxisSpacing != crossAxisSpacing ||
+        oldDelegate.childAspectRatio != childAspectRatio ||
+        oldDelegate.mainAxisExtent != mainAxisExtent;
   }
 }
 
@@ -478,37 +561,31 @@ class SliverGridParentData extends SliverMultiBoxAdaptorParentData {
 class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
   /// Creates a sliver that contains multiple box children that whose size and
   /// position are determined by a delegate.
-  ///
-  /// The [childManager] and [gridDelegate] arguments must not be null.
-  RenderSliverGrid({
-    required RenderSliverBoxChildManager childManager,
-    required SliverGridDelegate gridDelegate,
-  }) : assert(gridDelegate != null),
-       _gridDelegate = gridDelegate,
-       super(childManager: childManager);
+  RenderSliverGrid({required super.childManager, required this._gridDelegate});
 
   @override
   void setupParentData(RenderObject child) {
-    if (child.parentData is! SliverGridParentData)
+    if (child.parentData is! SliverGridParentData) {
       child.parentData = SliverGridParentData();
+    }
   }
 
   /// The delegate that controls the size and position of the children.
   SliverGridDelegate get gridDelegate => _gridDelegate;
   SliverGridDelegate _gridDelegate;
   set gridDelegate(SliverGridDelegate value) {
-    assert(value != null);
-    if (_gridDelegate == value)
+    if (_gridDelegate == value) {
       return;
-    if (value.runtimeType != _gridDelegate.runtimeType ||
-        value.shouldRelayout(_gridDelegate))
+    }
+    if (value.runtimeType != _gridDelegate.runtimeType || value.shouldRelayout(_gridDelegate)) {
       markNeedsLayout();
+    }
     _gridDelegate = value;
   }
 
   @override
   double childCrossAxisPosition(RenderBox child) {
-    final SliverGridParentData childParentData = child.parentData! as SliverGridParentData;
+    final childParentData = child.parentData! as SliverGridParentData;
     return childParentData.crossAxisOffset!;
   }
 
@@ -527,46 +604,42 @@ class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
     final SliverGridLayout layout = _gridDelegate.getLayout(constraints);
 
     final int firstIndex = layout.getMinChildIndexForScrollOffset(scrollOffset);
-    final int? targetLastIndex = targetEndScrollOffset.isFinite ?
-      layout.getMaxChildIndexForScrollOffset(targetEndScrollOffset) : null;
-
+    final int? targetLastIndex = targetEndScrollOffset.isFinite
+        ? layout.getMaxChildIndexForScrollOffset(targetEndScrollOffset)
+        : null;
     if (firstChild != null) {
-      final int oldFirstIndex = indexOf(firstChild!);
-      final int oldLastIndex = indexOf(lastChild!);
-      final int leadingGarbage = (firstIndex - oldFirstIndex).clamp(0, childCount);
-      final int trailingGarbage = targetLastIndex == null
-        ? 0
-        : (oldLastIndex - targetLastIndex).clamp(0, childCount);
+      final int leadingGarbage = calculateLeadingGarbage(firstIndex: firstIndex);
+      final int trailingGarbage = targetLastIndex != null
+          ? calculateTrailingGarbage(lastIndex: targetLastIndex)
+          : 0;
       collectGarbage(leadingGarbage, trailingGarbage);
     } else {
       collectGarbage(0, 0);
     }
 
     final SliverGridGeometry firstChildGridGeometry = layout.getGeometryForChildIndex(firstIndex);
-    final double leadingScrollOffset = firstChildGridGeometry.scrollOffset;
-    double trailingScrollOffset = firstChildGridGeometry.trailingScrollOffset;
 
     if (firstChild == null) {
       if (!addInitialChild(index: firstIndex, layoutOffset: firstChildGridGeometry.scrollOffset)) {
         // There are either no children, or we are past the end of all our children.
         final double max = layout.computeMaxScrollOffset(childManager.childCount);
-        geometry = SliverGeometry(
-          scrollExtent: max,
-          maxPaintExtent: max,
-        );
+        geometry = SliverGeometry(scrollExtent: max, maxPaintExtent: max);
         childManager.didFinishLayout();
         return;
       }
     }
 
+    final double leadingScrollOffset = firstChildGridGeometry.scrollOffset;
+    double trailingScrollOffset = firstChildGridGeometry.trailingScrollOffset;
     RenderBox? trailingChildWithLayout;
+    var reachedEnd = false;
 
     for (int index = indexOf(firstChild!) - 1; index >= firstIndex; --index) {
       final SliverGridGeometry gridGeometry = layout.getGeometryForChildIndex(index);
       final RenderBox child = insertAndLayoutLeadingChild(
         gridGeometry.getBoxConstraints(constraints),
       )!;
-      final SliverGridParentData childParentData = child.parentData! as SliverGridParentData;
+      final childParentData = child.parentData! as SliverGridParentData;
       childParentData.layoutOffset = gridGeometry.scrollOffset;
       childParentData.crossAxisOffset = gridGeometry.crossAxisOffset;
       assert(childParentData.index == index);
@@ -576,19 +649,24 @@ class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
 
     if (trailingChildWithLayout == null) {
       firstChild!.layout(firstChildGridGeometry.getBoxConstraints(constraints));
-      final SliverGridParentData childParentData = firstChild!.parentData! as SliverGridParentData;
+      final childParentData = firstChild!.parentData! as SliverGridParentData;
       childParentData.layoutOffset = firstChildGridGeometry.scrollOffset;
       childParentData.crossAxisOffset = firstChildGridGeometry.crossAxisOffset;
       trailingChildWithLayout = firstChild;
     }
 
-    for (int index = indexOf(trailingChildWithLayout!) + 1; targetLastIndex == null || index <= targetLastIndex; ++index) {
+    for (
+      int index = indexOf(trailingChildWithLayout!) + 1;
+      targetLastIndex == null || index <= targetLastIndex;
+      ++index
+    ) {
       final SliverGridGeometry gridGeometry = layout.getGeometryForChildIndex(index);
       final BoxConstraints childConstraints = gridGeometry.getBoxConstraints(constraints);
       RenderBox? child = childAfter(trailingChildWithLayout!);
       if (child == null || indexOf(child) != index) {
         child = insertAndLayoutChild(childConstraints, after: trailingChildWithLayout);
         if (child == null) {
+          reachedEnd = true;
           // We have run out of children.
           break;
         }
@@ -596,8 +674,7 @@ class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
         child.layout(childConstraints);
       }
       trailingChildWithLayout = child;
-      assert(child != null);
-      final SliverGridParentData childParentData = child.parentData! as SliverGridParentData;
+      final childParentData = child.parentData! as SliverGridParentData;
       childParentData.layoutOffset = gridGeometry.scrollOffset;
       childParentData.crossAxisOffset = gridGeometry.crossAxisOffset;
       assert(childParentData.index == index);
@@ -610,14 +687,15 @@ class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
     assert(indexOf(firstChild!) == firstIndex);
     assert(targetLastIndex == null || lastIndex <= targetLastIndex);
 
-    final double estimatedTotalExtent = childManager.estimateMaxScrollOffset(
-      constraints,
-      firstIndex: firstIndex,
-      lastIndex: lastIndex,
-      leadingScrollOffset: leadingScrollOffset,
-      trailingScrollOffset: trailingScrollOffset,
-    );
-
+    final double estimatedTotalExtent = reachedEnd
+        ? trailingScrollOffset
+        : childManager.estimateMaxScrollOffset(
+            constraints,
+            firstIndex: firstIndex,
+            lastIndex: lastIndex,
+            leadingScrollOffset: leadingScrollOffset,
+            trailingScrollOffset: trailingScrollOffset,
+          );
     final double paintExtent = calculatePaintOffset(
       constraints,
       from: math.min(constraints.scrollOffset, leadingScrollOffset),
@@ -634,14 +712,17 @@ class RenderSliverGrid extends RenderSliverMultiBoxAdaptor {
       paintExtent: paintExtent,
       maxPaintExtent: estimatedTotalExtent,
       cacheExtent: cacheExtent,
-      // Conservative to avoid complexity.
-      hasVisualOverflow: true,
+      hasVisualOverflow:
+          estimatedTotalExtent > paintExtent ||
+          constraints.scrollOffset > 0.0 ||
+          constraints.overlap != 0.0,
     );
 
     // We may have started the layout while scrolled to the end, which
     // would not expose a new child.
-    if (estimatedTotalExtent == trailingScrollOffset)
+    if (estimatedTotalExtent == trailingScrollOffset) {
       childManager.setDidUnderflow(true);
+    }
     childManager.didFinishLayout();
   }
 }

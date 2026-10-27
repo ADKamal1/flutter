@@ -7,14 +7,15 @@ import 'package:flutter/cupertino.dart';
 import '../../gallery/demo.dart';
 
 class CupertinoSwitchDemo extends StatefulWidget {
+  const CupertinoSwitchDemo({super.key});
+
   static const String routeName = '/cupertino/switch';
 
   @override
-  _CupertinoSwitchDemoState createState() => _CupertinoSwitchDemoState();
+  State<CupertinoSwitchDemo> createState() => _CupertinoSwitchDemoState();
 }
 
 class _CupertinoSwitchDemoState extends State<CupertinoSwitchDemo> {
-
   bool _switchValue = false;
 
   @override
@@ -47,37 +48,25 @@ class _CupertinoSwitchDemoState extends State<CupertinoSwitchDemo> {
                           });
                         },
                       ),
-                      Text(
-                        "Enabled - ${_switchValue ? "On" : "Off"}"
-                      ),
+                      Text("Enabled - ${_switchValue ? "On" : "Off"}"),
                     ],
                   ),
                 ),
                 Semantics(
                   container: true,
-                  child: Column(
-                    children: const <Widget>[
-                      CupertinoSwitch(
-                        value: true,
-                        onChanged: null,
-                      ),
-                      Text(
-                        'Disabled - On'
-                      ),
+                  child: const Column(
+                    children: <Widget>[
+                      CupertinoSwitch(value: true, onChanged: null),
+                      Text('Disabled - On'),
                     ],
                   ),
                 ),
                 Semantics(
                   container: true,
-                  child: Column(
-                    children: const <Widget>[
-                      CupertinoSwitch(
-                        value: false,
-                        onChanged: null,
-                      ),
-                      Text(
-                        'Disabled - Off'
-                      ),
+                  child: const Column(
+                    children: <Widget>[
+                      CupertinoSwitch(value: false, onChanged: null),
+                      Text('Disabled - Off'),
                     ],
                   ),
                 ),

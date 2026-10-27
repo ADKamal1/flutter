@@ -12,20 +12,22 @@ import '../image_data.dart';
 import '../rendering/rendering_tester.dart';
 
 void main() {
-  TestRenderingFlutterBinding();
+  TestRenderingFlutterBinding.ensureInitialized();
 
-  test('Clearing images while they\'re pending does not crash', () async {
-    final Uint8List bytes = Uint8List.fromList(kTransparentImage);
-    final MemoryImage memoryImage = MemoryImage(bytes);
+  test("Clearing images while they're pending does not crash", () async {
+    final bytes = Uint8List.fromList(kTransparentImage);
+    final memoryImage = MemoryImage(bytes);
     final ImageStream stream = memoryImage.resolve(ImageConfiguration.empty);
-    final Completer<void> completer = Completer<void>();
-    FlutterError.onError = (FlutterErrorDetails error) { completer.completeError(error.exception, error.stack); };
-    stream.addListener(ImageStreamListener(
-      (ImageInfo image, bool synchronousCall) {
+    final completer = Completer<void>();
+    FlutterError.onError = (FlutterErrorDetails error) {
+      completer.completeError(error.exception, error.stack);
+    };
+    stream.addListener(
+      ImageStreamListener((ImageInfo image, bool synchronousCall) {
         completer.complete();
-      }
-    ));
-    imageCache!.clearLiveImages();
+      }),
+    );
+    imageCache.clearLiveImages();
     await completer.future;
   });
 }

@@ -4,14 +4,14 @@
 
 import 'dart:math' as math;
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void verifyPaintPosition(GlobalKey key, Offset ideal) {
   final RenderObject target = key.currentContext!.findRenderObject()!;
   expect(target.parent, isA<RenderViewport>());
-  final SliverPhysicalParentData parentData = target.parentData! as SliverPhysicalParentData;
+  final parentData = target.parentData! as SliverPhysicalParentData;
   final Offset actual = parentData.paintOffset;
   expect(actual, ideal);
 }
@@ -34,7 +34,10 @@ void main() {
       ),
     );
     final ScrollPosition position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
-    const double max = RenderBigSliver.height * 3.0 + (RenderOverlappingSliver.totalHeight) * 2.0 - 600.0; // 600 is the height of the test viewport
+    const double max =
+        RenderBigSliver.height * 3.0 +
+        RenderOverlappingSliver.totalHeight * 2.0 -
+        600.0; // 600 is the height of the test viewport
     assert(max < 10000.0);
     expect(max, 1450.0);
     expect(position.pixels, 0.0);
@@ -45,17 +48,18 @@ void main() {
     expect(position.pixels, max);
     expect(position.minScrollExtent, 0.0);
     expect(position.maxScrollExtent, max);
-    verifyPaintPosition(key1, const Offset(0.0, 0.0));
-    verifyPaintPosition(key2, const Offset(0.0, 0.0));
-    verifyPaintPosition(key3, const Offset(0.0, 0.0));
-    verifyPaintPosition(key4, const Offset(0.0, 0.0));
+    verifyPaintPosition(key1, Offset.zero);
+    verifyPaintPosition(key2, Offset.zero);
+    verifyPaintPosition(key3, Offset.zero);
+    verifyPaintPosition(key4, Offset.zero);
     verifyPaintPosition(key5, const Offset(0.0, 50.0));
   });
 }
 
 class RenderBigSliver extends RenderSliver {
   static const double height = 550.0;
-  double get paintExtent => (height - constraints.scrollOffset).clamp(0.0, constraints.remainingPaintExtent);
+  double get paintExtent =>
+      (height - constraints.scrollOffset).clamp(0.0, constraints.remainingPaintExtent);
 
   @override
   void performLayout() {
@@ -68,7 +72,7 @@ class RenderBigSliver extends RenderSliver {
 }
 
 class BigSliver extends LeafRenderObjectWidget {
-  const BigSliver({ Key? key }) : super(key: key);
+  const BigSliver({super.key});
   @override
   RenderBigSliver createRenderObject(BuildContext context) {
     return RenderBigSliver();
@@ -81,12 +85,9 @@ class RenderOverlappingSliver extends RenderSliver {
 
   double get paintExtent {
     return math.min(
-             math.max(
-               fixedHeight,
-               totalHeight - constraints.scrollOffset,
-             ),
-             constraints.remainingPaintExtent,
-           );
+      math.max(fixedHeight, totalHeight - constraints.scrollOffset),
+      constraints.remainingPaintExtent,
+    );
   }
 
   double get layoutExtent {
@@ -105,7 +106,7 @@ class RenderOverlappingSliver extends RenderSliver {
 }
 
 class OverlappingSliver extends LeafRenderObjectWidget {
-  const OverlappingSliver({ Key? key }) : super(key: key);
+  const OverlappingSliver({super.key});
   @override
   RenderOverlappingSliver createRenderObject(BuildContext context) {
     return RenderOverlappingSliver();

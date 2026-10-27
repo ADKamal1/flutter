@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/material.dart';
+/// @docImport 'package:flutter/widgets.dart';
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
-import 'package:vector_math/vector_math_64.dart' show Matrix4;
 
 import 'basic.dart';
 import 'container.dart';
@@ -23,61 +26,17 @@ export 'package:flutter/rendering.dart' show RelativeRect;
 /// [ChangeNotifier] and [ValueNotifier].
 ///
 /// [AnimatedWidget] is most useful for widgets that are otherwise stateless. To
-/// use [AnimatedWidget], simply subclass it and implement the build function.
+/// use [AnimatedWidget], subclass it and implement the build function.
 ///
-///{@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// This code defines a widget called `Spinner` that spins a green square
 /// continually. It is built with an [AnimatedWidget].
 ///
-/// ```dart imports
-/// import 'dart:math' as math;
-/// ```
-///
-/// ```dart preamble
-/// class SpinningContainer extends AnimatedWidget {
-///   const SpinningContainer({Key key, AnimationController controller})
-///       : super(key: key, listenable: controller);
-///
-///   Animation<double> get _progress => listenable;
-///
-///   @override
-///   Widget build(BuildContext context) {
-///     return Transform.rotate(
-///       angle: _progress.value * 2.0 * math.pi,
-///       child: Container(width: 200.0, height: 200.0, color: Colors.green),
-///     );
-///   }
-/// }
-/// ```
-///
-/// ```dart
-/// AnimationController _controller;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 10),
-///     vsync: this,
-///   )..repeat();
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return SpinningContainer(controller: _controller);
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/animated_widget.0.dart **
 /// {@end-tool}
 ///
 /// For more complex case involving additional state, consider using
-/// [AnimatedBuilder].
+/// [AnimatedBuilder] or [ListenableBuilder].
 ///
 /// ## Relationship to [ImplicitlyAnimatedWidget]s
 ///
@@ -100,8 +59,10 @@ export 'package:flutter/rendering.dart' show RelativeRect;
 /// with subclasses of [ImplicitlyAnimatedWidget] (see above), which are usually
 /// named `AnimatedFoo`. Commonly used animated widgets include:
 ///
-///  * [AnimatedBuilder], which is useful for complex animation use cases and a
-///    notable exception to the naming scheme of [AnimatedWidget] subclasses.
+///  * [ListenableBuilder], which uses a builder pattern that is useful for
+///    complex [Listenable] use cases.
+///  * [AnimatedBuilder], which uses a builder pattern that is useful for
+///    complex [Animation] use cases.
 ///  * [AlignTransition], which is an animated version of [Align].
 ///  * [DecoratedBoxTransition], which is an animated version of [DecoratedBox].
 ///  * [DefaultTextStyleTransition], which is an animated version of
@@ -120,11 +81,7 @@ abstract class AnimatedWidget extends StatefulWidget {
   /// Creates a widget that rebuilds when the given listenable changes.
   ///
   /// The [listenable] argument is required.
-  const AnimatedWidget({
-    Key? key,
-    required this.listenable,
-  }) : assert(listenable != null),
-       super(key: key);
+  const AnimatedWidget({super.key, required this.listenable});
 
   /// The [Listenable] to which this widget is listening.
   ///
@@ -138,12 +95,12 @@ abstract class AnimatedWidget extends StatefulWidget {
 
   /// Subclasses typically do not override this method.
   @override
-  _AnimatedState createState() => _AnimatedState();
+  State<AnimatedWidget> createState() => _AnimatedState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties.add(DiagnosticsProperty<Listenable>('animation', listenable));
+    properties.add(DiagnosticsProperty<Listenable>('listenable', listenable));
   }
 }
 
@@ -170,6 +127,9 @@ class _AnimatedState extends State<AnimatedWidget> {
   }
 
   void _handleChange() {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       // The listenable's state is our build state, and it changed already.
     });
@@ -178,6 +138,23 @@ class _AnimatedState extends State<AnimatedWidget> {
   @override
   Widget build(BuildContext context) => widget.build(context);
 }
+
+/// Signature for a builder used to control a page's exit transition.
+///
+/// When a new route enters the stack, the `animation` argument is typically
+/// used to control the enter and exit transition of the topmost route. The exit
+/// transition of the route just below the new route is controlled with the
+/// `secondaryAnimation`, which also controls the transition of the old route
+/// when the topmost route is popped off the stack.
+///
+/// Typically used as the argument for [ModalRoute.delegatedTransition].
+typedef DelegatedTransitionBuilder = Widget? Function(
+  BuildContext context,
+  Animation<double> animation,
+  Animation<double> secondaryAnimation,
+  bool allowSnapshotting,
+  Widget? child,
+);
 
 /// Animates the position of a widget relative to its normal position.
 ///
@@ -195,49 +172,11 @@ class _AnimatedState extends State<AnimatedWidget> {
 /// animated by a [CurvedAnimation] set to [Curves.elasticIn]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/slide_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_scaffold_center_freeform_state}
+/// {@tool dartpad}
 /// The following code implements the [SlideTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// class _MyStatefulWidgetState extends State<MyStatefulWidget> with SingleTickerProviderStateMixin {
-///   AnimationController _controller;
-///   Animation<Offset> _offsetAnimation;
-///
-///   @override
-///   void initState() {
-///     super.initState();
-///     _controller = AnimationController(
-///       duration: const Duration(seconds: 2),
-///       vsync: this,
-///     )..repeat(reverse: true);
-///     _offsetAnimation = Tween<Offset>(
-///       begin: Offset.zero,
-///       end: const Offset(1.5, 0.0),
-///     ).animate(CurvedAnimation(
-///       parent: _controller,
-///       curve: Curves.elasticIn,
-///     ));
-///   }
-///
-///   @override
-///   void dispose() {
-///     super.dispose();
-///     _controller.dispose();
-///   }
-///
-///   @override
-///   Widget build(BuildContext context) {
-///     return SlideTransition(
-///       position: _offsetAnimation,
-///       child: const Padding(
-///         padding: EdgeInsets.all(8.0),
-///         child: FlutterLogo(size: 150.0),
-///       ),
-///     );
-///   }
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/slide_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -250,16 +189,13 @@ class _AnimatedState extends State<AnimatedWidget> {
 ///    position based on the value of a rectangle relative to a bounding box.
 class SlideTransition extends AnimatedWidget {
   /// Creates a fractional translation transition.
-  ///
-  /// The [position] argument must not be null.
   const SlideTransition({
-    Key? key,
+    super.key,
     required Animation<Offset> position,
     this.transformHitTests = true,
     this.textDirection,
     this.child,
-  }) : assert(position != null),
-       super(key: key, listenable: position);
+  }) : super(listenable: position);
 
   /// The animation that controls the position of the child.
   ///
@@ -297,8 +233,9 @@ class SlideTransition extends AnimatedWidget {
   @override
   Widget build(BuildContext context) {
     Offset offset = position.value;
-    if (textDirection == TextDirection.rtl)
+    if (textDirection == TextDirection.rtl) {
       offset = Offset(-offset.dx, offset.dy);
+    }
     return FractionalTranslation(
       translation: offset,
       transformHitTests: transformHitTests,
@@ -307,55 +244,99 @@ class SlideTransition extends AnimatedWidget {
   }
 }
 
+/// Signature for the callback to [MatrixTransition.onTransform].
+///
+/// Computes a [Matrix4] to be used in the [MatrixTransition] transformed widget
+/// from the [MatrixTransition.animation] value.
+typedef TransformCallback = Matrix4 Function(double animationValue);
+
+/// Animates the [Matrix4] of a transformed widget.
+///
+/// The [onTransform] callback computes a [Matrix4] from the animated value, it
+/// is called every time the [animation] changes its value.
+///
+/// {@tool dartpad}
+/// The following example implements a [MatrixTransition] with a rotation around
+/// the Y axis, with a 3D perspective skew.
+///
+/// ** See code in examples/api/lib/widgets/transitions/matrix_transition.0.dart **
+/// {@end-tool}
+///
+/// See also:
+///
+///  * [ScaleTransition], which animates the scale of a widget, by providing a
+///    matrix which scales along the X and Y axis.
+///  * [RotationTransition], which animates the rotation of a widget, by
+///    providing a matrix which rotates along the Z axis.
+class MatrixTransition extends AnimatedWidget {
+  /// Creates a matrix transition.
+  ///
+  /// The [alignment] argument defaults to [Alignment.center].
+  const MatrixTransition({
+    super.key,
+    required Animation<double> animation,
+    required this.onTransform,
+    this.alignment = Alignment.center,
+    this.filterQuality,
+    this.child,
+  }) : super(listenable: animation);
+
+  /// The callback to compute a [Matrix4] from the [animation]. It's called
+  /// every time [animation] changes its value.
+  final TransformCallback onTransform;
+
+  /// The animation that controls the matrix of the child.
+  ///
+  /// The matrix will be computed from the animation with the [onTransform]
+  /// callback.
+  Animation<double> get animation => listenable as Animation<double>;
+
+  /// The alignment of the origin of the coordinate system in which the
+  /// transform takes place, relative to the size of the box.
+  ///
+  /// For example, to set the origin of the transform to bottom middle, you can
+  /// use an alignment of (0.0, 1.0).
+  final Alignment alignment;
+
+  /// The filter quality with which to apply the transform as a bitmap operation.
+  ///
+  /// When the animation is stopped (either in [AnimationStatus.dismissed] or
+  /// [AnimationStatus.completed]), the filter quality argument will be ignored.
+  ///
+  /// {@macro flutter.widgets.Transform.optional.FilterQuality}
+  final FilterQuality? filterQuality;
+
+  /// The widget below this widget in the tree.
+  ///
+  /// {@macro flutter.widgets.ProxyWidget.child}
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    // The ImageFilter layer created by setting filterQuality will introduce
+    // a saveLayer call. This is usually worthwhile when animating the layer,
+    // but leaving it in the layer tree before the animation has started or after
+    // it has finished significantly hurts performance.
+    return Transform(
+      transform: onTransform(animation.value),
+      alignment: alignment,
+      filterQuality: animation.isAnimating ? filterQuality : null,
+      child: child,
+    );
+  }
+}
+
 /// Animates the scale of a transformed widget.
 ///
-/// Here's an illustration of the [ScaleTransition] widget, with it's [alignment]
+/// Here's an illustration of the [ScaleTransition] widget, with it's [scale]
 /// animated by a [CurvedAnimation] set to [Curves.fastOutSlowIn]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/scale_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [ScaleTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// AnimationController _controller;
-/// Animation<double> _animation;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-///   _animation = CurvedAnimation(
-///     parent: _controller,
-///     curve: Curves.fastOutSlowIn,
-///   );
-/// }
-///
-/// @override
-/// void dispose() {
-///   super.dispose();
-///   _controller.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return Scaffold(
-///     body: Center(
-///       child: ScaleTransition(
-///         scale: _animation,
-///         child: const Padding(
-///           padding: EdgeInsets.all(8.0),
-///           child: FlutterLogo(size: 150.0),
-///         ),
-///       ),
-///     ),
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/scale_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -366,48 +347,26 @@ class SlideTransition extends AnimatedWidget {
 ///    position based on the value of a rectangle relative to a bounding box.
 ///  * [SizeTransition], a widget that animates its own size and clips and
 ///    aligns its child.
-class ScaleTransition extends AnimatedWidget {
+class ScaleTransition extends MatrixTransition {
   /// Creates a scale transition.
   ///
-  /// The [scale] argument must not be null. The [alignment] argument defaults
-  /// to [Alignment.center].
+  /// The [alignment] argument defaults to [Alignment.center].
   const ScaleTransition({
-    Key? key,
+    super.key,
     required Animation<double> scale,
-    this.alignment = Alignment.center,
-    this.child,
-  }) : assert(scale != null),
-       super(key: key, listenable: scale);
+    super.alignment = Alignment.center,
+    super.filterQuality,
+    super.child,
+  }) : super(animation: scale, onTransform: _handleScaleMatrix);
 
   /// The animation that controls the scale of the child.
+  Animation<double> get scale => animation;
+
+  /// The callback that controls the scale of the child.
   ///
-  /// If the current value of the scale animation is v, the child will be
+  /// If the current value of the animation is v, the child will be
   /// painted v times its normal size.
-  Animation<double> get scale => listenable as Animation<double>;
-
-  /// The alignment of the origin of the coordinate system in which the scale
-  /// takes place, relative to the size of the box.
-  ///
-  /// For example, to set the origin of the scale to bottom middle, you can use
-  /// an alignment of (0.0, 1.0).
-  final Alignment alignment;
-
-  /// The widget below this widget in the tree.
-  ///
-  /// {@macro flutter.widgets.ProxyWidget.child}
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    final double scaleValue = scale.value;
-    final Matrix4 transform = Matrix4.identity()
-      ..scale(scaleValue, scaleValue, 1.0);
-    return Transform(
-      transform: transform,
-      alignment: alignment,
-      child: child,
-    );
-  }
+  static Matrix4 _handleScaleMatrix(double value) => Matrix4.diagonal3Values(value, value, 1.0);
 }
 
 /// Animates the rotation of a widget.
@@ -416,49 +375,11 @@ class ScaleTransition extends AnimatedWidget {
 /// animated by a [CurvedAnimation] set to [Curves.elasticOut]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/rotation_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [RotationTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// AnimationController _controller;
-/// Animation<double> _animation;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-///   _animation = CurvedAnimation(
-///     parent: _controller,
-///     curve: Curves.elasticOut,
-///   );
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return Scaffold(
-///     body: Center(
-///       child: RotationTransition(
-///         turns: _animation,
-///         child: const Padding(
-///           padding: EdgeInsets.all(8.0),
-///           child: FlutterLogo(size: 150.0),
-///         ),
-///       ),
-///     ),
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/rotation_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -467,53 +388,31 @@ class ScaleTransition extends AnimatedWidget {
 ///    widget.
 ///  * [SizeTransition], a widget that animates its own size and clips and
 ///    aligns its child.
-class RotationTransition extends AnimatedWidget {
+class RotationTransition extends MatrixTransition {
   /// Creates a rotation transition.
-  ///
-  /// The [turns] argument must not be null.
   const RotationTransition({
-    Key? key,
+    super.key,
     required Animation<double> turns,
-    this.alignment = Alignment.center,
-    this.child,
-  }) : assert(turns != null),
-       super(key: key, listenable: turns);
+    super.alignment = Alignment.center,
+    super.filterQuality,
+    super.child,
+  }) : super(animation: turns, onTransform: _handleTurnsMatrix);
 
   /// The animation that controls the rotation of the child.
-  ///
-  /// If the current value of the turns animation is v, the child will be
-  /// rotated v * 2 * pi radians before being painted.
-  Animation<double> get turns => listenable as Animation<double>;
+  Animation<double> get turns => animation;
 
-  /// The alignment of the origin of the coordinate system around which the
-  /// rotation occurs, relative to the size of the box.
+  /// The callback that controls the rotation of the child.
   ///
-  /// For example, to set the origin of the rotation to top right corner, use
-  /// an alignment of (1.0, -1.0) or use [Alignment.topRight]
-  final Alignment alignment;
-
-  /// The widget below this widget in the tree.
-  ///
-  /// {@macro flutter.widgets.ProxyWidget.child}
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    final double turnsValue = turns.value;
-    final Matrix4 transform = Matrix4.rotationZ(turnsValue * math.pi * 2.0);
-    return Transform(
-      transform: transform,
-      alignment: alignment,
-      child: child,
-    );
-  }
+  /// If the current value of the animation is v, the child will be rotated
+  /// v * 2 * pi radians before being painted.
+  static Matrix4 _handleTurnsMatrix(double value) => Matrix4.rotationZ(value * math.pi * 2.0);
 }
 
 /// Animates its own size and clips and aligns its child.
 ///
 /// [SizeTransition] acts as a [ClipRect] that animates either its width or its
-/// height, depending upon the value of [axis]. The alignment of the child along
-/// the [axis] is specified by the [axisAlignment].
+/// height, depending upon the value of [axis]. The alignment of the child is
+/// specified by the [alignment].
 ///
 /// Like most widgets, [SizeTransition] will conform to the constraints it is
 /// given, so be sure to put it in a context where it can change size. For
@@ -525,49 +424,12 @@ class RotationTransition extends AnimatedWidget {
 /// animated by a [CurvedAnimation] set to [Curves.fastOutSlowIn]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/size_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// This code defines a widget that uses [SizeTransition] to change the size
 /// of [FlutterLogo] continually. It is built with a [Scaffold]
 /// where the internal widget has space to change its size.
 ///
-/// ```dart
-/// AnimationController _controller;
-/// Animation<double> _animation;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 3),
-///     vsync: this,
-///   )..repeat();
-///   _animation = CurvedAnimation(
-///     parent: _controller,
-///     curve: Curves.fastOutSlowIn,
-///   );
-/// }
-///
-/// @override
-/// void dispose() {
-///   super.dispose();
-///   _controller.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return Scaffold(
-///     body: SizeTransition(
-///       sizeFactor: _animation,
-///       axis: Axis.horizontal,
-///       axisAlignment: -1,
-///       child: Center(
-///           child: FlutterLogo(size: 200.0),
-///       ),
-///     ),
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/size_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -583,20 +445,28 @@ class RotationTransition extends AnimatedWidget {
 class SizeTransition extends AnimatedWidget {
   /// Creates a size transition.
   ///
-  /// The [axis], [sizeFactor], and [axisAlignment] arguments must not be null.
-  /// The [axis] argument defaults to [Axis.vertical]. The [axisAlignment]
-  /// defaults to 0.0, which centers the child along the main axis during the
-  /// transition.
+  /// The [axis] argument defaults to [Axis.vertical]. The [alignment] defaults
+  /// to [Alignment.center], which centers the child within the parent during
+  /// the transition.
   const SizeTransition({
-    Key? key,
+    super.key,
     this.axis = Axis.vertical,
     required Animation<double> sizeFactor,
-    this.axisAlignment = 0.0,
+    @Deprecated(
+      'Use alignment instead. '
+      'This property provides full control over both axes, which is an improvement over the old axisAlignment. '
+      'This feature was deprecated after v3.41.0-1.0.pre.',
+    )
+    this.axisAlignment,
+    this.alignment,
+    this.fixedCrossAxisSizeFactor,
     this.child,
-  }) : assert(axis != null),
-       assert(sizeFactor != null),
-       assert(axisAlignment != null),
-       super(key: key, listenable: sizeFactor);
+  }) : assert(fixedCrossAxisSizeFactor == null || fixedCrossAxisSizeFactor >= 0.0),
+       assert(
+         axisAlignment == null || alignment == null,
+         'Cannot provide both axisAlignment and alignment as axisAlignment has been deprecated and superseded by alignment.',
+       ),
+       super(listenable: sizeFactor);
 
   /// [Axis.horizontal] if [sizeFactor] modifies the width, otherwise
   /// [Axis.vertical].
@@ -623,7 +493,27 @@ class SizeTransition extends AnimatedWidget {
   /// A value of 1.0 indicates the bottom or end, depending upon the [axis].
   ///
   /// A value of 0.0 (the default) indicates the center for either [axis] value.
-  final double axisAlignment;
+  ///
+  /// This property has been deprecated and superseded by [alignment]. Existing usages can be migrated to [alignment] as follows:
+  /// - If [axis] is [Axis.horizontal], replace with `Alignment(axisAlignment ?? 0.0, -1.0)`.
+  /// - If [axis] is [Axis.vertical], replace with `Alignment(-1.0, axisAlignment ?? 0.0)`.
+  @Deprecated(
+    'Use alignment instead. '
+    'This property provides full control over both axes, which is an improvement over the old axisAlignment. '
+    'This feature was deprecated after v3.41.0-1.0.pre.',
+  )
+  final double? axisAlignment;
+
+  /// The alignment of the child within the parent during the transition.
+  final AlignmentGeometry? alignment;
+
+  /// The factor by which to multiply the cross axis size of the child.
+  ///
+  /// If the value of [fixedCrossAxisSizeFactor] is less than one, the child
+  /// will be clipped along the appropriate axis.
+  ///
+  /// If `null` (the default), the cross axis size is as large as the parent.
+  final double? fixedCrossAxisSizeFactor;
 
   /// The widget below this widget in the tree.
   ///
@@ -632,16 +522,20 @@ class SizeTransition extends AnimatedWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AlignmentDirectional alignment;
-    if (axis == Axis.vertical)
-      alignment = AlignmentDirectional(-1.0, axisAlignment);
-    else
-      alignment = AlignmentDirectional(axisAlignment, -1.0);
     return ClipRect(
       child: Align(
-        alignment: alignment,
-        heightFactor: axis == Axis.vertical ? math.max(sizeFactor.value, 0.0) : null,
-        widthFactor: axis == Axis.horizontal ? math.max(sizeFactor.value, 0.0) : null,
+        alignment:
+            alignment ??
+            switch (axis) {
+              Axis.horizontal => AlignmentDirectional(axisAlignment ?? 0.0, -1.0),
+              Axis.vertical => AlignmentDirectional(-1.0, axisAlignment ?? 0.0),
+            },
+        heightFactor: axis == Axis.vertical
+            ? math.max(sizeFactor.value, 0.0)
+            : fixedCrossAxisSizeFactor,
+        widthFactor: axis == Axis.horizontal
+            ? math.max(sizeFactor.value, 0.0)
+            : fixedCrossAxisSizeFactor,
         child: child,
       ),
     );
@@ -658,66 +552,47 @@ class SizeTransition extends AnimatedWidget {
 /// Here's an illustration of the [FadeTransition] widget, with it's [opacity]
 /// animated by a [CurvedAnimation] set to [Curves.fastOutSlowIn]:
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [FadeTransition] using
 /// the Flutter logo:
 ///
-/// ```dart
-/// AnimationController _controller;
-/// Animation<double> _animation;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-///   _animation = CurvedAnimation(
-///     parent: _controller,
-///     curve: Curves.easeIn,
-///   );
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return Container(
-///     color: Colors.white,
-///     child: FadeTransition(
-///       opacity: _animation,
-///       child: const Padding(
-///         padding: EdgeInsets.all(8),
-///         child: FlutterLogo()
-///       ),
-///     ),
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/fade_transition.0.dart **
 /// {@end-tool}
+///
+/// ## Hit testing
+///
+/// Setting the [opacity] to zero does not prevent hit testing from being
+/// applied to the descendants of the [FadeTransition] widget. This can be
+/// confusing for the user, who may not see anything, and may believe the area
+/// of the interface where the [FadeTransition] is hiding a widget to be
+/// non-interactive.
+///
+/// With certain widgets, such as [Flow], that compute their positions only when
+/// they are painted, this can actually lead to bugs (from unexpected geometry
+/// to exceptions), because those widgets are not painted by the [FadeTransition]
+/// widget at all when the [opacity] animation reaches zero.
+///
+/// To avoid such problems, it is generally a good idea to combine this widget
+/// with an [IgnorePointer] that one enables when the [opacity] animation
+/// reaches zero. This prevents interactions with any children in the subtree
+/// when the [child] is not visible. For performance reasons, when implementing
+/// this, care should be taken not to rebuild the relevant widget (e.g. by
+/// calling [State.setState]) except at the transition point.
 ///
 /// See also:
 ///
 ///  * [Opacity], which does not animate changes in opacity.
 ///  * [AnimatedOpacity], which animates changes in opacity without taking an
 ///    explicit [Animation] argument.
+///  * [SliverFadeTransition], the sliver version of this widget.
 class FadeTransition extends SingleChildRenderObjectWidget {
   /// Creates an opacity transition.
-  ///
-  /// The [opacity] argument must not be null.
   const FadeTransition({
-    Key? key,
+    super.key,
     required this.opacity,
     this.alwaysIncludeSemantics = false,
-    Widget? child,
-  }) : assert(opacity != null),
-       super(key: key, child: child);
+    super.child,
+  });
 
   /// The animation that controls the opacity of the child.
   ///
@@ -739,10 +614,7 @@ class FadeTransition extends SingleChildRenderObjectWidget {
 
   @override
   RenderAnimatedOpacity createRenderObject(BuildContext context) {
-    return RenderAnimatedOpacity(
-      opacity: opacity,
-      alwaysIncludeSemantics: alwaysIncludeSemantics,
-    );
+    return RenderAnimatedOpacity(opacity: opacity, alwaysIncludeSemantics: alwaysIncludeSemantics);
   }
 
   @override
@@ -756,61 +628,23 @@ class FadeTransition extends SingleChildRenderObjectWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<Animation<double>>('opacity', opacity));
-    properties.add(FlagProperty('alwaysIncludeSemantics', value: alwaysIncludeSemantics, ifTrue: 'alwaysIncludeSemantics'));
+    properties.add(
+      FlagProperty(
+        'alwaysIncludeSemantics',
+        value: alwaysIncludeSemantics,
+        ifTrue: 'alwaysIncludeSemantics',
+      ),
+    );
   }
 }
 
 /// Animates the opacity of a sliver widget.
 ///
-/// {@tool dartpad --template=stateful_widget_scaffold_center_freeform_state}
+/// {@tool dartpad}
 /// Creates a [CustomScrollView] with a [SliverFixedExtentList] that uses a
 /// [SliverFadeTransition] to fade the list in and out.
 ///
-/// ```dart
-/// class _MyStatefulWidgetState extends State<MyStatefulWidget> with SingleTickerProviderStateMixin {
-///   AnimationController controller;
-///   Animation<double> animation;
-///
-///   initState() {
-///     super.initState();
-///     controller = AnimationController(
-///         duration: const Duration(milliseconds: 1000), vsync: this);
-///     animation = CurvedAnimation(parent: controller, curve: Curves.easeIn);
-///
-///     animation.addStatusListener((status) {
-///       if (status == AnimationStatus.completed) {
-///         controller.reverse();
-///       } else if (status == AnimationStatus.dismissed) {
-///         controller.forward();
-///       }
-///     });
-///     controller.forward();
-///   }
-///
-///   Widget build(BuildContext context) {
-///     return CustomScrollView(
-///       slivers: <Widget>[
-///         SliverFadeTransition(
-///           opacity: animation,
-///           sliver: SliverFixedExtentList(
-///             itemExtent: 100.0,
-///             delegate: SliverChildBuilderDelegate(
-///               (BuildContext context, int index) {
-///                 return Container(
-///                   color: index % 2 == 0
-///                     ? Colors.indigo[200]
-///                     : Colors.orange[200],
-///                 );
-///               },
-///               childCount: 5,
-///             ),
-///           ),
-///         )
-///       ]
-///     );
-///   }
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/sliver_fade_transition.0.dart **
 /// {@end-tool}
 ///
 /// Here's an illustration of the [FadeTransition] widget, the [RenderBox]
@@ -819,20 +653,39 @@ class FadeTransition extends SingleChildRenderObjectWidget {
 ///
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/fade_transition.mp4}
 ///
+/// ## Hit testing
+///
+/// Setting the [opacity] to zero does not prevent hit testing from being
+/// applied to the descendants of the [SliverFadeTransition] widget. This can be
+/// confusing for the user, who may not see anything, and may believe the area
+/// of the interface where the [SliverFadeTransition] is hiding a widget to be
+/// non-interactive.
+///
+/// With certain widgets, such as [Flow], that compute their positions only when
+/// they are painted, this can actually lead to bugs (from unexpected geometry
+/// to exceptions), because those widgets are not painted by the
+/// [SliverFadeTransition] widget at all when the [opacity] animation reaches
+/// zero.
+///
+/// To avoid such problems, it is generally a good idea to combine this widget
+/// with a [SliverIgnorePointer] that one enables when the [opacity] animation
+/// reaches zero. This prevents interactions with any children in the subtree
+/// when the sliver is not visible. For performance reasons, when implementing
+/// this, care should be taken not to rebuild the relevant widget (e.g. by
+/// calling [State.setState]) except at the transition point.
+///
 /// See also:
 ///
 ///  * [SliverOpacity], which does not animate changes in opacity.
+///  * [FadeTransition], the box version of this widget.
 class SliverFadeTransition extends SingleChildRenderObjectWidget {
   /// Creates an opacity transition.
-  ///
-  /// The [opacity] argument must not be null.
   const SliverFadeTransition({
-    Key? key,
+    super.key,
     required this.opacity,
     this.alwaysIncludeSemantics = false,
     Widget? sliver,
-  }) : assert(opacity != null),
-      super(key: key, child: sliver);
+  }) : super(child: sliver);
 
   /// The animation that controls the opacity of the sliver child.
   ///
@@ -871,7 +724,13 @@ class SliverFadeTransition extends SingleChildRenderObjectWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<Animation<double>>('opacity', opacity));
-    properties.add(FlagProperty('alwaysIncludeSemantics', value: alwaysIncludeSemantics, ifTrue: 'alwaysIncludeSemantics'));
+    properties.add(
+      FlagProperty(
+        'alwaysIncludeSemantics',
+        value: alwaysIncludeSemantics,
+        ifTrue: 'alwaysIncludeSemantics',
+      ),
+    );
   }
 }
 
@@ -886,8 +745,7 @@ class RelativeRectTween extends Tween<RelativeRect> {
   ///
   /// The [begin] and [end] properties may be null; the null value
   /// is treated as [RelativeRect.fill].
-  RelativeRectTween({ RelativeRect? begin, RelativeRect? end })
-    : super(begin: begin, end: end);
+  RelativeRectTween({super.begin, super.end});
 
   /// Returns the value this variable has at the given animation clock value.
   @override
@@ -904,58 +762,11 @@ class RelativeRectTween extends Tween<RelativeRect> {
 /// animated by a [CurvedAnimation] set to [Curves.elasticInOut]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/positioned_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [PositionedTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// AnimationController _controller;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   final double smallLogo = 100;
-///   final double bigLogo = 200;
-///
-///   return LayoutBuilder(
-///     builder: (context, constraints) {
-///       final Size biggest = constraints.biggest;
-///       return Stack(
-///         children: [
-///           PositionedTransition(
-///             rect: RelativeRectTween(
-///               begin: RelativeRect.fromSize(Rect.fromLTWH(0, 0, smallLogo, smallLogo), biggest),
-///               end: RelativeRect.fromSize(Rect.fromLTWH(biggest.width - bigLogo, biggest.height - bigLogo, bigLogo, bigLogo), biggest),
-///             ).animate(CurvedAnimation(
-///               parent: _controller,
-///               curve: Curves.elasticInOut,
-///             )),
-///             child: Padding(
-///               padding: const EdgeInsets.all(8),
-///               child: FlutterLogo()
-///             ),
-///           ),
-///         ],
-///       );
-///     },
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/positioned_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -974,14 +785,11 @@ class RelativeRectTween extends Tween<RelativeRect> {
 ///    aligns its child.
 class PositionedTransition extends AnimatedWidget {
   /// Creates a transition for [Positioned].
-  ///
-  /// The [rect] argument must not be null.
   const PositionedTransition({
-    Key? key,
+    super.key,
     required Animation<RelativeRect> rect,
     required this.child,
-  }) : assert(rect != null),
-       super(key: key, listenable: rect);
+  }) : super(listenable: rect);
 
   /// The animation that controls the child's size and position.
   Animation<RelativeRect> get rect => listenable as Animation<RelativeRect>;
@@ -993,10 +801,7 @@ class PositionedTransition extends AnimatedWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fromRelativeRect(
-      rect: rect.value,
-      child: child,
-    );
+    return Positioned.fromRelativeRect(rect: rect.value, child: child);
   }
 }
 
@@ -1010,59 +815,11 @@ class PositionedTransition extends AnimatedWidget {
 /// animated by a [CurvedAnimation] set to [Curves.elasticInOut]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/relative_positioned_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [RelativePositionedTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// AnimationController _controller;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   final double smallLogo = 100;
-///   final double bigLogo = 200;
-///
-///   return LayoutBuilder(
-///     builder: (context, constraints) {
-///       final Size biggest = constraints.biggest;
-///       return Stack(
-///         children: [
-///           RelativePositionedTransition(
-///             size: biggest,
-///             rect: RectTween(
-///               begin: Rect.fromLTWH(0, 0, bigLogo, bigLogo),
-///               end: Rect.fromLTWH(biggest.width - smallLogo, biggest.height - smallLogo, smallLogo, smallLogo),
-///             ).animate(CurvedAnimation(
-///               parent: _controller,
-///               curve: Curves.elasticInOut,
-///             )),
-///             child: Padding(
-///               padding: const EdgeInsets.all(8),
-///               child: FlutterLogo()
-///             ),
-///           ),
-///         ],
-///       );
-///     },
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/relative_positioned_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -1082,24 +839,23 @@ class RelativePositionedTransition extends AnimatedWidget {
   ///
   /// Each frame, the [Positioned] widget will be configured to represent the
   /// current value of the [rect] argument assuming that the stack has the given
-  /// [size]. Both [rect] and [size] must not be null.
+  /// [size].
   const RelativePositionedTransition({
-    Key? key,
-    required Animation<Rect> rect,
+    super.key,
+    required Animation<Rect?> rect,
     required this.size,
     required this.child,
-  }) : assert(rect != null),
-       assert(size != null),
-       assert(child != null),
-       super(key: key, listenable: rect);
+  }) : super(listenable: rect);
 
   /// The animation that controls the child's size and position.
+  ///
+  /// If the animation returns a null [Rect], the rect is assumed to be [Rect.zero].
   ///
   /// See also:
   ///
   ///  * [size], which gets the size of the box that the [Positioned] widget's
   ///    offsets are relative to.
-  Animation<Rect> get rect => listenable as Animation<Rect>;
+  Animation<Rect?> get rect => listenable as Animation<Rect?>;
 
   /// The [Positioned] widget's offsets are relative to a box of this
   /// size whose origin is 0,0.
@@ -1112,7 +868,7 @@ class RelativePositionedTransition extends AnimatedWidget {
 
   @override
   Widget build(BuildContext context) {
-    final RelativeRect offsets = RelativeRect.fromSize(rect.value, size);
+    final offsets = RelativeRect.fromSize(rect.value ?? Rect.zero, size);
     return Positioned(
       top: offsets.top,
       right: offsets.right,
@@ -1130,72 +886,11 @@ class RelativePositionedTransition extends AnimatedWidget {
 /// [decoration] animated by a [CurvedAnimation] set to [Curves.decelerate]:
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/decorated_box_transition.mp4}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
+/// {@tool dartpad}
 /// The following code implements the [DecoratedBoxTransition] as seen in the video
 /// above:
 ///
-/// ```dart
-/// final DecorationTween decorationTween = DecorationTween(
-///   begin: BoxDecoration(
-///     color: const Color(0xFFFFFFFF),
-///     border: Border.all(style: BorderStyle.none),
-///     borderRadius: BorderRadius.circular(60.0),
-///     shape: BoxShape.rectangle,
-///     boxShadow: const <BoxShadow>[
-///       BoxShadow(
-///         color: Color(0x66666666),
-///         blurRadius: 10.0,
-///         spreadRadius: 3.0,
-///         offset: Offset(0, 6.0),
-///       )
-///     ],
-///   ),
-///   end: BoxDecoration(
-///     color: const Color(0xFFFFFFFF),
-///     border: Border.all(
-///       style: BorderStyle.none,
-///     ),
-///     borderRadius: BorderRadius.zero,
-///     // No shadow.
-///   ),
-/// );
-///
-/// AnimationController _controller;
-///
-/// @override
-/// void initState() {
-///   _controller = AnimationController(
-///     vsync: this,
-///     duration: const Duration(seconds: 3),
-///   )..repeat(reverse: true);
-///   super.initState();
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-///  @override
-///  Widget build(BuildContext context) {
-///    return Container(
-///      color: Colors.white,
-///      child: Center(
-///        child: DecoratedBoxTransition(
-///          position: DecorationPosition.background,
-///          decoration: decorationTween.animate(_controller),
-///          child: Container(
-///            width: 200,
-///            height: 200,
-///            padding: const EdgeInsets.all(10),
-///            child: const FlutterLogo(),
-///          ),
-///        ),
-///      ),
-///    );
-///  }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/decorated_box_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -1207,19 +902,15 @@ class DecoratedBoxTransition extends AnimatedWidget {
   /// Creates an animated [DecoratedBox] whose [Decoration] animation updates
   /// the widget.
   ///
-  /// The [decoration] and [position] must not be null.
-  ///
   /// See also:
   ///
-  ///  * [new DecoratedBox]
+  ///  * [DecoratedBox.new]
   const DecoratedBoxTransition({
-    Key? key,
+    super.key,
     required this.decoration,
     this.position = DecorationPosition.background,
     required this.child,
-  }) : assert(decoration != null),
-       assert(child != null),
-       super(key: key, listenable: decoration);
+  }) : super(listenable: decoration);
 
   /// Animation of the decoration to paint.
   ///
@@ -1237,11 +928,7 @@ class DecoratedBoxTransition extends AnimatedWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: decoration.value,
-      position: position,
-      child: child,
-    );
+    return DecoratedBox(decoration: decoration.value, position: position, child: child);
   }
 }
 
@@ -1252,6 +939,13 @@ class DecoratedBoxTransition extends AnimatedWidget {
 /// [Curves.decelerate]:
 ///
 /// {@animation 300 378 https://flutter.github.io/assets-for-api-docs/assets/widgets/align_transition.mp4}
+///
+/// {@tool dartpad}
+/// The following code implements the [AlignTransition] as seen in the video
+/// above:
+///
+/// ** See code in examples/api/lib/widgets/transitions/align_transition.0.dart **
+/// {@end-tool}
 ///
 /// See also:
 ///
@@ -1271,16 +965,14 @@ class AlignTransition extends AnimatedWidget {
   ///
   /// See also:
   ///
-  ///  * [new Align].
+  ///  * [Align.new].
   const AlignTransition({
-    Key? key,
+    super.key,
     required Animation<AlignmentGeometry> alignment,
     required this.child,
     this.widthFactor,
     this.heightFactor,
-  }) : assert(alignment != null),
-       assert(child != null),
-       super(key: key, listenable: alignment);
+  }) : super(listenable: alignment);
 
   /// The animation that controls the child's alignment.
   Animation<AlignmentGeometry> get alignment => listenable as Animation<AlignmentGeometry>;
@@ -1310,49 +1002,11 @@ class AlignTransition extends AnimatedWidget {
 /// Animated version of a [DefaultTextStyle] that animates the different properties
 /// of its [TextStyle].
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// The following code implements the [DefaultTextStyleTransition] that shows
 /// a transition between thick blue font and thin red font.
 ///
-/// ```dart
-/// AnimationController _controller;
-/// TextStyleTween _styleTween;
-/// CurvedAnimation _curvedAnimation;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 2),
-///     vsync: this,
-///   )..repeat(reverse: true);
-///   _styleTween = TextStyleTween(
-///     begin: TextStyle(fontSize: 50, color: Colors.blue, fontWeight: FontWeight.w900),
-///     end: TextStyle(fontSize: 50, color: Colors.red, fontWeight: FontWeight.w100),
-///   );
-///   _curvedAnimation = CurvedAnimation(
-///     parent: _controller,
-///     curve: Curves.elasticInOut,
-///   );
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return Center(
-///     child: DefaultTextStyleTransition(
-///       style: _styleTween.animate(_curvedAnimation),
-///       child: Text('Flutter'),
-///     ),
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/default_text_style_transition.0.dart **
 /// {@end-tool}
 ///
 /// See also:
@@ -1365,16 +1019,14 @@ class DefaultTextStyleTransition extends AnimatedWidget {
   /// Creates an animated [DefaultTextStyle] whose [TextStyle] animation updates
   /// the widget.
   const DefaultTextStyleTransition({
-    Key? key,
+    super.key,
     required Animation<TextStyle> style,
     required this.child,
     this.textAlign,
     this.softWrap = true,
     this.overflow = TextOverflow.clip,
     this.maxLines,
-  }) : assert(style != null),
-       assert(child != null),
-       super(key: key, listenable: style);
+  }) : super(listenable: style);
 
   /// The animation that controls the descendants' text style.
   Animation<TextStyle> get style => listenable as Animation<TextStyle>;
@@ -1414,117 +1066,202 @@ class DefaultTextStyleTransition extends AnimatedWidget {
   }
 }
 
+/// A general-purpose widget for building a widget subtree when a [Listenable]
+/// changes.
+///
+/// [ListenableBuilder] is useful for more complex widgets that wish to listen
+/// to changes in other objects as part of a larger build function. To use
+/// [ListenableBuilder], construct the widget and pass it a [builder]
+/// function.
+///
+/// Any subtype of [Listenable] (such as a [ChangeNotifier], [ValueNotifier], or
+/// [Animation]) can be used with a [ListenableBuilder] to rebuild only certain
+/// parts of a widget when the [Listenable] notifies its listeners. Although
+/// they have identical implementations, if an [Animation] is being listened to,
+/// consider using an [AnimatedBuilder] instead for better readability.
+///
+/// {@tool dartpad}
+/// The following example uses a subclass of [ChangeNotifier] to hold the
+/// application model's state, in this case, a counter. A [ListenableBuilder] is
+/// then used to update the rendering (a [Text] widget) whenever the model changes.
+///
+/// ** See code in examples/api/lib/widgets/transitions/listenable_builder.2.dart **
+/// {@end-tool}
+///
+/// {@tool dartpad}
+/// This version is identical, but using a [ValueNotifier] instead of a
+/// dedicated subclass of [ChangeNotifier]. This works well when there is only a
+/// single immutable value to be tracked.
+///
+/// ** See code in examples/api/lib/widgets/transitions/listenable_builder.1.dart **
+/// {@end-tool}
+///
+/// ## Performance optimizations
+///
+/// {@template flutter.widgets.transitions.ListenableBuilder.optimizations}
+/// If the [builder] function contains a subtree that does not depend on the
+/// [listenable], it is more efficient to build that subtree once instead
+/// of rebuilding it on every change of the [listenable].
+///
+/// Performance is therefore improved by specifying any widgets that don't need
+/// to change using the prebuilt [child] attribute. The [ListenableBuilder]
+/// passes this [child] back to the [builder] callback so that it can be
+/// incorporated into the build.
+///
+/// Using this pre-built [child] is entirely optional, but can improve
+/// performance significantly in some cases and is therefore a good practice.
+/// {@endtemplate}
+///
+/// {@tool dartpad}
+/// This example shows how a [ListenableBuilder] can be used to listen to a
+/// [FocusNode] (which is also a [ChangeNotifier]) to see when a subtree has
+/// focus, and modify a decoration when its focus state changes. Only the
+/// [Container] is rebuilt when the [FocusNode] changes; the rest of the tree
+/// (notably the [Focus] widget) remain unchanged from frame to frame.
+///
+/// ** See code in examples/api/lib/widgets/transitions/listenable_builder.0.dart **
+/// {@end-tool}
+///
+/// See also:
+///
+/// * [AnimatedBuilder], which has the same functionality, but is named more
+///   appropriately for a builder triggered by [Animation]s.
+/// * [ValueListenableBuilder], which is specialized for [ValueNotifier]s and
+///   reports the new value in its builder callback.
+class ListenableBuilder extends AnimatedWidget {
+  /// Creates a builder that responds to changes in [listenable].
+  const ListenableBuilder({
+    super.key,
+    required super.listenable,
+    required this.builder,
+    this.child,
+  });
+
+  /// The [Listenable] supplied to the constructor.
+  ///
+  /// {@tool dartpad}
+  /// In this example, the [listenable] is a [ChangeNotifier] subclass that
+  /// encapsulates a list. The [ListenableBuilder] is rebuilt each time an item
+  /// is added to the list.
+  ///
+  /// ** See code in examples/api/lib/widgets/transitions/listenable_builder.3.dart **
+  /// {@end-tool}
+  ///
+  /// See also:
+  ///
+  /// * [AnimatedBuilder], a widget with identical functionality commonly
+  ///   used with [Animation] [Listenable]s for better readability.
+  //
+  // Overridden getter to replace with documentation tailored to
+  // ListenableBuilder.
+  @override
+  Listenable get listenable => super.listenable;
+
+  /// Called every time the [listenable] notifies about a change.
+  ///
+  /// The child given to the builder should typically be part of the returned
+  /// widget tree.
+  final TransitionBuilder builder;
+
+  /// The child widget to pass to the [builder].
+  ///
+  /// {@macro flutter.widgets.transitions.ListenableBuilder.optimizations}
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => builder(context, child);
+}
+
 /// A general-purpose widget for building animations.
 ///
-/// AnimatedBuilder is useful for more complex widgets that wish to include
-/// an animation as part of a larger build function. To use AnimatedBuilder,
-/// simply construct the widget and pass it a builder function.
+/// [AnimatedBuilder] is useful for more complex widgets that wish to include
+/// an animation as part of a larger build function. To use [AnimatedBuilder],
+/// construct the widget and pass it a builder function.
 ///
 /// For simple cases without additional state, consider using
 /// [AnimatedWidget].
 ///
 /// {@youtube 560 315 https://www.youtube.com/watch?v=N-RiyZlv8v8}
 ///
+/// Despite the name, [AnimatedBuilder] is not limited to [Animation]s, any
+/// subtype of [Listenable] (such as [ChangeNotifier] or [ValueNotifier]) can be
+/// used to trigger rebuilds. Although they have identical implementations, if
+/// an [Animation] is not being listened to, consider using a
+/// [ListenableBuilder] for better readability.
+///
 /// ## Performance optimizations
 ///
-/// If your [builder] function contains a subtree that does not depend on the
-/// animation, it's more efficient to build that subtree once instead of
-/// rebuilding it on every animation tick.
+/// {@template flutter.widgets.transitions.AnimatedBuilder.optimizations}
+/// If the [builder] function contains a subtree that does not depend on the
+/// animation passed to the constructor, it's more efficient to build that
+/// subtree once instead of rebuilding it on every animation tick.
 ///
-/// If you pass the pre-built subtree as the [child] parameter, the
-/// AnimatedBuilder will pass it back to your builder function so that you
-/// can incorporate it into your build.
+/// If a pre-built subtree is passed as the [child] parameter, the
+/// [AnimatedBuilder] will pass it back to the [builder] function so that it can
+/// be incorporated into the build.
 ///
 /// Using this pre-built child is entirely optional, but can improve
 /// performance significantly in some cases and is therefore a good practice.
+/// {@endtemplate}
 ///
-/// {@tool dartpad --template=stateful_widget_material_ticker}
-///
+/// {@tool dartpad}
 /// This code defines a widget that spins a green square continually. It is
 /// built with an [AnimatedBuilder] and makes use of the [child] feature to
 /// avoid having to rebuild the [Container] each time.
 ///
-/// ```dart imports
-/// import 'dart:math' as math;
-/// ```
-///
-/// ```dart
-/// AnimationController _controller;
-///
-/// @override
-/// void initState() {
-///   super.initState();
-///   _controller = AnimationController(
-///     duration: const Duration(seconds: 10),
-///     vsync: this,
-///   )..repeat();
-/// }
-///
-/// @override
-/// void dispose() {
-///   _controller.dispose();
-///   super.dispose();
-/// }
-///
-/// @override
-/// Widget build(BuildContext context) {
-///   return AnimatedBuilder(
-///     animation: _controller,
-///     child: Container(
-///       width: 200.0,
-///       height: 200.0,
-///       color: Colors.green,
-///       child: const Center(
-///         child: Text('Whee!'),
-///       ),
-///     ),
-///     builder: (BuildContext context, Widget child) {
-///       return Transform.rotate(
-///         angle: _controller.value * 2.0 * math.pi,
-///         child: child,
-///       );
-///     },
-///   );
-/// }
-/// ```
+/// ** See code in examples/api/lib/widgets/transitions/animated_builder.0.dart **
 /// {@end-tool}
 ///
 /// See also:
 ///
-///  * [TweenAnimationBuilder], which animates a property to a target value
-///    without requiring manual management of an [AnimationController].
-class AnimatedBuilder extends AnimatedWidget {
+/// * [ListenableBuilder], a widget with similar functionality, but named
+///   more appropriately for a builder triggered on changes in [Listenable]s
+///   that aren't [Animation]s.
+/// * [TweenAnimationBuilder], which animates a property to a target value
+///   without requiring manual management of an [AnimationController].
+class AnimatedBuilder extends ListenableBuilder {
   /// Creates an animated builder.
   ///
-  /// The [animation] and [builder] arguments must not be null.
+  /// The [animation] and [builder] arguments are required.
   const AnimatedBuilder({
-    Key? key,
+    super.key,
     required Listenable animation,
-    required this.builder,
-    this.child,
-  }) : assert(animation != null),
-       assert(builder != null),
-       super(key: key, listenable: animation);
+    required super.builder,
+    super.child,
+  }) : super(listenable: animation);
 
-  /// Called every time the animation changes value.
-  final TransitionBuilder builder;
+  /// The [Listenable] supplied to the constructor (typically an [Animation]).
+  ///
+  /// Also accessible through the [listenable] getter.
+  ///
+  /// See also:
+  ///
+  /// * [ListenableBuilder], a widget with similar functionality commonly used
+  ///   with [Listenable]s (such as [ChangeNotifier]) for better readability
+  ///   when the [animation] isn't an [Animation].
+  Listenable get animation => super.listenable;
 
-  /// The child widget to pass to the [builder].
+  /// The [Listenable] supplied to the constructor (typically an [Animation]).
   ///
-  /// If a [builder] callback's return value contains a subtree that does not
-  /// depend on the animation, it's more efficient to build that subtree once
-  /// instead of rebuilding it on every animation tick.
+  /// Also accessible through the [animation] getter.
   ///
-  /// If the pre-built subtree is passed as the [child] parameter, the
-  /// [AnimatedBuilder] will pass it back to the [builder] function so that it
-  /// can be incorporated into the build.
+  /// See also:
   ///
-  /// Using this pre-built child is entirely optional, but can improve
-  /// performance significantly in some cases and is therefore a good practice.
-  final Widget? child;
-
+  /// * [ListenableBuilder], a widget with identical functionality commonly
+  ///   used with non-animation [Listenable]s for readability.
+  //
+  // Overridden getter to replace with documentation tailored to
+  // ListenableBuilder.
   @override
-  Widget build(BuildContext context) {
-    return builder(context, child);
-  }
+  Listenable get listenable => super.listenable;
+
+  /// Called every time the [animation] notifies about a change.
+  ///
+  /// The child given to the builder should typically be part of the returned
+  /// widget tree.
+  //
+  // Overridden getter to replace with documentation tailored to
+  // AnimatedBuilder.
+  @override
+  TransitionBuilder get builder => super.builder;
 }

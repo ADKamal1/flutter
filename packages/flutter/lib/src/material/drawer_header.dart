@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'drawer.dart';
+/// @docImport 'material.dart';
+/// @docImport 'user_accounts_drawer_header.dart';
+library;
+
 import 'package:flutter/widgets.dart';
 
 import 'debug.dart';
@@ -10,11 +15,11 @@ import 'theme.dart';
 
 const double _kDrawerHeaderHeight = 160.0 + 1.0; // bottom edge
 
-/// The top-most region of a material design drawer. The header's [child]
+/// The top-most region of a Material Design drawer. The header's [child]
 /// widget, if any, is placed inside a [Container] whose [decoration] can be
 /// passed as an argument, inset by the given [padding].
 ///
-/// Part of the material design [Drawer].
+/// Part of the Material Design [Drawer].
 ///
 /// Requires one of its ancestors to be a [Material] widget. This condition is
 /// satisfied by putting the [DrawerHeader] in a [Drawer].
@@ -25,18 +30,18 @@ const double _kDrawerHeaderHeight = 160.0 + 1.0; // bottom edge
 ///    specialized for showing user accounts.
 ///  * <https://material.io/design/components/navigation-drawer.html>
 class DrawerHeader extends StatelessWidget {
-  /// Creates a material design drawer header.
+  /// Creates a Material Design drawer header.
   ///
   /// Requires one of its ancestors to be a [Material] widget.
   const DrawerHeader({
-    Key? key,
+    super.key,
     this.decoration,
     this.margin = const EdgeInsets.only(bottom: 8.0),
     this.padding = const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
     this.duration = const Duration(milliseconds: 250),
     this.curve = Curves.fastOutSlowIn,
     required this.child,
-  }) : super(key: key);
+  });
 
   /// Decoration for the main drawer header [Container]; useful for applying
   /// backgrounds.
@@ -76,28 +81,22 @@ class DrawerHeader extends StatelessWidget {
     assert(debugCheckHasMaterial(context));
     assert(debugCheckHasMediaQuery(context));
     final ThemeData theme = Theme.of(context);
-    final double statusBarHeight = MediaQuery.of(context).padding.top;
+    final double statusBarHeight = MediaQuery.paddingOf(context).top;
     return Container(
       height: statusBarHeight + _kDrawerHeaderHeight,
       margin: margin,
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: Divider.createBorderSide(context),
-        ),
-      ),
+      decoration: BoxDecoration(border: Border(bottom: Divider.createBorderSide(context))),
       child: AnimatedContainer(
         padding: padding.add(EdgeInsets.only(top: statusBarHeight)),
         decoration: decoration,
         duration: duration,
         curve: curve,
-        child: child == null ? null : DefaultTextStyle(
-          style: theme.textTheme.bodyText1!,
-          child: MediaQuery.removePadding(
-            context: context,
-            removeTop: true,
-            child: child!,
-          ),
-        ),
+        child: child == null
+            ? null
+            : DefaultTextStyle(
+                style: theme.textTheme.bodyLarge!,
+                child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
+              ),
       ),
     );
   }

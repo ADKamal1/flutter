@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('repaint boundary with constraint changes', (WidgetTester tester) async {
@@ -15,7 +15,7 @@ void main() {
 }
 
 class RelayoutBoundariesCrash extends StatefulWidget {
-  const RelayoutBoundariesCrash({Key? key}) : super(key: key);
+  const RelayoutBoundariesCrash({super.key});
 
   @override
   RelayoutBoundariesCrashState createState() => RelayoutBoundariesCrashState();
@@ -40,19 +40,11 @@ class RelayoutBoundariesCrashState extends State<RelayoutBoundariesCrash> {
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             // Make the outer SizedBoxes relayout without making the Placeholders relayout.
-            final double dimension = !_mode ? 10.0 : 20.0;
+            final dimension = !_mode ? 10.0 : 20.0;
             return Column(
               children: <Widget>[
-                SizedBox(
-                  width: dimension,
-                  height: dimension,
-                  child: const Placeholder(),
-                ),
-                SizedBox(
-                  width: dimension,
-                  height: dimension,
-                  child: const Placeholder(),
-                ),
+                SizedBox(width: dimension, height: dimension, child: const Placeholder()),
+                SizedBox(width: dimension, height: dimension, child: const Placeholder()),
               ],
             );
           },

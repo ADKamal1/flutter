@@ -37,22 +37,12 @@ class TestStepResult {
   });
 
   factory TestStepResult.fromSnapshot(AsyncSnapshot<TestStepResult> snapshot) {
-    switch (snapshot.connectionState) {
-      case ConnectionState.none:
-        return const TestStepResult('Not started', nothing, TestStatus.ok);
-      case ConnectionState.waiting:
-        return const TestStepResult('Executing', nothing, TestStatus.pending);
-      case ConnectionState.done:
-        if (snapshot.hasData) {
-          return snapshot.data;
-        } else {
-          final TestStepResult result = snapshot.error as TestStepResult;
-          return result;
-        }
-        break;
-      default:
-        throw 'Unsupported state ${snapshot.connectionState}';
-    }
+    return switch (snapshot.connectionState) {
+      ConnectionState.none => const TestStepResult('Not started', nothing, TestStatus.ok),
+      ConnectionState.waiting => const TestStepResult('Executing', nothing, TestStatus.pending),
+      ConnectionState.done => snapshot.data ?? snapshot.error! as TestStepResult,
+      ConnectionState.active => throw 'Unsupported state: ConnectionState.active',
+    };
   }
 
   final String name;
@@ -72,8 +62,7 @@ class TestStepResult {
   );
 
   Widget asWidget(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
       children: <Widget>[
         Text('Step: $name', style: bold),
         Text(description),
@@ -85,13 +74,19 @@ class TestStepResult {
         Text('Error: ${_toString(error)}'),
         const Text(' '),
         Text(
-          status.toString().substring('TestStatus.'.length),
-          key: ValueKey<String>(
-              status == TestStatus.pending ? 'nostatus' : 'status'),
+          status.name,
+          key: ValueKey<String>(status == TestStatus.pending ? 'nostatus' : 'status'),
           style: bold,
         ),
       ],
     );
+  }
+
+  static bool deepEquals(dynamic a, dynamic b) => _deepEquals(a, b);
+
+  @override
+  String toString() {
+    return 'TestStepResult($status)';
   }
 }
 
@@ -104,8 +99,9 @@ Future<TestStepResult> resultOfHandshake(
   dynamic error,
 ) async {
   assert(message != nothing);
-  while (received.length < 2)
+  while (received.length < 2) {
     received.add(nothing);
+  }
   TestStatus status;
   if (!_deepEquals(messageEcho, message) ||
       received.length != 2 ||
@@ -130,27 +126,32 @@ Future<TestStepResult> resultOfHandshake(
 }
 
 String _toString(dynamic message) {
-  if (message is ByteData)
-    return message.buffer
-        .asUint8List(message.offsetInBytes, message.lengthInBytes)
-        .toString();
-  else
+  if (message is ByteData) {
+    return message.buffer.asUint8List(message.offsetInBytes, message.lengthInBytes).toString();
+  } else {
     return '$message';
+  }
 }
 
 bool _deepEquals(dynamic a, dynamic b) {
-  if (a == b)
+  if (a == b) {
     return true;
-  if (a is double && a.isNaN)
+  }
+  if (a is double && a.isNaN) {
     return b is double && b.isNaN;
-  if (a is ByteData)
+  }
+  if (a is ByteData) {
     return b is ByteData && _deepEqualsByteData(a, b);
-  if (a is List)
+  }
+  if (a is List) {
     return b is List && _deepEqualsList(a, b);
-  if (a is Map)
+  }
+  if (a is Map) {
     return b is Map && _deepEqualsMap(a, b);
-  if (a is Pair)
+  }
+  if (a is Pair) {
     return b is Pair && _deepEqualsPair(a, b);
+  }
   return false;
 }
 
@@ -162,21 +163,25 @@ bool _deepEqualsByteData(ByteData a, ByteData b) {
 }
 
 bool _deepEqualsList(List<dynamic> a, List<dynamic> b) {
-  if (a.length != b.length)
+  if (a.length != b.length) {
     return false;
-  for (int i = 0; i < a.length; i++) {
-    if (!_deepEquals(a[i], b[i]))
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (!_deepEquals(a[i], b[i])) {
       return false;
+    }
   }
   return true;
 }
 
 bool _deepEqualsMap(Map<dynamic, dynamic> a, Map<dynamic, dynamic> b) {
-  if (a.length != b.length)
+  if (a.length != b.length) {
     return false;
-  for (final dynamic key in a.keys) {
-    if (!b.containsKey(key) || !_deepEquals(a[key], b[key]))
+  }
+  for (final Object? key in a.keys) {
+    if (!b.containsKey(key) || !_deepEquals(a[key], b[key])) {
       return false;
+    }
   }
   return true;
 }

@@ -2,17 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_driver/driver_extension.dart';
 import 'package:flutter_driver/flutter_driver.dart';
 
 class StubNestedCommand extends CommandWithTarget {
-  StubNestedCommand(SerializableFinder finder, this.times, {Duration? timeout})
-      : super(finder, timeout: timeout);
+  StubNestedCommand(super.finder, this.times, {super.timeout});
 
-  StubNestedCommand.deserialize(
-      Map<String, String> json, DeserializeFinderFactory finderFactory)
-      : times = int.parse(json['times']!),
-        super.deserialize(json, finderFactory);
+  StubNestedCommand.deserialize(super.json, super.finderFactory)
+    : times = int.parse(json['times']!),
+      super.deserialize();
 
   @override
   Map<String, String> serialize() {
@@ -26,12 +23,11 @@ class StubNestedCommand extends CommandWithTarget {
 }
 
 class StubProberCommand extends CommandWithTarget {
-  StubProberCommand(SerializableFinder finder, this.times, {Duration? timeout})
-      : super(finder, timeout: timeout);
+  StubProberCommand(super.finder, this.times, {super.timeout});
 
-  StubProberCommand.deserialize(Map<String, String> json, DeserializeFinderFactory finderFactory)
-      : times = int.parse(json['times']!),
-        super.deserialize(json, finderFactory);
+  StubProberCommand.deserialize(super.json, super.finderFactory)
+    : times = int.parse(json['times']!),
+      super.deserialize();
 
   @override
   Map<String, String> serialize() {
@@ -51,8 +47,6 @@ class StubCommandResult extends Result {
 
   @override
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'resultParam': resultParam,
-    };
+    return <String, dynamic>{'resultParam': resultParam};
   }
 }

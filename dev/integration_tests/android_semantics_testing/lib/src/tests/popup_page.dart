@@ -10,6 +10,8 @@ export 'popup_constants.dart';
 
 /// A page with a popup menu, a dropdown menu, and a modal alert.
 class PopupControlsPage extends StatefulWidget {
+  const PopupControlsPage({super.key});
+
   @override
   State<StatefulWidget> createState() => _PopupControlsPageState();
 }
@@ -58,9 +60,9 @@ class _PopupControlsPageState extends State<PopupControlsPage> {
                     child: Text(item),
                   );
                 }).toList(),
-                onChanged: (String value) {
+                onChanged: (String? value) {
                   setState(() {
-                    dropdownValue = value;
+                    dropdownValue = value!;
                   });
                 },
               ),
@@ -74,12 +76,21 @@ class _PopupControlsPageState extends State<PopupControlsPage> {
                     builder: (BuildContext context) {
                       return AlertDialog(
                         key: const ValueKey<String>(alertKeyValue),
-                        title: const Text('Title text', key: ValueKey<String>('$alertKeyValue.Title')),
-                        content: SingleChildScrollView(
+                        title: const Text(
+                          'Title text',
+                          key: ValueKey<String>('$alertKeyValue.Title'),
+                        ),
+                        content: const SingleChildScrollView(
                           child: ListBody(
-                            children: const <Widget>[
-                              Text('Body text line 1.', key: ValueKey<String>('$alertKeyValue.Body1')),
-                              Text('Body text line 2.', key: ValueKey<String>('$alertKeyValue.Body2')),
+                            children: <Widget>[
+                              Text(
+                                'Body text line 1.',
+                                key: ValueKey<String>('$alertKeyValue.Body1'),
+                              ),
+                              Text(
+                                'Body text line 2.',
+                                key: ValueKey<String>('$alertKeyValue.Body2'),
+                              ),
                             ],
                           ),
                         ),

@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 
 class FortnightlyDemo extends StatelessWidget {
+  const FortnightlyDemo({super.key});
+
   static const String routeName = '/fortnightly';
 
   @override
@@ -15,7 +17,7 @@ class FortnightlyDemo extends StatelessWidget {
       home: Scaffold(
         body: Stack(
           children: <Widget>[
-            FruitPage(),
+            const FruitPage(),
             SafeArea(
               child: ShortAppBar(
                 onBackPressed: () {
@@ -31,9 +33,9 @@ class FortnightlyDemo extends StatelessWidget {
 }
 
 class ShortAppBar extends StatelessWidget {
-  const ShortAppBar({ this.onBackPressed });
+  const ShortAppBar({super.key, this.onBackPressed});
 
-  final VoidCallback onBackPressed;
+  final VoidCallback? onBackPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -66,15 +68,20 @@ class ShortAppBar extends StatelessWidget {
 }
 
 class FruitPage extends StatelessWidget {
-  static final String paragraph1 = '''
+  const FruitPage({super.key});
+
+  static final String paragraph1 =
+      '''
 Have you ever held a quince? It's strange;
 covered in a fuzz somewhere between peach skin and a spider web. And it's
 hard as soft lumber. You'd be forgiven for thinking it's veneered Larch-wood.
 But inhale the aroma and you'll instantly know you have something wonderful.
 Its scent can fill a room for days. And all this before you've even cooked it.
-'''.replaceAll('\n', ' ');
+'''
+          .replaceAll('\n', ' ');
 
-  static final String paragraph2 = '''
+  static final String paragraph2 =
+      '''
 Pomegranates on the other hand have become
 almost ubiquitous. You can find its juice in any bodega, Walmart, and even some
 gas stations. But at what cost? The pomegranate juice craze of the aughts made
@@ -82,7 +89,8 @@ gas stations. But at what cost? The pomegranate juice craze of the aughts made
 of water to make that much pomegranate juice. Water the Resnicks get from their
 majority stake in the Kern Water Bank. How did one family come to hold control
 over water meant for the whole central valley of California? The story will shock you.
-'''.replaceAll('\n', ' ');
+'''
+          .replaceAll('\n', ' ');
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +99,7 @@ over water meant for the whole central valley of California? The story will shoc
     return SingleChildScrollView(
       child: SafeArea(
         top: false,
-        child: Container(
+        child: ColoredBox(
           color: Theme.of(context).colorScheme.surface,
           child: Column(
             children: <Widget>[
@@ -111,31 +119,25 @@ over water meant for the whole central valley of California? The story will shoc
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        Text(
-                          'US',
-                          style: textTheme.overline,
-                        ),
+                        Text('US', style: textTheme.labelSmall),
                         Text(
                           ' ¬ ',
                           // TODO(larche): Replace textTheme.headline2.color with a ColorScheme value when known.
-                          style: textTheme.overline.apply(color: textTheme.headline2.color),
+                          style: textTheme.labelSmall!.apply(color: textTheme.displayMedium!.color),
                         ),
-                        Text(
-                          'CULTURE',
-                          style: textTheme.overline,
-                        ),
+                        Text('CULTURE', style: textTheme.labelSmall),
                       ],
                     ),
                     const SizedBox(height: 10),
                     Text(
                       'Quince for Wisdom, Persimmon for Luck, Pomegranate for Love',
-                      style: textTheme.headline4,
+                      style: textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 10),
                     Text(
                       'How these crazy fruits sweetened our hearts, relationships, '
-                          'and puffed pastries',
-                      style: textTheme.bodyText2,
+                      'and puffed pastries',
+                      style: textTheme.bodyMedium,
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -149,10 +151,7 @@ over water meant for the whole central valley of California? The story will shoc
                             radius: 20,
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            'by',
-                            style: textTheme.headline2,
-                          ),
+                          Text('by', style: textTheme.displayMedium),
                           const SizedBox(width: 4),
                           const Text(
                             'Connor Eghan',
@@ -166,10 +165,7 @@ over water meant for the whole central valley of California? The story will shoc
                         ],
                       ),
                     ),
-                    Text(
-                      '$paragraph1\n\n$paragraph2',
-                      style: textTheme.bodyText1,
-                    ),
+                    Text('$paragraph1\n\n$paragraph2', style: textTheme.bodyLarge),
                   ],
                 ),
               ),
@@ -184,7 +180,7 @@ over water meant for the whole central valley of California? The story will shoc
 final ThemeData _fortnightlyTheme = _buildFortnightlyTheme();
 
 ThemeData _buildFortnightlyTheme() {
-  final ThemeData base = ThemeData.light();
+  final base = ThemeData();
   return base.copyWith(
     primaryTextTheme: _buildTextTheme(base.primaryTextTheme),
     scaffoldBackgroundColor: Colors.white,
@@ -196,7 +192,7 @@ TextTheme _buildTextTheme(TextTheme base) {
   theme = theme.apply(displayColor: Colors.black);
 
   theme = theme.copyWith(
-    headline4: base.headline4.copyWith(
+    headlineMedium: base.headlineMedium!.copyWith(
       fontFamily: 'Merriweather',
       fontStyle: FontStyle.italic,
       fontSize: 28,
@@ -204,21 +200,21 @@ TextTheme _buildTextTheme(TextTheme base) {
       color: Colors.black,
       height: .88,
     ),
-    headline2: base.headline2.copyWith(
+    displayMedium: base.displayMedium!.copyWith(
       fontFamily: 'LibreFranklin',
       fontSize: 18,
       fontWeight: FontWeight.w500,
       color: Colors.black.withAlpha(153),
     ),
-    headline5: base.headline5.copyWith(fontWeight: FontWeight.w500),
-    bodyText2: base.bodyText2.copyWith(
+    headlineSmall: base.headlineSmall!.copyWith(fontWeight: FontWeight.w500),
+    bodyMedium: base.bodyMedium!.copyWith(
       fontFamily: 'Merriweather',
       fontSize: 14,
       fontWeight: FontWeight.w300,
       color: const Color(0xFF666666),
       height: 1.11,
     ),
-    bodyText1: base.bodyText1.copyWith(
+    bodyLarge: base.bodyLarge!.copyWith(
       fontFamily: 'Merriweather',
       fontSize: 16,
       fontWeight: FontWeight.w300,
@@ -226,7 +222,7 @@ TextTheme _buildTextTheme(TextTheme base) {
       height: 1.4,
       letterSpacing: .25,
     ),
-    overline: const TextStyle(
+    labelSmall: const TextStyle(
       fontFamily: 'LibreFranklin',
       fontSize: 10,
       fontWeight: FontWeight.w700,

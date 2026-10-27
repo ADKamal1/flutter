@@ -6,19 +6,15 @@ import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/macos/macos_workflow.dart';
 
 import '../../src/common.dart';
-import '../../src/testbed.dart';
+import '../../src/fakes.dart';
 
-final FakePlatform macOS = FakePlatform(
-  operatingSystem: 'macos',
-);
+final macOS = FakePlatform(operatingSystem: 'macos');
 
-final FakePlatform linux = FakePlatform(
-  operatingSystem: 'linux',
-);
+final linux = FakePlatform();
 
 void main() {
   testWithoutContext('Applies to macOS platform', () {
-    final MacOSWorkflow macOSWorkflow = MacOSWorkflow(
+    final macOSWorkflow = MacOSWorkflow(
       platform: macOS,
       featureFlags: TestFeatureFlags(isMacOSEnabled: true),
     );
@@ -30,7 +26,7 @@ void main() {
   });
 
   testWithoutContext('Does not apply to non-macOS platform', () {
-    final MacOSWorkflow macOSWorkflow = MacOSWorkflow(
+    final macOSWorkflow = MacOSWorkflow(
       platform: linux,
       featureFlags: TestFeatureFlags(isMacOSEnabled: true),
     );
@@ -42,10 +38,7 @@ void main() {
   });
 
   testWithoutContext('Does not apply when feature is disabled', () {
-    final MacOSWorkflow macOSWorkflow = MacOSWorkflow(
-      platform: macOS,
-      featureFlags: TestFeatureFlags(isMacOSEnabled: false),
-    );
+    final macOSWorkflow = MacOSWorkflow(platform: macOS, featureFlags: TestFeatureFlags());
 
     expect(macOSWorkflow.appliesToHostPlatform, false);
     expect(macOSWorkflow.canListDevices, false);

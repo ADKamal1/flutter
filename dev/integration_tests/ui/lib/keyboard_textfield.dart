@@ -10,23 +10,27 @@ import 'keys.dart' as keys;
 void main() {
   enableFlutterDriverExtension();
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Keyboard & TextField',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: MyHomePage(),
+      home: const MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
@@ -44,24 +48,27 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final bool isSoftKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 100;
     return Scaffold(
       body: Column(
         children: <Widget>[
-          Text('$offset',
-            key: const ValueKey<String>(keys.kOffsetText),
-          ),
+          Text('$offset', key: const ValueKey<String>(keys.kOffsetText)),
+          if (isSoftKeyboardVisible)
+            const Text('keyboard visible', key: ValueKey<String>(keys.kKeyboardVisibleView)),
           Expanded(
             child: ListView(
               key: const ValueKey<String>(keys.kListView),
               controller: _controller,
               children: <Widget>[
-                Container(
-                  height: MediaQuery.of(context).size.height,
-                ),
-                const TextField(
-                  key: ValueKey<String>(keys.kDefaultTextField),
-                ),
+                Container(height: MediaQuery.heightOf(context)),
+                const TextField(key: ValueKey<String>(keys.kDefaultTextField)),
               ],
             ),
           ),

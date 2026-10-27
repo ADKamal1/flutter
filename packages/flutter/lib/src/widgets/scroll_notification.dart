@@ -2,6 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/material.dart';
+///
+/// @docImport 'overscroll_indicator.dart';
+/// @docImport 'scroll_activity.dart';
+/// @docImport 'scroll_controller.dart';
+/// @docImport 'scroll_physics.dart';
+/// @docImport 'scroll_position.dart';
+/// @docImport 'scroll_view.dart';
+/// @docImport 'scrollable.dart';
+/// @docImport 'viewport.dart';
+library;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 
@@ -25,16 +37,25 @@ mixin ViewportNotificationMixin on Notification {
   int _depth = 0;
 
   @override
-  bool visitAncestor(Element element) {
-    if (element is RenderObjectElement && element.renderObject is RenderAbstractViewport)
-      _depth += 1;
-    return super.visitAncestor(element);
-  }
-
-  @override
   void debugFillDescription(List<String> description) {
     super.debugFillDescription(description);
-    description.add('depth: $depth (${ depth == 0 ? "local" : "remote"})');
+    description.add('depth: $depth (${depth == 0 ? "local" : "remote"})');
+  }
+}
+
+/// A mixin that allows [Element]s containing [Viewport] like widgets to correctly
+/// modify the notification depth of a [ViewportNotificationMixin].
+///
+/// See also:
+///   * [Viewport], which creates a custom [MultiChildRenderObjectElement] that mixes
+///     this in.
+mixin ViewportElementMixin on NotifiableElementMixin {
+  @override
+  bool onNotification(Notification notification) {
+    if (notification is ViewportNotificationMixin) {
+      notification._depth += 1;
+    }
+    return false;
   }
 }
 
@@ -74,14 +95,40 @@ mixin ViewportNotificationMixin on Notification {
 /// happens after layout). The [GlowingOverscrollIndicator] and [Scrollbar]
 /// widgets are examples of paint effects that use scroll notifications.
 ///
+/// {@tool dartpad}
+/// This sample shows the difference between using a [ScrollController] or a
+/// [NotificationListener] of type [ScrollNotification] to listen to scrolling
+/// activities. Toggling the [Radio] button switches between the two.
+/// Using a [ScrollNotification] will provide details about the scrolling
+/// activity, along with the metrics of the [ScrollPosition], but not the scroll
+/// position object itself. By listening with a [ScrollController], the position
+/// object is directly accessible.
+/// Both of these types of notifications are only triggered by scrolling.
+///
+/// ** See code in examples/api/lib/widgets/scroll_position/scroll_controller_notification.0.dart **
+/// {@end-tool}
+///
 /// To drive layout based on the scroll position, consider listening to the
-/// [ScrollPosition] directly (or indirectly via a [ScrollController]).
+/// [ScrollPosition] directly (or indirectly via a [ScrollController]). This
+/// will not notify when the [ScrollMetrics] of a given scroll position changes,
+/// such as when the window is resized, changing the dimensions of the
+/// [Viewport]. In order to listen to changes in scroll metrics, use a
+/// [NotificationListener] of type [ScrollMetricsNotification].
+/// This type of notification differs from [ScrollNotification], as it is not
+/// associated with the activity of scrolling, but rather the dimensions of
+/// the scrollable area.
+///
+/// {@tool dartpad}
+/// This sample shows how a [ScrollMetricsNotification] is dispatched when
+/// the `windowSize` is changed. Press the floating action button to increase
+/// the scrollable window's size.
+///
+/// ** See code in examples/api/lib/widgets/scroll_position/scroll_metrics_notification.0.dart **
+/// {@end-tool}
+///
 abstract class ScrollNotification extends LayoutChangedNotification with ViewportNotificationMixin {
   /// Initializes fields for subclasses.
-  ScrollNotification({
-    required this.metrics,
-    required this.context,
-  });
+  ScrollNotification({required this.metrics, required this.context});
 
   /// A description of a [Scrollable]'s contents, useful for modeling the state
   /// of its viewport.
@@ -108,11 +155,7 @@ abstract class ScrollNotification extends LayoutChangedNotification with Viewpor
 ///  * [ScrollNotification], which describes the notification lifecycle.
 class ScrollStartNotification extends ScrollNotification {
   /// Creates a notification that a [Scrollable] widget has started scrolling.
-  ScrollStartNotification({
-    required ScrollMetrics metrics,
-    required BuildContext? context,
-    this.dragDetails,
-  }) : super(metrics: metrics, context: context);
+  ScrollStartNotification({required super.metrics, required super.context, this.dragDetails});
 
   /// If the [Scrollable] started scrolling because of a drag, the details about
   /// that drag start.
@@ -123,8 +166,9 @@ class ScrollStartNotification extends ScrollNotification {
   @override
   void debugFillDescription(List<String> description) {
     super.debugFillDescription(description);
-    if (dragDetails != null)
+    if (dragDetails != null) {
       description.add('$dragDetails');
+    }
   }
 }
 
@@ -140,11 +184,16 @@ class ScrollUpdateNotification extends ScrollNotification {
   /// Creates a notification that a [Scrollable] widget has changed its scroll
   /// position.
   ScrollUpdateNotification({
-    required ScrollMetrics metrics,
-    required BuildContext context,
+    required super.metrics,
+    required BuildContext super.context,
     this.dragDetails,
     this.scrollDelta,
-  }) : super(metrics: metrics, context: context);
+    int? depth,
+  }) {
+    if (depth != null) {
+      _depth = depth;
+    }
+  }
 
   /// If the [Scrollable] changed its scroll position because of a drag, the
   /// details about that drag update.
@@ -159,8 +208,9 @@ class ScrollUpdateNotification extends ScrollNotification {
   void debugFillDescription(List<String> description) {
     super.debugFillDescription(description);
     description.add('scrollDelta: $scrollDelta');
-    if (dragDetails != null)
+    if (dragDetails != null) {
       description.add('$dragDetails');
+    }
   }
 }
 
@@ -177,16 +227,13 @@ class OverscrollNotification extends ScrollNotification {
   /// Creates a notification that a [Scrollable] widget has changed its scroll
   /// position outside of its scroll bounds.
   OverscrollNotification({
-    required ScrollMetrics metrics,
-    required BuildContext context,
+    required super.metrics,
+    required BuildContext super.context,
     this.dragDetails,
     required this.overscroll,
     this.velocity = 0.0,
-  }) : assert(overscroll != null),
-       assert(overscroll.isFinite),
-       assert(overscroll != 0.0),
-       assert(velocity != null),
-       super(metrics: metrics, context: context);
+  }) : assert(overscroll.isFinite),
+       assert(overscroll != 0.0);
 
   /// If the [Scrollable] overscrolled because of a drag, the details about that
   /// drag update.
@@ -213,13 +260,37 @@ class OverscrollNotification extends ScrollNotification {
     super.debugFillDescription(description);
     description.add('overscroll: ${overscroll.toStringAsFixed(1)}');
     description.add('velocity: ${velocity.toStringAsFixed(1)}');
-    if (dragDetails != null)
+    if (dragDetails != null) {
       description.add('$dragDetails');
+    }
   }
 }
 
 /// A notification that a [Scrollable] widget has stopped scrolling.
 ///
+/// {@tool dartpad}
+/// This sample shows how you can trigger an auto-scroll, which aligns the last
+/// partially visible fixed-height list item, by listening for this
+/// notification with a [NotificationListener]. This sort of thing can also
+/// be done by listening to the [ScrollController]'s
+/// [ScrollPosition.isScrollingNotifier]. An alternative example is provided
+/// with [ScrollPosition.isScrollingNotifier].
+///
+/// ** See code in examples/api/lib/widgets/scroll_end_notification/scroll_end_notification.0.dart **
+/// {@end-tool}
+///
+///
+/// {@tool dartpad}
+/// This example auto-scrolls one special "aligned item" sliver to
+/// the top or bottom of the viewport, whenever it's partially visible
+/// (because it overlaps the top or bottom of the viewport). This
+/// example differs from the previous one in that the layout of an
+/// individual sliver is retrieved from its [RenderSliver] via a
+/// [GlobalKey]. The example does not rely on all of the list items
+/// having the same extent.
+///
+/// ** See code in examples/api/lib/widgets/scroll_end_notification/scroll_end_notification.1.dart **
+/// {@end-tool}
 /// See also:
 ///
 ///  * [ScrollStartNotification], which indicates that scrolling has started.
@@ -227,10 +298,10 @@ class OverscrollNotification extends ScrollNotification {
 class ScrollEndNotification extends ScrollNotification {
   /// Creates a notification that a [Scrollable] widget has stopped scrolling.
   ScrollEndNotification({
-    required ScrollMetrics metrics,
-    required BuildContext context,
+    required super.metrics,
+    required BuildContext super.context,
     this.dragDetails,
-  }) : super(metrics: metrics, context: context);
+  });
 
   /// If the [Scrollable] stopped scrolling because of a drag, the details about
   /// that drag end.
@@ -248,13 +319,19 @@ class ScrollEndNotification extends ScrollNotification {
   @override
   void debugFillDescription(List<String> description) {
     super.debugFillDescription(description);
-    if (dragDetails != null)
+    if (dragDetails != null) {
       description.add('$dragDetails');
+    }
   }
 }
 
-/// A notification that the user has changed the direction in which they are
-/// scrolling.
+/// A notification that the user has changed the [ScrollDirection] in which they
+/// are scrolling, or have stopped scrolling.
+///
+/// For the direction that the [ScrollView] is oriented to, and the direction
+/// contents are being laid out in, see [AxisDirection] & [GrowthDirection].
+///
+/// {@macro flutter.rendering.ScrollDirection.sample}
 ///
 /// See also:
 ///
@@ -263,12 +340,19 @@ class UserScrollNotification extends ScrollNotification {
   /// Creates a notification that the user has changed the direction in which
   /// they are scrolling.
   UserScrollNotification({
-    required ScrollMetrics metrics,
-    required BuildContext context,
+    required super.metrics,
+    required BuildContext super.context,
     required this.direction,
-  }) : super(metrics: metrics, context: context);
+  });
 
   /// The direction in which the user is scrolling.
+  ///
+  /// This does not represent the current [AxisDirection] or [GrowthDirection]
+  /// of the [Viewport], which respectively represent the direction that the
+  /// scroll offset is increasing in, and the direction that contents are being
+  /// laid out in.
+  ///
+  /// {@macro flutter.rendering.ScrollDirection.sample}
   final ScrollDirection direction;
 
   @override

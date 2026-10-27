@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('Can be placed in an infinite box', (WidgetTester tester) async {
@@ -13,5 +13,17 @@ void main() {
         child: ListView(children: const <Widget>[Center()]),
       ),
     );
+  });
+
+  testWidgets('Center does not crash at zero area', (WidgetTester tester) async {
+    tester.view.physicalSize = Size.zero;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: Placeholder()),
+      ),
+    );
+    expect(tester.getSize(find.byType(Center)), Size.zero);
   });
 }

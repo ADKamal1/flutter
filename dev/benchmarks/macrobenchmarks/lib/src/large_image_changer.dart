@@ -8,22 +8,24 @@ import 'package:flutter/material.dart';
 
 /// Displays a new (from image cache's perspective) large image every 500ms.
 class LargeImageChangerPage extends StatefulWidget {
+  const LargeImageChangerPage({super.key});
+
   @override
-  _LargeImageChangerState createState() => _LargeImageChangerState();
+  State<LargeImageChangerPage> createState() => _LargeImageChangerState();
 }
 
 class _LargeImageChangerState extends State<LargeImageChangerPage> {
-  Timer _timer;
+  Timer? _timer;
   int imageIndex = 0;
-  ImageProvider currentImage;
+  late ImageProvider currentImage;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     currentImage = ResizeImage(
       const ExactAssetImage('assets/999x1000.png'),
-      width: (MediaQuery.of(context).size.width * 2).toInt() + imageIndex,
-      height: (MediaQuery.of(context).size.height * 2).toInt() + imageIndex,
+      width: (MediaQuery.widthOf(context) * 2).toInt() + imageIndex,
+      height: (MediaQuery.heightOf(context) * 2).toInt() + imageIndex,
       allowUpscaling: true,
     );
     _timer?.cancel();
@@ -33,8 +35,8 @@ class _LargeImageChangerState extends State<LargeImageChangerPage> {
           imageIndex = (imageIndex + 1) % 6;
           currentImage = ResizeImage(
             const ExactAssetImage('assets/999x1000.png'),
-            width: (MediaQuery.of(context).size.width * 2).toInt() + imageIndex,
-            height: (MediaQuery.of(context).size.height * 2).toInt() + imageIndex,
+            width: (MediaQuery.widthOf(context) * 2).toInt() + imageIndex,
+            height: (MediaQuery.heightOf(context) * 2).toInt() + imageIndex,
             allowUpscaling: true,
           );
         });

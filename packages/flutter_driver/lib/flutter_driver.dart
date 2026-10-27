@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 /// Provides API to test Flutter applications that run on real
 /// devices and emulators.
 ///
@@ -28,6 +26,7 @@ export 'src/common/render_tree.dart';
 export 'src/common/request_data.dart';
 export 'src/common/semantics.dart';
 export 'src/common/text.dart';
+export 'src/common/text_input_action.dart';
 export 'src/common/wait.dart';
 export 'src/driver/common.dart';
 export 'src/driver/driver.dart';

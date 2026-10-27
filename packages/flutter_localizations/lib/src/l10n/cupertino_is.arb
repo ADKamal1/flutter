@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "Velja allt",
   "tabSemanticsLabel": "Flipi $tabIndex af $tabCount",
   "modalBarrierDismissLabel": "Hunsa",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Leit",
+  "noSpellCheckReplacementsLabel": "Engir staðgenglar fundust",
+  "menuDismissLabel": "Loka valmynd",
+  "lookUpButtonLabel": "Look Up",
+  "searchWebButtonLabel": "Leita á vefnum",
+  "shareButtonLabel": "Deila...",
+  "clearButtonLabel": "Hreinsa",
+  "cancelButtonLabel": "Hætta við",
+  "backButtonLabel": "Til baka",
+  "expansionTileExpandedHint": "ýttu tvisvar til að minnka",
+  "expansionTileCollapsedHint": "ýttu tvisvar til að stækka",
+  "expansionTileExpandedTapHint": "Minnka",
+  "expansionTileCollapsedTapHint": "Stækka til að sjá frekari upplýsingar",
+  "expandedHint": "Minnkað",
+  "collapsedHint": "Stækkað"
 }

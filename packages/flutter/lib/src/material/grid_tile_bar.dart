@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'grid_tile.dart';
+/// @docImport 'icon_button.dart';
+library;
+
 import 'package:flutter/widgets.dart';
 
 import 'colors.dart';
 import 'theme.dart';
 
-/// A header used in a material design [GridTile].
+/// A header used in a Material Design [GridTile].
 ///
 /// Typically used to add a one or two line header or footer on a [GridTile].
 ///
@@ -23,13 +27,13 @@ class GridTileBar extends StatelessWidget {
   ///
   /// Typically used to with [GridTile].
   const GridTileBar({
-    Key? key,
+    super.key,
     this.backgroundColor,
     this.leading,
     this.title,
     this.subtitle,
     this.trailing,
-  }) : super(key: key);
+  });
 
   /// The color to paint behind the child widgets.
   ///
@@ -59,20 +63,16 @@ class GridTileBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     BoxDecoration? decoration;
-    if (backgroundColor != null)
+    if (backgroundColor != null) {
       decoration = BoxDecoration(color: backgroundColor);
+    }
 
-    final EdgeInsetsDirectional padding = EdgeInsetsDirectional.only(
+    final padding = EdgeInsetsDirectional.only(
       start: leading != null ? 8.0 : 16.0,
       end: trailing != null ? 8.0 : 16.0,
     );
 
-    final ThemeData theme = Theme.of(context);
-    final ThemeData darkTheme = ThemeData(
-      brightness: Brightness.dark,
-      accentColor: theme.accentColor,
-      accentColorBrightness: theme.accentColorBrightness,
-    );
+    final darkTheme = ThemeData.dark();
     return Container(
       padding: padding,
       decoration: decoration,
@@ -82,7 +82,6 @@ class GridTileBar extends StatelessWidget {
         child: IconTheme.merge(
           data: const IconThemeData(color: Colors.white),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               if (leading != null)
                 Padding(padding: const EdgeInsetsDirectional.only(end: 8.0), child: leading),
@@ -93,13 +92,13 @@ class GridTileBar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       DefaultTextStyle(
-                        style: darkTheme.textTheme.subtitle1!,
+                        style: darkTheme.textTheme.titleMedium!,
                         softWrap: false,
                         overflow: TextOverflow.ellipsis,
                         child: title!,
                       ),
                       DefaultTextStyle(
-                        style: darkTheme.textTheme.caption!,
+                        style: darkTheme.textTheme.bodySmall!,
                         softWrap: false,
                         overflow: TextOverflow.ellipsis,
                         child: subtitle!,
@@ -110,7 +109,7 @@ class GridTileBar extends StatelessWidget {
               else if (title != null || subtitle != null)
                 Expanded(
                   child: DefaultTextStyle(
-                    style: darkTheme.textTheme.subtitle1!,
+                    style: darkTheme.textTheme.titleMedium!,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                     child: title ?? subtitle!,

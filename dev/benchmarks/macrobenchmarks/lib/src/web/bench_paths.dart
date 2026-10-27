@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:macrobenchmarks/src/web/recorder.dart';
-import 'package:macrobenchmarks/src/web/bench_paths_recording.dart'
-    as recording;
+import 'bench_paths_recording.dart' as recording;
+import 'recorder.dart';
 
 /// Measure the performance of path construction.
 ///
@@ -16,13 +15,12 @@ class BenchPathRecording extends RawRecorder {
   static const String benchmarkName = 'bench_path_recording';
 
   @override
-  Future<void> setUpAll() async {
-  }
+  Future<void> setUpAll() async {}
 
   @override
   void body(Profile profile) {
     profile.record('recordPathConstruction', () {
-      for (int i = 1; i <= 10; i++) {
+      for (var i = 1; i <= 10; i++) {
         recording.createPaths();
       }
     }, reported: true);

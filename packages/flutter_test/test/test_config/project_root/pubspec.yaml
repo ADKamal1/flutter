@@ -3,4 +3,7 @@
 
 name: dummy
 
-# PUBSPEC CHECKSUM: 0000
+environment:
+  sdk: ^3.13.0-0
+
+# PUBSPEC CHECKSUM: 1

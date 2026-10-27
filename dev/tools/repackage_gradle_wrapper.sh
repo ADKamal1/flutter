@@ -48,7 +48,7 @@ WRAPPER_TEMP_DIR="$FLUTTER_ROOT/bin/cache/gradle-wrapper-temp"
 echo "Downloading gradle wrapper..."
 rm -rf "$WRAPPER_TEMP_DIR"
 mkdir "$WRAPPER_TEMP_DIR"
-curl --continue-at - --location --output "$WRAPPER_TEMP_DIR/templates.tgz" "$WRAPPER_SRC_URL" 2>&1
+curl --continue-at - --location --output "${WRAPPER_TEMP_DIR}/templates.tgz" "${WRAPPER_SRC_URL}" 2>&1
 
 echo
 echo "Repackaging files..."
@@ -68,9 +68,9 @@ popd > /dev/null
 echo
 echo "Uploading repackaged gradle wrapper..."
 echo "Content hash: $STAMP"
-gsutil.py cp -n "$WRAPPER_TEMP_DIR/gradle-wrapper.tgz" "gs://flutter_infra/gradle-wrapper/$STAMP/gradle-wrapper.tgz"
+gsutil.py cp -n "$WRAPPER_TEMP_DIR/gradle-wrapper.tgz" "gs://flutter_infra_release/gradle-wrapper/$STAMP/gradle-wrapper.tgz"
 
-echo "flutter_infra/gradle-wrapper/$STAMP/gradle-wrapper.tgz" > "$WRAPPER_VERSION_PATH"
+echo "flutter_infra_release/gradle-wrapper/$STAMP/gradle-wrapper.tgz" > "$WRAPPER_VERSION_PATH"
 
 rm -rf "$WRAPPER_TEMP_DIR"
 echo

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'dart:ui';
+library;
+
 import 'dart:async';
 
 import 'package:flutter/painting.dart';
@@ -40,22 +43,18 @@ import 'scrollable.dart';
 /// The [Image] widget wraps its incoming providers with this provider to avoid
 /// overutilization of resources for images that would never appear on screen or
 /// only be visible for a very brief period.
+@immutable
 @optionalTypeArgs
 class ScrollAwareImageProvider<T extends Object> extends ImageProvider<T> {
   /// Creates a [ScrollAwareImageProvider].
   ///
   /// The [context] object is the [BuildContext] of the [State] using this
-  /// provider. It is used to determine scrolling velocity during [resolve]. It
-  /// must not be null.
+  /// provider. It is used to determine scrolling velocity during [resolve].
   ///
   /// The [imageProvider] is used to create a key and load the image. It must
   /// not be null, and is assumed to interact with the cache in the normal way
   /// that [ImageProvider.resolveStreamForKey] does.
-  const ScrollAwareImageProvider({
-    required this.context,
-    required this.imageProvider,
-  }) : assert(context != null),
-       assert(imageProvider != null);
+  const ScrollAwareImageProvider({required this.context, required this.imageProvider});
 
   /// The context that may or may not be enclosed by a [Scrollable].
   ///
@@ -64,7 +63,7 @@ class ScrollAwareImageProvider<T extends Object> extends ImageProvider<T> {
   /// been resolved.
   final DisposableBuildContext context;
 
-  /// The wrapped image provider to delegate [obtainKey] and [load] to.
+  /// The wrapped image provider to delegate [obtainKey] and [loadImage] to.
   final ImageProvider<T> imageProvider;
 
   @override
@@ -83,7 +82,7 @@ class ScrollAwareImageProvider<T extends Object> extends ImageProvider<T> {
     // Do this before checking scrolling, so that if the bytes are available we
     // render them even though we're scrolling fast - there's no additional
     // allocations to do for texture memory, it's already there.
-    if (stream.completer != null || PaintingBinding.instance!.imageCache!.containsKey(key)) {
+    if (stream.completer != null || PaintingBinding.instance.imageCache.containsKey(key)) {
       imageProvider.resolveStreamForKey(configuration, stream, key, handleError);
       return;
     }
@@ -96,19 +95,40 @@ class ScrollAwareImageProvider<T extends Object> extends ImageProvider<T> {
     // Try to get to end of the frame callbacks of the next frame, and then
     // check again.
     if (Scrollable.recommendDeferredLoadingForContext(context.context!)) {
-        SchedulerBinding.instance!.scheduleFrameCallback((_) {
-          scheduleMicrotask(() => resolveStreamForKey(configuration, stream, key, handleError));
-        });
-        return;
+      SchedulerBinding.instance.scheduleFrameCallback((_) {
+        scheduleMicrotask(() => resolveStreamForKey(configuration, stream, key, handleError));
+      });
+      return;
     }
     // We are in the tree, we're not scrolling too fast, the cache doesn't
-    // have our image, and no one has otherwise completed the stream.  Go.
+    // have our image, and no one has otherwise completed the stream. Go.
     imageProvider.resolveStreamForKey(configuration, stream, key, handleError);
   }
 
   @override
-  ImageStreamCompleter load(T key, DecoderCallback decode) => imageProvider.load(key, decode);
+  ImageStreamCompleter loadBuffer(T key, DecoderBufferCallback decode) =>
+      imageProvider.loadBuffer(key, decode);
+
+  @override
+  ImageStreamCompleter loadImage(T key, ImageDecoderCallback decode) =>
+      imageProvider.loadImage(key, decode);
 
   @override
   Future<T> obtainKey(ImageConfiguration configuration) => imageProvider.obtainKey(configuration);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other.runtimeType != runtimeType) {
+      return false;
+    }
+    return other is ScrollAwareImageProvider &&
+        context == other.context &&
+        imageProvider == other.imageProvider;
+  }
+
+  @override
+  int get hashCode => Object.hash(context, imageProvider);
 }

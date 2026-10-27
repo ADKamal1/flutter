@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "Նշել բոլորը",
   "tabSemanticsLabel": "Ներդիր $tabIndex՝ $tabCount-ից",
   "modalBarrierDismissLabel": "Փակել",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Որոնում",
+  "noSpellCheckReplacementsLabel": "Փոխարինումներ չեն գտնվել",
+  "menuDismissLabel": "Փակել ընտրացանկը",
+  "lookUpButtonLabel": "Փնտրել",
+  "searchWebButtonLabel": "Որոնել համացանցում",
+  "shareButtonLabel": "Կիսվել...",
+  "clearButtonLabel": "Մաքրել",
+  "cancelButtonLabel": "Չեղարկել",
+  "backButtonLabel": "Հետ",
+  "expansionTileExpandedHint": "կրկնակի հպեք ծալելու համար",
+  "expansionTileCollapsedHint": "կրկնակի հպեք ծավալելու համար",
+  "expansionTileExpandedTapHint": "Ծալել",
+  "expansionTileCollapsedTapHint": "ծավալեք՝ մանրամասները տեսնելու համար",
+  "expandedHint": "Ծալված է",
+  "collapsedHint": "Ծավալված է"
 }

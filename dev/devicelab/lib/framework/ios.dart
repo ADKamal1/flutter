@@ -3,180 +3,354 @@
 // found in the LICENSE file.
 
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:collection/collection.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as path;
 
+import 'host_agent.dart';
 import 'utils.dart';
 
 typedef SimulatorFunction = Future<void> Function(String deviceId);
-
-Future<String> dylibSymbols(String pathToDylib) {
-  return eval('nm', <String>['-g', pathToDylib]);
-}
 
 Future<String> fileType(String pathToBinary) {
   return eval('file', <String>[pathToBinary]);
 }
 
-Future<bool> containsBitcode(String pathToBinary) async {
-  // See: https://stackoverflow.com/questions/32755775/how-to-check-a-static-library-is-built-contain-bitcode
-  final String loadCommands = await eval('otool', <String>[
-    '-l',
-    pathToBinary,
-  ]);
-  if (!loadCommands.contains('__LLVM')) {
-    return false;
+Future<String?> minPhoneOSVersion(String pathToBinary) async {
+  final String loadCommands = await eval('otool', <String>['-l', '-arch', 'arm64', pathToBinary]);
+  if (!loadCommands.contains('LC_VERSION_MIN_IPHONEOS')) {
+    return null;
   }
-  // Presence of the section may mean a bitcode marker was embedded (size=1), but there is no content.
-  if (!loadCommands.contains('size 0x0000000000000001')) {
-    return true;
-  }
-  // Check the false positives: size=1 wasn't referencing the __LLVM section.
 
-  bool emptyBitcodeMarkerFound = false;
-  //  Section
-  //  sectname __bundle
-  //  segname __LLVM
-  //  addr 0x003c4000
-  //  size 0x0042b633
-  //  offset 3932160
+  String? minVersion;
+  // Load command 7
+  // cmd LC_VERSION_MIN_IPHONEOS
+  // cmdsize 16
+  // version 9.0
+  // sdk 15.2
   //  ...
   final List<String> lines = LineSplitter.split(loadCommands).toList();
   lines.asMap().forEach((int index, String line) {
-    if (line.contains('segname __LLVM') && lines.length - index - 1 > 3) {
-      final String emptyBitcodeMarker = lines
-        .skip(index - 1)
-        .take(3)
-        .firstWhere(
-          (String line) => line.contains(' size 0x0000000000000001'),
-          orElse: () => null,
-      );
-      if (emptyBitcodeMarker != null) {
-        emptyBitcodeMarkerFound = true;
-        return;
-      }
+    if (line.contains('LC_VERSION_MIN_IPHONEOS') && lines.length - index - 1 > 3) {
+      final String versionLine = lines.skip(index - 1).take(4).last;
+      final versionRegex = RegExp(r'\s*version\s*(\S*)');
+      minVersion = versionRegex.firstMatch(versionLine)?.group(1);
     }
   });
-  return !emptyBitcodeMarkerFound;
+  return minVersion;
 }
 
-Future<bool> dartObservatoryBonjourServiceFound(String appBundlePath) async =>
-  (await eval(
-    'plutil',
-    <String>[
-      '-extract',
-      'NSBonjourServices',
-      'xml1',
-      '-o',
-      '-',
-      path.join(
-        appBundlePath,
-        'Info.plist',
-      ),
-    ],
-    canFail: true,
-  )).contains('_dartobservatory._tcp');
+/// An installed, available iOS simulator runtime from `simctl list runtimes`.
+@visibleForTesting
+final class SimulatorRuntime {
+  const SimulatorRuntime({
+    required this.identifier,
+    required this.build,
+    required this.version,
+    required this.supportedDeviceTypeIds,
+  });
 
-Future<bool> localNetworkUsageFound(String appBundlePath) async =>
-  await exec(
-    'plutil',
-    <String>[
-      '-extract',
-      'NSLocalNetworkUsageDescription',
-      'xml1',
-      '-o',
-      '-',
-      path.join(
-        appBundlePath,
-        'Info.plist',
-      ),
-    ],
-    canFail: true,
-  ) == 0;
+  final String identifier;
+  final String build;
+  final String version;
+  final Set<String> supportedDeviceTypeIds;
+
+  @override
+  String toString() => 'iOS $version ($build)';
+}
+
+List<SimulatorRuntime> _parseAvailableIOSRuntimes(String simctlListRuntimesJson) {
+  if (json.decode(simctlListRuntimesJson) case {'runtimes': final List<Object?> runtimes}) {
+    return <SimulatorRuntime>[
+      for (final Object? runtime in runtimes)
+        if (runtime case {
+          'platform': 'iOS',
+          'isAvailable': true,
+          'identifier': final String identifier,
+          'buildversion': final String build,
+          'version': final String version,
+          'supportedDeviceTypes': final List<Object?> deviceTypes,
+        })
+          SimulatorRuntime(
+            identifier: identifier,
+            build: build,
+            version: version,
+            supportedDeviceTypeIds: <String>{
+              for (final Object? deviceType in deviceTypes)
+                if (deviceType case {'identifier': final String id}) id,
+            },
+          ),
+    ];
+  }
+  return const <SimulatorRuntime>[];
+}
+
+/// Picks the runtime for a [deviceTypeId] simulator from `simctl list runtimes`
+/// and `simctl runtime match list` JSON output.
+///
+/// Prefers the selected Xcode's runtime if it supports [deviceTypeId],
+/// otherwise the last compatible runtime. Throws if none is compatible.
+@visibleForTesting
+SimulatorRuntime selectIOSSimulatorRuntime({
+  required String simctlListRuntimesJson,
+  required String simctlRuntimeMatchListJson,
+  required String deviceTypeId,
+}) {
+  // mac_toolchain may set userOverriddenBuild in CI. Otherwise use the build
+  // simctl matched to the selected Xcode's iOS SDK, which older simctl versions
+  // (Xcode < 27) call "preferredBuild" and newer versions (Xcode >= 27) call
+  // "chosenRuntimeBuild".
+  final decodeResult = json.decode(simctlRuntimeMatchListJson) as Map<String, Object?>;
+  final String? iosKey = decodeResult.keys
+      .where((String key) => key.contains('iphoneos'))
+      .firstOrNull;
+  final String? runtimeBuildForSelectedXcode = switch (decodeResult[iosKey]) {
+    {'userOverriddenBuild': final String build} => build,
+    {'chosenRuntimeBuild': final String build} => build,
+    {'preferredBuild': final String build} => build,
+    _ => null,
+  };
+
+  // Some runtimes (e.g. iOS 27.1) only support a few device types.
+  final List<SimulatorRuntime> compatibleRuntimes = _parseAvailableIOSRuntimes(
+    simctlListRuntimesJson,
+  ).where((SimulatorRuntime r) => r.supportedDeviceTypeIds.contains(deviceTypeId)).toList();
+  if (compatibleRuntimes.isEmpty) {
+    throw 'No iOS simulator runtime supports $deviceTypeId. Available runtimes:\n$simctlListRuntimesJson';
+  }
+  final SimulatorRuntime runtime =
+      compatibleRuntimes.firstWhereOrNull(
+        (SimulatorRuntime r) => r.build == runtimeBuildForSelectedXcode,
+      ) ??
+      compatibleRuntimes.last;
+  if (runtimeBuildForSelectedXcode != null && runtime.build != runtimeBuildForSelectedXcode) {
+    print(
+      'Runtime $runtimeBuildForSelectedXcode for the selected Xcode does not '
+      'support $deviceTypeId. Falling back to $runtime.',
+    );
+  }
+  return runtime;
+}
 
 /// Creates and boots a new simulator, passes the new simulator's identifier to
 /// `testFunction`.
 ///
-/// Remember to call removeIOSimulator in the test teardown.
+/// Remember to call removeIOSSimulator in the test teardown.
 Future<void> testWithNewIOSSimulator(
   String deviceName,
   SimulatorFunction testFunction, {
   String deviceTypeId = 'com.apple.CoreSimulator.SimDeviceType.iPhone-11',
 }) async {
-  // Xcode 11.4 simctl create makes the runtime argument optional, and defaults to latest.
-  // TODO(jmagman): Remove runtime parsing when devicelab upgrades to Xcode 11.4 https://github.com/flutter/flutter/issues/54889
-  final String availableRuntimes = await eval(
-    'xcrun',
-    <String>[
-      'simctl',
-      'list',
-      'runtimes',
-    ],
-    workingDirectory: flutterDirectory.path,
+  final String availableRuntimes = await eval('xcrun', <String>[
+    'simctl',
+    'list',
+    'runtimes',
+    '--json',
+  ], workingDirectory: flutterDirectory.path);
+
+  final String runtimesForSelectedXcode = await eval('xcrun', <String>[
+    'simctl',
+    'runtime',
+    'match',
+    'list',
+    '--json',
+  ], workingDirectory: flutterDirectory.path);
+
+  final SimulatorRuntime runtime = selectIOSSimulatorRuntime(
+    simctlListRuntimesJson: availableRuntimes,
+    simctlRuntimeMatchListJson: runtimesForSelectedXcode,
+    deviceTypeId: deviceTypeId,
   );
 
-  String iOSSimRuntime;
-
-  final RegExp iOSRuntimePattern = RegExp(r'iOS .*\) - (.*)');
-
-  for (final String runtime in LineSplitter.split(availableRuntimes)) {
-    // These seem to be in order, so allow matching multiple lines so it grabs
-    // the last (hopefully latest) one.
-    final RegExpMatch iOSRuntimeMatch = iOSRuntimePattern.firstMatch(runtime);
-    if (iOSRuntimeMatch != null) {
-      iOSSimRuntime = iOSRuntimeMatch.group(1).trim();
-      continue;
-    }
-  }
-  if (iOSSimRuntime == null) {
-    throw 'No iOS simulator runtime found. Available runtimes:\n$availableRuntimes';
-  }
-
-  final String deviceId = await eval(
-    'xcrun',
-    <String>[
-      'simctl',
-      'create',
-      deviceName,
-      deviceTypeId,
-      iOSSimRuntime,
-    ],
-    workingDirectory: flutterDirectory.path,
-  );
-  await eval(
-    'xcrun',
-    <String>[
-      'simctl',
-      'boot',
-      deviceId,
-    ],
-    workingDirectory: flutterDirectory.path,
-  );
+  final String deviceId = await eval('xcrun', <String>[
+    'simctl',
+    'create',
+    deviceName,
+    deviceTypeId,
+    runtime.identifier,
+  ], workingDirectory: flutterDirectory.path);
+  await eval('xcrun', <String>[
+    'simctl',
+    'boot',
+    deviceId,
+  ], workingDirectory: flutterDirectory.path);
 
   await testFunction(deviceId);
 }
 
 /// Shuts down and deletes simulator with deviceId.
-Future<void> removeIOSimulator(String deviceId) async {
+Future<void> removeIOSSimulator(String? deviceId) async {
   if (deviceId != null && deviceId != '') {
     await eval(
       'xcrun',
-      <String>[
-        'simctl',
-        'shutdown',
-        deviceId
-      ],
+      <String>['simctl', 'shutdown', deviceId],
       canFail: true,
       workingDirectory: flutterDirectory.path,
     );
     await eval(
       'xcrun',
-      <String>[
-        'simctl',
-        'delete',
-        deviceId],
+      <String>['simctl', 'delete', deviceId],
       canFail: true,
       workingDirectory: flutterDirectory.path,
     );
   }
+}
+
+Future<bool> runXcodeTests({
+  required String platformDirectory,
+  required String destination,
+  required String testName,
+  List<String> actions = const <String>['test'],
+  String configuration = 'Release',
+  List<String> extraOptions = const <String>[],
+  String scheme = 'Runner',
+  bool skipCodesign = false,
+}) {
+  return runXcodeBuild(
+    platformDirectory: platformDirectory,
+    destination: destination,
+    testName: testName,
+    actions: actions,
+    configuration: configuration,
+    extraOptions: extraOptions,
+    scheme: scheme,
+    skipCodesign: skipCodesign,
+  );
+}
+
+Future<bool> runXcodeBuild({
+  required String platformDirectory,
+  required String destination,
+  required String testName,
+  List<String> actions = const <String>['build'],
+  String configuration = 'Release',
+  List<String> extraOptions = const <String>[],
+  String scheme = 'Runner',
+  bool skipCodesign = false,
+}) async {
+  final Map<String, String> environment = Platform.environment;
+  String? developmentTeam;
+  String? codeSignStyle;
+  String? provisioningProfile;
+  if (!skipCodesign) {
+    // If not running on CI, inject the Flutter team code signing properties.
+    developmentTeam = environment['FLUTTER_XCODE_DEVELOPMENT_TEAM'] ?? 'S8QB4VV633';
+    codeSignStyle = environment['FLUTTER_XCODE_CODE_SIGN_STYLE'];
+    provisioningProfile = environment['FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER'];
+  }
+  File? disabledSandboxEntitlementFile;
+  if (platformDirectory.endsWith('macos')) {
+    disabledSandboxEntitlementFile = _createDisabledSandboxEntitlementFile(
+      platformDirectory,
+      configuration,
+    );
+  }
+  final String resultBundleTemp = Directory.systemTemp.createTempSync('flutter_xcresult.').path;
+  final String resultBundlePath = path.join(resultBundleTemp, 'result');
+  final int testResultExit = await exec(
+    'xcodebuild',
+    <String>[
+      '-workspace',
+      'Runner.xcworkspace',
+      '-scheme',
+      scheme,
+      '-configuration',
+      configuration,
+      '-destination',
+      destination,
+      '-resultBundlePath',
+      resultBundlePath,
+      ...actions,
+      ...extraOptions,
+      'COMPILER_INDEX_STORE_ENABLE=NO',
+      if (developmentTeam != null) 'DEVELOPMENT_TEAM=$developmentTeam',
+      if (codeSignStyle != null) 'CODE_SIGN_STYLE=$codeSignStyle',
+      if (provisioningProfile != null) 'PROVISIONING_PROFILE_SPECIFIER=$provisioningProfile',
+      if (disabledSandboxEntitlementFile != null)
+        'CODE_SIGN_ENTITLEMENTS=${disabledSandboxEntitlementFile.path}',
+    ],
+    workingDirectory: platformDirectory,
+    canFail: true,
+  );
+
+  if (testResultExit != 0) {
+    final Directory? dumpDirectory = hostAgent.dumpDirectory;
+    final xcresultBundle = Directory(path.join(resultBundleTemp, 'result.xcresult'));
+    if (dumpDirectory != null) {
+      if (xcresultBundle.existsSync()) {
+        // Zip the test results to the artifacts directory for upload.
+        final String zipPath = path.join(
+          dumpDirectory.path,
+          '$testName-${DateTime.now().toLocal().toIso8601String()}.zip',
+        );
+        await exec(
+          'zip',
+          <String>['-r', '-9', '-q', zipPath, path.basename(xcresultBundle.path)],
+          workingDirectory: resultBundleTemp,
+          canFail: true, // Best effort to get the logs.
+        );
+      } else {
+        print('xcresult bundle ${xcresultBundle.path} does not exist, skipping upload');
+      }
+    }
+    return false;
+  }
+  return true;
+}
+
+/// Finds and copies macOS entitlements file. In the copy, disables sandboxing.
+/// If entitlements file is not found, returns null.
+///
+/// As of macOS 14, testing a macOS sandbox app may prompt the user to grant
+/// access to the app. To workaround this in CI, we create and use a entitlements
+/// file with sandboxing disabled. See
+/// https://developer.apple.com/documentation/security/app_sandbox/accessing_files_from_the_macos_app_sandbox.
+File? _createDisabledSandboxEntitlementFile(String platformDirectory, String configuration) {
+  String entitlementDefaultFileName;
+  if (configuration == 'Release') {
+    entitlementDefaultFileName = 'Release';
+  } else {
+    entitlementDefaultFileName = 'DebugProfile';
+  }
+
+  final String entitlementFilePath = path.join(
+    platformDirectory,
+    'Runner',
+    '$entitlementDefaultFileName.entitlements',
+  );
+  final entitlementFile = File(entitlementFilePath);
+
+  if (!entitlementFile.existsSync()) {
+    print('Unable to find entitlements file at ${entitlementFile.path}');
+    return null;
+  }
+
+  final String originalEntitlementFileContents = entitlementFile.readAsStringSync();
+  final String tempEntitlementPath = Directory.systemTemp
+      .createTempSync('flutter_disable_sandbox_entitlement.')
+      .path;
+  final disabledSandboxEntitlementFile = File(
+    path.join(
+      tempEntitlementPath,
+      '${entitlementDefaultFileName}WithDisabledSandboxing.entitlements',
+    ),
+  );
+  disabledSandboxEntitlementFile.createSync(recursive: true);
+  disabledSandboxEntitlementFile.writeAsStringSync(
+    originalEntitlementFileContents.replaceAll(
+      RegExp(r'<key>com\.apple\.security\.app-sandbox<\/key>[\S\s]*?<true\/>'),
+      '''
+<key>com.apple.security.app-sandbox</key>
+	<false/>''',
+    ),
+  );
+
+  return disabledSandboxEntitlementFile;
+}
+
+/// Returns global (external) symbol table entries, delimited by new lines.
+Future<String> dumpSymbolTable(String filePath) {
+  return eval('nm', <String>['--extern-only', '--just-symbol-name', filePath, '-arch', 'arm64']);
 }

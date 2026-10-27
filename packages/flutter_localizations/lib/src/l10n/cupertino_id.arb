@@ -21,5 +21,19 @@
   "selectAllButtonLabel": "Pilih Semua",
   "tabSemanticsLabel": "Tab $tabIndex dari $tabCount",
   "modalBarrierDismissLabel": "Tutup",
-  "searchTextFieldPlaceholerLabel": "Search"
+  "searchTextFieldPlaceholderLabel": "Telusuri",
+  "noSpellCheckReplacementsLabel": "Penggantian Tidak Ditemukan",
+  "menuDismissLabel": "Tutup menu",
+  "lookUpButtonLabel": "Cari",
+  "searchWebButtonLabel": "Telusuri di Web",
+  "shareButtonLabel": "Bagikan...",
+  "clearButtonLabel": "Hapus",
+  "cancelButtonLabel": "Batal",
+  "backButtonLabel": "Kembali",
+  "expansionTileExpandedHint": "ketuk dua kali untuk menciutkan",
+  "expansionTileCollapsedHint": "ketuk dua kali untuk meluaskan",
+  "expansionTileExpandedTapHint": "Ciutkan",
+  "expansionTileCollapsedTapHint": "Luaskan untuk mengetahui detail selengkapnya",
+  "expandedHint": "Diciutkan",
+  "collapsedHint": "Diluaskan"
 }

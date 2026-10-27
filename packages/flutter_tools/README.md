@@ -7,7 +7,7 @@ for building Flutter applications.
 
 Be sure to follow the instructions on [CONTRIBUTING.md](../../CONTRIBUTING.md)
 to set up your development environment. Further, familiarize yourself with the
-[style guide](https://github.com/flutter/flutter/wiki/Style-guide-for-Flutter-repo),
+[style guide](../../docs/contributing/Style-guide-for-Flutter-repo.md),
 which we follow.
 
 ### Setting up
@@ -15,86 +15,129 @@ which we follow.
 First, ensure that the Dart SDK and other necessary artifacts are available by
 invoking the Flutter Tools wrapper script. In this directory run:
 ```shell
-$ ../../bin/flutter --version
+$ flutter --version
 ```
 
 ### Running the Tool
 
 To run Flutter Tools from source, in this directory run:
 ```shell
-$ ../../bin/dart bin/flutter_tools.dart
+$ dart bin/flutter_tools.dart
 ```
 followed by command-line arguments, as usual.
 
+As a convenience for folks developing the `flutter` tool itself,
+you can also use the `bin/flutter-dev` script:
+```shell
+# Assuming flutter/bin is on your PATH
+$ flutter-dev
+```
+
+Note: `flutter-dev` is identical to `flutter`, except it does not
+use a cached on-disk snapshot. In other words, it will be significantly
+slower but you will not need to forget (remember?) to delete the cached
+snapshot.
 
 ### Running the analyzer
 
 To run the analyzer on Flutter Tools, in this directory run:
 ```shell
-$ ../../bin/flutter analyze
+$ flutter analyze
 ```
 
 ### Writing tests
 
-As with other parts of the Flutter repository, all changes in behavior [must be
-tested](https://github.com/flutter/flutter/wiki/Style-guide-for-Flutter-repo#write-test-find-bug).
+As with other parts of the Flutter repository, all changes in behavior
+[must be tested](../../docs/contributing/Style-guide-for-Flutter-repo.md#write-test-find-bug).
 Tests live under the `test/` subdirectory.
-- Hermetic unit tests of tool internals go under `test/general.shard`.
-- Tests of tool commands go under `test/commands.shard`. Hermetic tests go under
-  its `hermetic/` subdirectory. Non-hermetic tests go under its `permeable`
-  sub-directory.
-- Integration tests (e.g. tests that run the tool in a subprocess) go under
-  `test/integration.shard`.
 
-In general, the tests for the code in a file called `file.dart` should go in a
-file called `file_test.dart` in the subdirectory that matches the behavior of
-the test.
+- Hermetic unit tests of tool internals go under `test/general.shard`
+  and must run in significantly less than two seconds.
 
-We measure [test coverage](https://codecov.io/gh/flutter/flutter) post-submit.
-A change that deletes code might decrease test coverage, however, most changes
-that add new code should aim to increase coverage. In particular, the coverage
-of the diff should be close to the average coverage, and should ideally be
-better.
+- Tests of tool commands go under `test/commands.shard`. Hermetic
+  tests go under its `hermetic/` subdirectory. Non-hermetic tests go
+  under its `permeable` sub-directory. Avoid adding tests here and
+  prefer writing either a unit test or a full integration test.
+
+- Integration tests (e.g. tests that run the tool in a subprocess) go
+  under `test/integration.shard`.
+
+- Slow web-related tests go in the `test/web.shard` directory.
+
+In general, the tests for the code in a file called `file.dart` should
+go in a file called `file_test.dart` in the subdirectory that matches
+the behavior of the test.
+
+The `dart_test.yaml` file configures the timeout for these tests to be
+15 minutes. The `test.dart` script that is used in CI overrides this
+to two seconds for the `test/general.shard` directory, to catch
+behaviour that is unexpectedly slow.
+
+Please avoid setting any other timeouts.
 
 #### Using local engine builds in integration tests
 
 The integration tests can be configured to use a specific local engine
-variant by setting the `FLUTTER_LOCAL_ENGINE` environment variable to the
-name of the local engine (e.g. "android_debug_unopt"). If the local engine build
-requires a source path, this can be provided by setting the `FLUTTER_LOCAL_ENGINE_SRC_PATH`
-environment variable. This second variable is not necessary if the `flutter` and
-`engine` checkouts are in adjacent directories.
+variant by setting the `FLUTTER_LOCAL_ENGINE` and `FLUTTER_LOCAL_ENGINE_HOST`
+environment variables to the name of the local engines (e.g. `android_debug_unopt`
+and `host_debug_unopt`). If the local engine build requires a source path, this
+can be provided by setting the `FLUTTER_LOCAL_ENGINE_SRC_PATH` environment
+variable. This second variable is not necessary if the `flutter` and `engine`
+checkouts are in adjacent directories.
 
 ```shell
 export FLUTTER_LOCAL_ENGINE=android_debug_unopt
-../../bin/dart test test/integration.shard/some_test_case
+export FLUTTER_LOCAL_ENGINE_HOST=host_debug_unopt
+flutter test test/integration.shard/some_test_case
 ```
 
 ### Running the tests
 
-To run the tests in the `test/` directory, first ensure that there are no
-connected devices. Then, in this directory run:
+To run all of the unit tests:
+
 ```shell
-$ ../../bin/dart pub run test
+$ flutter test test/general.shard
 ```
 
-The tests in `test/integration.shard` are slower to run than the tests in
-`test/general.shard`. They also require the `FLUTTER_ROOT` environment variable
-to be set and pointing to the root of the Flutter SDK. To run only the tests in `test/general.shard`, in this
-directory run:
+The tests in `test/integration.shard` are slower to run than the tests
+in `test/general.shard`. Depending on your development computer, you
+might want to limit concurrency. Generally it is easier to run these
+on CI, or to manually verify the behavior you are changing instead of
+running the test.
+
+The integration tests also require the `FLUTTER_ROOT` environment
+variable to be set. The full invocation to run everything might
+therefore look something like:
+
 ```shell
-$ ../../bin/dart pub run test test/general.shard
+$ export FLUTTER_ROOT=~/path/to/flutter-sdk
+$ flutter test --concurrency 1
 ```
 
-To run the tests in a specific file, run:
+This may take some time (on the order of an hour). The unit tests
+alone take much less time (on the order of a minute).
+
+You can run the tests in a specific file, e.g.:
+
 ```shell
-$ ../../bin/dart pub run test test/general.shard/utils_test.dart
+$ flutter test test/general.shard/utils_test.dart
 ```
 
-### Forcing snapshot regeneration
+### Forcing Flutter Tools Snapshot Regeneration
 
-To force the Flutter Tools snapshot to be regenerated, delete the following
-files:
-```shell
-$ rm ../../bin/cache/flutter_tools.stamp ../../bin/cache/flutter_tools.snapshot
+To force the Flutter Tools snapshot to be regenerated, delete these files:
+
+- `flutter_tools.stamp`
+- `flutter_tools.snapshot`
+
+**On macOS/Linux:**
+
+```bash
+rm ../../bin/cache/flutter_tools.stamp ../../bin/cache/flutter_tools.snapshot
+```
+
+**On Windows:**
+
+```bat
+del ..\..\bin\cache\flutter_tools.stamp ..\..\bin\cache\flutter_tools.snapshot
 ```

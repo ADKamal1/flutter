@@ -7,6 +7,9 @@ import 'dart:collection';
 
 import 'package:meta/meta.dart';
 
+// TODO(ianh): We should remove AppContext's mechanism and replace it with
+// passing dependencies directly in constructors, methods, etc. See #47161.
+
 /// Generates an [AppContext] value.
 ///
 /// Generators are allowed to return `null`, in which case the context will
@@ -37,7 +40,7 @@ const Object contextKey = _Key.key;
 /// context will not have any values associated with it.
 ///
 /// This is guaranteed to never return `null`.
-AppContext get context => Zone.current[contextKey] as AppContext ?? AppContext._root;
+AppContext get context => Zone.current[contextKey] as AppContext? ?? AppContext._root;
 
 /// A lookup table (mapping types to values) and an implied scope, in which
 /// code is run.
@@ -56,16 +59,16 @@ class AppContext {
     this._fallbacks = const <Type, Generator>{},
   ]);
 
-  final String name;
-  final AppContext _parent;
+  final String? name;
+  final AppContext? _parent;
   final Map<Type, Generator> _overrides;
   final Map<Type, Generator> _fallbacks;
-  final Map<Type, dynamic> _values = <Type, dynamic>{};
+  final _values = <Type, dynamic>{};
 
-  List<Type> _reentrantChecks;
+  List<Type>? _reentrantChecks;
 
   /// Bootstrap context.
-  static final AppContext _root = AppContext._(null, 'ROOT');
+  static final _root = AppContext._(null, 'ROOT');
 
   dynamic _boxNull(dynamic value) => value ?? _BoxedNull.instance;
 
@@ -92,33 +95,34 @@ class AppContext {
     return _values.putIfAbsent(type, () {
       _reentrantChecks ??= <Type>[];
 
-      final int index = _reentrantChecks.indexOf(type);
+      final int index = _reentrantChecks!.indexOf(type);
       if (index >= 0) {
         // We're already in the process of trying to generate this type.
         throw ContextDependencyCycleException._(
-            UnmodifiableListView<Type>(_reentrantChecks.sublist(index)));
+          UnmodifiableListView<Type>(_reentrantChecks!.sublist(index)),
+        );
       }
 
-      _reentrantChecks.add(type);
+      _reentrantChecks!.add(type);
       try {
-        return _boxNull(generators[type]());
+        return _boxNull(generators[type]!());
       } finally {
-        _reentrantChecks.removeLast();
-        if (_reentrantChecks.isEmpty) {
+        _reentrantChecks!.removeLast();
+        if (_reentrantChecks!.isEmpty) {
           _reentrantChecks = null;
         }
       }
     });
   }
 
-  /// Gets the value associated with the specified [type], or `null` if no
+  /// Gets the value associated with the specified [T], or `null` if no
   /// such value has been associated.
-  T get<T>() {
+  T? get<T>() {
     dynamic value = _generateIfNecessary(T, _overrides);
     if (value == null && _parent != null) {
       value = _parent.get<T>();
     }
-    return _unboxNull(value ?? _generateIfNecessary(T, _fallbacks)) as T;
+    return _unboxNull(value ?? _generateIfNecessary(T, _fallbacks)) as T?;
   }
 
   /// Runs [body] in a child context and returns the value returned by [body].
@@ -134,19 +138,19 @@ class AppContext {
   /// name. This is useful for debugging purposes and is analogous to naming a
   /// thread in Java.
   Future<V> run<V>({
-    @required FutureOr<V> body(),
-    String name,
-    Map<Type, Generator> overrides,
-    Map<Type, Generator> fallbacks,
-    ZoneSpecification zoneSpecification,
+    required FutureOr<V> Function() body,
+    String? name,
+    Map<Type, Generator>? overrides,
+    Map<Type, Generator>? fallbacks,
+    ZoneSpecification? zoneSpecification,
   }) async {
-    final AppContext child = AppContext._(
+    final child = AppContext._(
       this,
       name,
       Map<Type, Generator>.unmodifiable(overrides ?? const <Type, Generator>{}),
       Map<Type, Generator>.unmodifiable(fallbacks ?? const <Type, Generator>{}),
     );
-    return await runZoned<Future<V>>(
+    return runZoned<Future<V>>(
       () async => await body(),
       zoneValues: <_Key, AppContext>{_Key.key: child},
       zoneSpecification: zoneSpecification,
@@ -155,9 +159,9 @@ class AppContext {
 
   @override
   String toString() {
-    final StringBuffer buf = StringBuffer();
-    String indent = '';
-    AppContext ctx = this;
+    final buf = StringBuffer();
+    var indent = '';
+    AppContext? ctx = this;
     while (ctx != null) {
       buf.write('AppContext');
       if (ctx.name != null) {
@@ -183,7 +187,7 @@ class AppContext {
 class _Key {
   const _Key();
 
-  static const _Key key = _Key();
+  static const key = _Key();
 
   @override
   String toString() => 'context';
@@ -193,5 +197,5 @@ class _Key {
 class _BoxedNull {
   const _BoxedNull();
 
-  static const _BoxedNull instance = _BoxedNull();
+  static const instance = _BoxedNull();
 }

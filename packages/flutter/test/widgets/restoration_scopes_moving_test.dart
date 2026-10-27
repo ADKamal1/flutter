@@ -2,20 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('widget moves scopes during restore', (WidgetTester tester) async {
-    await tester.pumpWidget(RootRestorationScope(
-      restorationId: 'root',
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: TestWidgetWithCounterChild(),
+    await tester.pumpWidget(
+      const RootRestorationScope(
+        restorationId: 'root',
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: TestWidgetWithCounterChild(),
+        ),
       ),
-    ));
+    );
 
-    expect(tester.state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild)).restoreChild, true);
+    expect(
+      tester
+          .state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild))
+          .restoreChild,
+      true,
+    );
     expect(find.text('Counter: 0'), findsOneWidget);
     await tester.tap(find.text('Counter: 0'));
     await tester.pump();
@@ -23,9 +30,17 @@ void main() {
 
     final TestRestorationData dataWithChild = await tester.getRestorationData();
 
-    tester.state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild)).restoreChild = false;
+    tester
+            .state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild))
+            .restoreChild =
+        false;
     await tester.pump();
-    expect(tester.state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild)).restoreChild, false);
+    expect(
+      tester
+          .state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild))
+          .restoreChild,
+      false,
+    );
 
     await tester.tap(find.text('Counter: 1'));
     await tester.pump();
@@ -65,20 +80,25 @@ void main() {
     await tester.restoreFrom(dataWithoutChild);
     expect(find.text('Counter: 7'), findsOneWidget);
 
-    expect(tester.state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild)).toggleCount, 0);
+    expect(
+      tester
+          .state<TestWidgetWithCounterChildState>(find.byType(TestWidgetWithCounterChild))
+          .toggleCount,
+      0,
+    );
   });
 
   testWidgets('restoration is turned on later', (WidgetTester tester) async {
     tester.binding.restorationManager.disableRestoration();
-    await tester.pumpWidget(const RootRestorationScope(
-      restorationId: 'root-child',
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: TestWidget(
-          restorationId: 'foo',
+    await tester.pumpWidget(
+      const RootRestorationScope(
+        restorationId: 'root-child',
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: TestWidget(restorationId: 'foo'),
         ),
       ),
-    ));
+    );
 
     final TestWidgetState state = tester.state<TestWidgetState>(find.byType(TestWidget));
     expect(find.text('hello'), findsOneWidget);
@@ -91,15 +111,15 @@ void main() {
 
     await tester.restoreFrom(TestRestorationData.empty);
 
-    await tester.pumpWidget(const RootRestorationScope(
-      restorationId: 'root-child',
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: TestWidget(
-          restorationId: 'foo',
+    await tester.pumpWidget(
+      const RootRestorationScope(
+        restorationId: 'root-child',
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: TestWidget(restorationId: 'foo'),
         ),
       ),
-    ));
+    );
 
     expect(find.text('hello'), findsOneWidget);
     expect(state.buckets.single, isNull);
@@ -111,11 +131,14 @@ void main() {
 }
 
 class TestWidgetWithCounterChild extends StatefulWidget {
+  const TestWidgetWithCounterChild({super.key});
+
   @override
   State<TestWidgetWithCounterChild> createState() => TestWidgetWithCounterChildState();
 }
 
-class TestWidgetWithCounterChildState extends State<TestWidgetWithCounterChild> with RestorationMixin {
+class TestWidgetWithCounterChildState extends State<TestWidgetWithCounterChild>
+    with RestorationMixin {
   final RestorableBool childRestorationEnabled = RestorableBool(true);
 
   int toggleCount = 0;
@@ -149,9 +172,7 @@ class TestWidgetWithCounterChildState extends State<TestWidgetWithCounterChild> 
 
   @override
   Widget build(BuildContext context) {
-    return Counter(
-      restorationId: restoreChild ? 'counter' : null,
-    );
+    return Counter(restorationId: restoreChild ? 'counter' : null);
   }
 
   @override
@@ -159,7 +180,7 @@ class TestWidgetWithCounterChildState extends State<TestWidgetWithCounterChild> 
 }
 
 class Counter extends StatefulWidget {
-  const Counter({this.restorationId});
+  const Counter({super.key, this.restorationId});
 
   final String? restorationId;
 
@@ -186,21 +207,19 @@ class CounterState extends State<Counter> with RestorationMixin {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: () {
+    return GestureDetector(
+      onTap: () {
         setState(() {
           count.value++;
         });
       },
-      child: Text(
-        'Counter: ${count.value}',
-      ),
+      child: Text('Counter: ${count.value}'),
     );
   }
 }
 
 class TestWidget extends StatefulWidget {
-  const TestWidget({required this.restorationId});
+  const TestWidget({super.key, required this.restorationId});
 
   final String? restorationId;
 

@@ -4,7 +4,7 @@
 
 import 'localizations_utils.dart';
 
-HeaderGenerator generateCupertinoHeader = (String regenerateInstructions) {
+String generateCupertinoHeader(String regenerateInstructions) {
   return '''
 // Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -16,7 +16,6 @@ HeaderGenerator generateCupertinoHeader = (String regenerateInstructions) {
 
 import 'dart:collection';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -27,47 +26,47 @@ import '../cupertino_localizations.dart';
 //
 // These classes are constructed by the [getCupertinoTranslation] method at the
 // bottom of this file, and used by the [_GlobalCupertinoLocalizationsDelegate.load]
-// method defined in `flutter_localizations/lib/src/cupertino_localizations.dart`.''';
-};
+// method defined in `flutter_localizations/lib/src/cupertino_localizations.dart`.
+
+// TODO(goderbauer): Extend the generator to properly format the output.
+// dart format off''';
+}
 
 /// Returns the source of the constructor for a GlobalCupertinoLocalizations
 /// subclass.
-ConstructorGenerator generateCupertinoConstructor = (LocaleInfo locale) {
+String generateCupertinoConstructor(LocaleInfo locale) {
   final String localeName = locale.originalString;
+  final className = 'CupertinoLocalization${locale.camelCase()}';
   return '''
   /// Create an instance of the translation bundle for ${describeLocale(localeName)}.
   ///
   /// For details on the meaning of the arguments, see [GlobalCupertinoLocalizations].
-  const CupertinoLocalization${locale.camelCase()}({
-    String localeName = '$localeName',
-    @required intl.DateFormat fullYearFormat,
-    @required intl.DateFormat dayFormat,
-    @required intl.DateFormat mediumDateFormat,
-    @required intl.DateFormat singleDigitHourFormat,
-    @required intl.DateFormat singleDigitMinuteFormat,
-    @required intl.DateFormat doubleDigitMinuteFormat,
-    @required intl.DateFormat singleDigitSecondFormat,
-    @required intl.NumberFormat decimalFormat,
-  }) : super(
-    localeName: localeName,
-    fullYearFormat: fullYearFormat,
-    dayFormat: dayFormat,
-    mediumDateFormat: mediumDateFormat,
-    singleDigitHourFormat: singleDigitHourFormat,
-    singleDigitMinuteFormat: singleDigitMinuteFormat,
-    doubleDigitMinuteFormat: doubleDigitMinuteFormat,
-    singleDigitSecondFormat: singleDigitSecondFormat,
-    decimalFormat: decimalFormat,
-  );''';
-};
+  @Deprecated(
+    'Use $className from package:cupertino_ui/cupertino_ui.dart instead. '
+    'This feature was deprecated after v3.47.0-0.0.pre.',
+  )
+  const $className({
+    super.localeName = '$localeName',
+    required super.fullYearFormat,
+    required super.dayFormat,
+    required super.weekdayFormat,
+    required super.mediumDateFormat,
+    required super.singleDigitHourFormat,
+    required super.singleDigitMinuteFormat,
+    required super.doubleDigitMinuteFormat,
+    required super.singleDigitSecondFormat,
+    required super.decimalFormat,
+  });''';
+}
 
 const String cupertinoFactoryName = 'getCupertinoTranslation';
 
 const String cupertinoFactoryDeclaration = '''
-GlobalCupertinoLocalizations getCupertinoTranslation(
+GlobalCupertinoLocalizations? getCupertinoTranslation(
   Locale locale,
   intl.DateFormat fullYearFormat,
   intl.DateFormat dayFormat,
+  intl.DateFormat weekdayFormat,
   intl.DateFormat mediumDateFormat,
   intl.DateFormat singleDigitHourFormat,
   intl.DateFormat singleDigitMinuteFormat,
@@ -77,7 +76,7 @@ GlobalCupertinoLocalizations getCupertinoTranslation(
 ) {''';
 
 const String cupertinoFactoryArguments =
-    'fullYearFormat: fullYearFormat, dayFormat: dayFormat, mediumDateFormat: mediumDateFormat, singleDigitHourFormat: singleDigitHourFormat, singleDigitMinuteFormat: singleDigitMinuteFormat, doubleDigitMinuteFormat: doubleDigitMinuteFormat, singleDigitSecondFormat: singleDigitSecondFormat, decimalFormat: decimalFormat';
+    'fullYearFormat: fullYearFormat, dayFormat: dayFormat, weekdayFormat: weekdayFormat, mediumDateFormat: mediumDateFormat, singleDigitHourFormat: singleDigitHourFormat, singleDigitMinuteFormat: singleDigitMinuteFormat, doubleDigitMinuteFormat: doubleDigitMinuteFormat, singleDigitSecondFormat: singleDigitSecondFormat, decimalFormat: decimalFormat';
 
 const String cupertinoSupportedLanguagesConstant = 'kCupertinoSupportedLanguages';
 

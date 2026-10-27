@@ -7,27 +7,25 @@ import 'package:test/test.dart' hide TypeMatcher, isInstanceOf;
 
 void main() {
   group('button tap test', () {
-    FlutterDriver driver;
+    late FlutterDriver driver;
 
     setUpAll(() async {
       driver = await FlutterDriver.connect();
     });
 
     tearDownAll(() async {
-      if (driver != null)
-        driver.close();
+      await driver.close();
     });
 
     test('tap on the button, verify result', () async {
-      final SerializableFinder batteryLevelLabel =
-          find.byValueKey('Battery level label');
+      final SerializableFinder batteryLevelLabel = find.byValueKey('Battery level label');
       expect(batteryLevelLabel, isNotNull);
 
       final SerializableFinder button = find.text('Refresh');
       await driver.waitFor(button);
       await driver.tap(button);
 
-      String batteryLevel;
+      String? batteryLevel;
       while (batteryLevel == null || batteryLevel.contains('unknown')) {
         batteryLevel = await driver.getText(batteryLevelLabel);
       }

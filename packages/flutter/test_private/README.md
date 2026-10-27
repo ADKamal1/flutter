@@ -15,8 +15,8 @@ private interface can be accessed by the test.
 
 The tests are run like so:
 
-```shell
-pub run --enable-experiment=non-nullable test_private.dart
+```sh
+dart run bin/test_private.dart
 ```
 
 One limitation is that the copied private API needs to be separable enough to be
@@ -32,7 +32,6 @@ To add a private test, add a manifest file of the form (assuming
   ],
   "pubspec": "my_private_test.pubspec.yaml",
   "deps": [
-    "test/flutter_test_alternative.dart",
     "lib/src/subpackage/my_private_implementation.dart",
   ]
 }

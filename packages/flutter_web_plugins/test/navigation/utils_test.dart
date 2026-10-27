@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
 @TestOn('browser') // Uses web-only Flutter SDK
+library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_web_plugins/src/navigation/utils.dart';
@@ -34,5 +33,9 @@ void main() {
     expect(extractPathname('https://example.com/foo'), '/foo');
     expect(extractPathname('https://example.com/foo#bar'), '/foo');
     expect(extractPathname('https://example.com/foo/#bar'), '/foo/');
+
+    // URL encoding.
+    expect(extractPathname('/foo bar'), '/foo%20bar');
+    expect(extractPathname('https://example.com/foo bar'), '/foo%20bar');
   });
 }

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/material.dart';
+library;
 
 import 'dart:ui' as ui show PlaceholderAlignment;
 
@@ -16,12 +18,16 @@ import 'text_style.dart';
 /// An immutable placeholder that is embedded inline within text.
 ///
 /// [PlaceholderSpan] represents a placeholder that acts as a stand-in for other
-/// content. A [PlaceholderSpan] by itself does not contain useful
-/// information to change a [TextSpan]. Instead, this class must be extended
-/// to define contents.
+/// content. A [PlaceholderSpan] by itself does not contain useful information
+/// to change a [TextSpan]. [WidgetSpan] from the widgets library extends
+/// [PlaceholderSpan] and may be used instead to specify a widget as the contents
+/// of the placeholder.
 ///
-/// [WidgetSpan] from the widgets library extends [PlaceholderSpan] and may be
-/// used instead to specify a widget as the contents of the placeholder.
+/// Flutter widgets such as [TextField], [Text] and [RichText] do not recognize
+/// [PlaceholderSpan] subclasses other than [WidgetSpan]. **Consider
+/// implementing the [WidgetSpan] interface instead of the [Placeholder]
+/// interface.**
+///
 ///
 /// See also:
 ///
@@ -38,8 +44,11 @@ abstract class PlaceholderSpan extends InlineSpan {
   const PlaceholderSpan({
     this.alignment = ui.PlaceholderAlignment.bottom,
     this.baseline,
-    TextStyle? style,
-  }) : super(style: style,);
+    super.style,
+  });
+
+  /// The unicode character to represent a placeholder.
+  static const int placeholderCodeUnit = 0xFFFC;
 
   /// How the placeholder aligns vertically with the text.
   ///
@@ -55,9 +64,13 @@ abstract class PlaceholderSpan extends InlineSpan {
   /// [PlaceholderSpan]s are flattened to a `0xFFFC` object replacement character in the
   /// plain text representation when `includePlaceholders` is true.
   @override
-  void computeToPlainText(StringBuffer buffer, {bool includeSemanticsLabels = true, bool includePlaceholders = true}) {
+  void computeToPlainText(
+    StringBuffer buffer, {
+    bool includeSemanticsLabels = true,
+    bool includePlaceholders = true,
+  }) {
     if (includePlaceholders) {
-      buffer.write('\uFFFC');
+      buffer.writeCharCode(placeholderCodeUnit);
     }
   }
 
@@ -66,38 +79,19 @@ abstract class PlaceholderSpan extends InlineSpan {
     collector.add(InlineSpanSemanticsInformation.placeholder);
   }
 
-  // TODO(garyq): Remove this after next stable release.
-  /// The [visitTextSpan] method is invalid on [PlaceholderSpan]s.
-  @override
-  @Deprecated(
-    'Use to visitChildren instead. '
-    'This feature was deprecated after v1.7.3.'
-  )
-  bool visitTextSpan(bool visitor(TextSpan span)) {
-    assert(false, 'visitTextSpan is deprecated. Use visitChildren to support InlineSpans');
-    return false;
-  }
-
-  /// Populates the `semanticsOffsets` and `semanticsElements` with the appropriate data
-  /// to be able to construct a [SemanticsNode].
-  ///
-  /// [PlaceholderSpan]s have a text length of 1, which corresponds to the object
-  /// replacement character (0xFFFC) that is inserted to represent it.
-  ///
-  /// Null is added to `semanticsElements` for [PlaceholderSpan]s.
-  @override
-  void describeSemantics(Accumulator offset, List<int> semanticsOffsets, List<dynamic> semanticsElements) {
-    semanticsOffsets.add(offset.value);
-    semanticsOffsets.add(offset.value + 1);
-    semanticsElements.add(null); // null indicates this is a placeholder.
-    offset.increment(1);
-  }
-
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
 
-    properties.add(EnumProperty<ui.PlaceholderAlignment>('alignment', alignment, defaultValue: null));
+    properties.add(
+      EnumProperty<ui.PlaceholderAlignment>('alignment', alignment, defaultValue: null),
+    );
     properties.add(EnumProperty<TextBaseline>('baseline', baseline, defaultValue: null));
+  }
+
+  @override
+  bool debugAssertIsValid() {
+    assert(false, 'Consider implementing the WidgetSpan interface instead.');
+    return super.debugAssertIsValid();
   }
 }

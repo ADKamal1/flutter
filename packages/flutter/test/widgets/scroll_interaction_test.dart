@@ -2,24 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('Scroll flings twice in a row does not crash', (WidgetTester tester) async {
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
-        child: ListView(
-          children: <Widget>[
-            Container(height: 100000.0),
-          ],
-        ),
+        child: ListView(children: <Widget>[Container(height: 100000.0)]),
       ),
     );
 
-    final ScrollableState scrollable =
-      tester.state<ScrollableState>(find.byType(Scrollable));
+    final ScrollableState scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
 
     expect(scrollable.position.pixels, equals(0.0));
 

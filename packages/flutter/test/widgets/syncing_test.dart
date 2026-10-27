@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class TestWidget extends StatefulWidget {
   const TestWidget({
-    Key? key,
+    super.key,
     required this.child,
     required this.persistentState,
     required this.syncedState,
-  }) : super(key: key);
+  });
 
   final Widget child;
   final int persistentState;
@@ -47,16 +47,13 @@ class TestWidgetState extends State<TestWidget> {
 }
 
 void main() {
-
   testWidgets('no change', (WidgetTester tester) async {
     await tester.pumpWidget(
-      Container(
-        child: Container(
-          child: TestWidget(
-            persistentState: 1,
-            syncedState: 0,
-            child: Container(),
-          ),
+      ColoredBox(
+        color: const Color(0xFF0000FF),
+        child: ColoredBox(
+          color: const Color(0xFF0000FF),
+          child: TestWidget(persistentState: 1, syncedState: 0, child: Container()),
         ),
       ),
     );
@@ -67,13 +64,11 @@ void main() {
     expect(state.updates, equals(0));
 
     await tester.pumpWidget(
-      Container(
-        child: Container(
-          child: TestWidget(
-            persistentState: 2,
-            syncedState: 0,
-            child: Container(),
-          ),
+      ColoredBox(
+        color: const Color(0xFF0000FF),
+        child: ColoredBox(
+          color: const Color(0xFF0000FF),
+          child: TestWidget(persistentState: 2, syncedState: 0, child: Container()),
         ),
       ),
     );
@@ -86,13 +81,11 @@ void main() {
 
   testWidgets('remove one', (WidgetTester tester) async {
     await tester.pumpWidget(
-      Container(
-        child: Container(
-          child: TestWidget(
-            persistentState: 10,
-            syncedState: 0,
-            child: Container(),
-          ),
+      ColoredBox(
+        color: const Color(0xFF0000FF),
+        child: ColoredBox(
+          color: const Color(0xFF0000FF),
+          child: TestWidget(persistentState: 10, syncedState: 0, child: Container()),
         ),
       ),
     );
@@ -103,12 +96,9 @@ void main() {
     expect(state.updates, equals(0));
 
     await tester.pumpWidget(
-      Container(
-        child: TestWidget(
-          persistentState: 11,
-          syncedState: 0,
-          child: Container(),
-        ),
+      ColoredBox(
+        color: const Color(0xFF00FF00),
+        child: TestWidget(persistentState: 11, syncedState: 0, child: Container()),
       ),
     );
 
@@ -121,9 +111,17 @@ void main() {
   });
 
   testWidgets('swap instances around', (WidgetTester tester) async {
-    const Widget a = TestWidget(persistentState: 0x61, syncedState: 0x41, child: Text('apple', textDirection: TextDirection.ltr));
-    const Widget b = TestWidget(persistentState: 0x62, syncedState: 0x42, child: Text('banana', textDirection: TextDirection.ltr));
-    await tester.pumpWidget(Column());
+    const Widget a = TestWidget(
+      persistentState: 0x61,
+      syncedState: 0x41,
+      child: Text('apple', textDirection: TextDirection.ltr),
+    );
+    const Widget b = TestWidget(
+      persistentState: 0x62,
+      syncedState: 0x42,
+      child: Text('banana', textDirection: TextDirection.ltr),
+    );
+    await tester.pumpWidget(const Column());
 
     final GlobalKey keyA = GlobalKey();
     final GlobalKey keyB = GlobalKey();
@@ -131,14 +129,8 @@ void main() {
     await tester.pumpWidget(
       Column(
         children: <Widget>[
-          Container(
-            key: keyA,
-            child: a,
-          ),
-          Container(
-            key: keyB,
-            child: b,
-          ),
+          Container(key: keyA, child: a),
+          Container(key: keyB, child: b),
         ],
       ),
     );
@@ -158,14 +150,8 @@ void main() {
     await tester.pumpWidget(
       Column(
         children: <Widget>[
-          Container(
-            key: keyA,
-            child: a,
-          ),
-          Container(
-            key: keyB,
-            child: b,
-          ),
+          Container(key: keyA, child: a),
+          Container(key: keyB, child: b),
         ],
       ),
     );
@@ -187,14 +173,8 @@ void main() {
     await tester.pumpWidget(
       Column(
         children: <Widget>[
-          Container(
-            key: keyA,
-            child: b,
-          ),
-          Container(
-            key: keyB,
-            child: a,
-          ),
+          Container(key: keyA, child: b),
+          Container(key: keyB, child: a),
         ],
       ),
     );

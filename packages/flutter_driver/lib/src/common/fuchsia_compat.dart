@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-/// Convenience methods for Flutter application driving on Fuchsia. Can
-/// be run on either a host machine (making a remote connection to a Fuchsia
-/// device), or on the target Fuchsia machine.
 import 'dart:io';
 
 import 'package:fuchsia_remote_debug_protocol/fuchsia_remote_debug_protocol.dart';
@@ -29,7 +24,7 @@ class _DummyPortForwarder implements PortForwarder {
   String get openPortAddress => InternetAddress.loopbackIPv4.address;
 
   @override
-  Future<void> stop() async { }
+  Future<void> stop() async {}
 }
 
 class _DummySshCommandRunner implements SshCommandRunner {
@@ -40,13 +35,13 @@ class _DummySshCommandRunner implements SshCommandRunner {
   }
 
   @override
-  String get sshConfigPath => null;
+  String get sshConfigPath => '';
 
   @override
   String get address => InternetAddress.loopbackIPv4.address;
 
   @override
-  String get interface => null;
+  String get interface => '';
 
   @override
   Future<List<String>> run(String command) async {
@@ -72,8 +67,8 @@ class _DummySshCommandRunner implements SshCommandRunner {
 Future<PortForwarder> _dummyPortForwardingFunction(
   String address,
   int remotePort, [
-  String interface = '',
-  String configFile,
+  String? interface,
+  String? configFile,
 ]) async {
   return _DummyPortForwarder(remotePort, remotePort);
 }
@@ -84,7 +79,7 @@ Future<PortForwarder> _dummyPortForwardingFunction(
 /// [FuchsiaRemoteConnection.connect] whereby the `FUCHSIA_REMOTE_URL` and
 /// `FUCHSIA_SSH_CONFIG` variables must be set. If run on a Fuchsia device, will
 /// connect locally without need for environment variables.
-class FuchsiaCompat {
+abstract final class FuchsiaCompat {
   static void _init() {
     fuchsiaPortForwardingFunction = _dummyPortForwardingFunction;
   }
@@ -104,7 +99,6 @@ class FuchsiaCompat {
   /// [FuchsiaRemoteConnection.stop].
   static Future<FuchsiaRemoteConnection> connect() async {
     FuchsiaCompat._init();
-    return FuchsiaRemoteConnection.connectWithSshCommandRunner(
-        _DummySshCommandRunner());
+    return FuchsiaRemoteConnection.connectWithSshCommandRunner(_DummySshCommandRunner());
   }
 }

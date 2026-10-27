@@ -2,9 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'dart:developer';
+/// @docImport 'dart:ui';
+///
+/// @docImport 'package:flutter/widgets.dart';
+/// @docImport 'package:flutter_test/flutter_test.dart';
+///
+/// @docImport 'border_radius.dart';
+/// @docImport 'borders.dart';
+/// @docImport 'box_decoration.dart';
+/// @docImport 'box_shadow.dart';
+/// @docImport 'image_provider.dart';
+/// @docImport 'shader_warm_up.dart';
+/// @docImport 'shape_decoration.dart';
+library;
 
 import 'dart:io';
-import 'dart:ui' show Size, hashValues;
+import 'dart:ui' show Image, Picture, Size, TextDirection;
 
 import 'package:flutter/foundation.dart';
 
@@ -13,6 +27,18 @@ import 'package:flutter/foundation.dart';
 /// This is useful when writing golden file tests (see [matchesGoldenFile]) since
 /// the rendering of shadows is not guaranteed to be pixel-for-pixel identical from
 /// version to version (or even from run to run).
+///
+/// This is set to true in [AutomatedTestWidgetsFlutterBinding]. Tests will fail
+/// if they change this value and do not reset it before the end of the test.
+///
+/// When this is set, [BoxShadow.toPaint] acts as if the [BoxShadow.blurStyle]
+/// was [BlurStyle.normal] regardless of the actual specified blur style. This
+/// is compensated for in [BoxDecoration] and [ShapeDecoration] but may need to
+/// be explicitly considered in other situations.
+///
+/// This property should not be changed during a frame (e.g. during a call to
+/// [ShapeBorder.paintInterior] or [ShapeBorder.getOuterPath]); doing so may
+/// cause undefined effects.
 bool debugDisableShadows = false;
 
 /// Signature for a method that returns an [HttpClient].
@@ -36,7 +62,7 @@ HttpClientProvider? debugNetworkImageHttpClientProvider;
 /// output size.
 ///
 /// See: [debugOnPaintImage].
-typedef PaintImageCallback = void Function(ImageSizeInfo);
+typedef PaintImageCallback = void Function(ImageSizeInfo info);
 
 /// Tracks the bytes used by a [dart:ui.Image] compared to the bytes needed to
 /// paint that image without scaling it.
@@ -48,20 +74,20 @@ class ImageSizeInfo {
   /// This class is used by the framework when it paints an image to a canvas
   /// to report to `dart:developer`'s [postEvent], as well as to the
   /// [debugOnPaintImage] callback if it is set.
-  const ImageSizeInfo({this.source, this.displaySize, required this.imageSize});
+  const ImageSizeInfo({this.source, required this.displaySize, required this.imageSize});
 
   /// A unique identifier for this image, for example its asset path or network
   /// URL.
   final String? source;
 
   /// The size of the area the image will be rendered in.
-  final Size? displaySize;
+  final Size displaySize;
 
   /// The size the image has been decoded to.
   final Size imageSize;
 
   /// The number of bytes needed to render the image without scaling it.
-  int get displaySizeInBytes => _sizeToBytes(displaySize!);
+  int get displaySizeInBytes => _sizeToBytes(displaySize);
 
   /// The number of bytes used by the image in memory.
   int get decodedSizeInBytes => _sizeToBytes(imageSize);
@@ -69,22 +95,15 @@ class ImageSizeInfo {
   int _sizeToBytes(Size size) {
     // Assume 4 bytes per pixel and that mipmapping will be used, which adds
     // 4/3.
-    return (size.width * size.height * 4 * (4/3)).toInt();
+    return (size.width * size.height * 4 * (4 / 3)).toInt();
   }
 
   /// Returns a JSON encodable representation of this object.
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'source': source,
-      if (displaySize != null)
-        'displaySize': <String, Object?>{
-          'width': displaySize!.width,
-          'height': displaySize!.height,
-        },
-      'imageSize': <String, Object?>{
-        'width': imageSize.width,
-        'height': imageSize.height,
-      },
+      'displaySize': <String, Object?>{'width': displaySize.width, 'height': displaySize.height},
+      'imageSize': <String, Object?>{'width': imageSize.width, 'height': imageSize.height},
       'displaySizeInBytes': displaySizeInBytes,
       'decodedSizeInBytes': decodedSizeInBytes,
     };
@@ -95,14 +114,14 @@ class ImageSizeInfo {
     if (other.runtimeType != runtimeType) {
       return false;
     }
-    return other is ImageSizeInfo
-        && other.source == source
-        && other.imageSize == imageSize
-        && other.displaySize == displaySize;
+    return other is ImageSizeInfo &&
+        other.source == source &&
+        other.imageSize == imageSize &&
+        other.displaySize == displaySize;
   }
 
   @override
-  int get hashCode => hashValues(source, displaySize, imageSize);
+  int get hashCode => Object.hash(source, displaySize, imageSize);
 
   @override
   String toString() => 'ImageSizeInfo($source, imageSize: $imageSize, displaySize: $displaySize)';
@@ -157,11 +176,13 @@ PaintImageCallback? debugOnPaintImage;
 /// This has no effect unless asserts are enabled.
 bool debugInvertOversizedImages = false;
 
+const int _imageOverheadAllowanceDefault = 128 * 1024;
+
 /// The number of bytes an image must use before it triggers inversion when
 /// [debugInvertOversizedImages] is true.
 ///
-/// Default is 1024 (1kb).
-int debugImageOverheadAllowance = 1024;
+/// Default is 128kb.
+int debugImageOverheadAllowance = _imageOverheadAllowanceDefault;
 
 /// Returns true if none of the painting library debug variables have been changed.
 ///
@@ -174,14 +195,77 @@ int debugImageOverheadAllowance = 1024;
 /// The `debugDisableShadowsOverride` argument can be provided to override
 /// the expected value for [debugDisableShadows]. (This exists because the
 /// test framework itself overrides this value in some cases.)
-bool debugAssertAllPaintingVarsUnset(String reason, { bool debugDisableShadowsOverride = false }) {
+bool debugAssertAllPaintingVarsUnset(String reason, {bool debugDisableShadowsOverride = false}) {
   assert(() {
     if (debugDisableShadows != debugDisableShadowsOverride ||
         debugNetworkImageHttpClientProvider != null ||
         debugOnPaintImage != null ||
-        debugInvertOversizedImages == true ||
-        debugImageOverheadAllowance != 1024) {
+        debugInvertOversizedImages ||
+        debugImageOverheadAllowance != _imageOverheadAllowanceDefault) {
       throw FlutterError(reason);
+    }
+    return true;
+  }());
+  return true;
+}
+
+/// The signature of [debugCaptureShaderWarmUpPicture].
+///
+/// Used by tests to run assertions on the [Picture] created by
+/// [ShaderWarmUp.execute]. The return value indicates whether the assertions
+/// pass or not.
+typedef ShaderWarmUpPictureCallback = bool Function(Picture picture);
+
+/// The signature of [debugCaptureShaderWarmUpImage].
+///
+/// Used by tests to run assertions on the [Image] created by
+/// [ShaderWarmUp.execute]. The return value indicates whether the assertions
+/// pass or not.
+typedef ShaderWarmUpImageCallback = bool Function(Image image);
+
+/// Called by [ShaderWarmUp.execute] immediately after it creates a [Picture].
+///
+/// Tests may use this to capture the picture and run assertions on it.
+ShaderWarmUpPictureCallback debugCaptureShaderWarmUpPicture = _defaultPictureCapture;
+bool _defaultPictureCapture(Picture picture) => true;
+
+/// Called by [ShaderWarmUp.execute] immediately after it creates an [Image].
+///
+/// Tests may use this to capture the picture and run assertions on it.
+ShaderWarmUpImageCallback debugCaptureShaderWarmUpImage = _defaultImageCapture;
+bool _defaultImageCapture(Image image) => true;
+
+/// Asserts that a given [TextDirection] is not null.
+///
+/// Used by painting library classes that require a [TextDirection] to resolve
+/// their properties, such as [BorderRadiusDirectional].
+///
+/// Does nothing if asserts are disabled. Always returns true.
+///
+/// See also:
+///
+///  * [debugCheckHasDirectionality], which is a similar widgets-library level function.
+bool debugCheckCanResolveTextDirection(TextDirection? direction, String target) {
+  assert(() {
+    if (direction == null) {
+      throw FlutterError.fromParts(<DiagnosticsNode>[
+        ErrorSummary('No TextDirection found.'),
+        ErrorDescription(
+          'To resolve $target properties, it must be provided with a TextDirection.',
+        ),
+        ErrorHint(
+          'This error usually occurs when $target is used in a widget without '
+          'a Directionality ancestor.',
+        ),
+        ErrorHint(
+          'Typically, the Directionality widget is introduced by the MaterialApp '
+          'or WidgetsApp widget at the top of your application widget tree. It '
+          'determines the ambient reading direction and is used, for example, to '
+          'determine how to lay out text, how to interpret "start" and "end" '
+          'values, and to resolve EdgeInsetsDirectional, '
+          'AlignmentDirectional, and other *Directional objects.',
+        ),
+      ]);
     }
     return true;
   }());

@@ -10,30 +10,27 @@ import 'stock_data.dart';
 typedef StockRowActionCallback = void Function(Stock stock);
 
 class StockRow extends StatelessWidget {
-  StockRow({
-    this.stock,
-    this.onPressed,
-    this.onDoubleTap,
-    this.onLongPressed,
-  }) : super(key: ObjectKey(stock));
+  StockRow({required this.stock, this.onPressed, this.onDoubleTap, this.onLongPressed})
+    : super(key: ObjectKey(stock));
 
   final Stock stock;
-  final StockRowActionCallback onPressed;
-  final StockRowActionCallback onDoubleTap;
-  final StockRowActionCallback onLongPressed;
+  final StockRowActionCallback? onPressed;
+  final StockRowActionCallback? onDoubleTap;
+  final StockRowActionCallback? onLongPressed;
 
   static const double kHeight = 79.0;
 
-  GestureTapCallback _getHandler(StockRowActionCallback callback) {
+  GestureTapCallback? _getHandler(StockRowActionCallback? callback) {
     return callback == null ? null : () => callback(stock);
   }
 
   @override
   Widget build(BuildContext context) {
-    final String lastSale = '\$${stock.lastSale.toStringAsFixed(2)}';
-    String changeInPrice = '${stock.percentChange.toStringAsFixed(2)}%';
-    if (stock.percentChange > 0)
-      changeInPrice = '+' + changeInPrice;
+    final lastSale = '\$${stock.lastSale.toStringAsFixed(2)}';
+    var changeInPrice = '${stock.percentChange.toStringAsFixed(2)}%';
+    if (stock.percentChange > 0) {
+      changeInPrice = '+$changeInPrice';
+    }
     return InkWell(
       key: ValueKey<String>(stock.symbol),
       onTap: _getHandler(onPressed),
@@ -42,9 +39,7 @@ class StockRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 20.0),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Theme.of(context).dividerColor)
-          )
+          border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
         ),
         child: Row(
           children: <Widget>[
@@ -57,28 +52,13 @@ class StockRow extends StatelessWidget {
             ),
             Expanded(
               child: Row(
-                children: <Widget>[
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      stock.symbol
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      lastSale,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      changeInPrice,
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ],
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: DefaultTextStyle.of(context).style.textBaseline,
+                children: <Widget>[
+                  Expanded(flex: 2, child: Text(stock.symbol)),
+                  Expanded(child: Text(lastSale, textAlign: TextAlign.right)),
+                  Expanded(child: Text(changeInPrice, textAlign: TextAlign.right)),
+                ],
               ),
             ),
           ],

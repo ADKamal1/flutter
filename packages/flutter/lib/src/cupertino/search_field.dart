@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/rendering.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -11,6 +12,20 @@ import 'colors.dart';
 import 'icons.dart';
 import 'localizations.dart';
 import 'text_field.dart';
+
+export 'package:flutter/services.dart' show SmartDashesType, SmartQuotesType;
+
+// The fraction of the height of the search text field after which its contents
+// completely fade out when resized on scroll.
+//
+// Eyeballed on an iPhone 15 simulator running iOS 17.5.
+const double _kMinHeightBeforeTotalTransparency = 4 / 5;
+
+// The maximum icon size of the prefix icon of a focused search field before it
+// is hidden in higher accessibility text scale modes.
+//
+// Eyeballed on an iPhone 15 simulator running iOS 17.5.
+const double _kMaxPrefixIconSize = 30.0;
 
 /// A [CupertinoTextField] that mimics the look and behavior of UIKit's
 /// `UISearchTextField`.
@@ -23,58 +38,27 @@ import 'text_field.dart';
 /// [controller]. For example, to set the initial value of the text field, use
 /// a [controller] that already contains some text such as:
 ///
-/// {@tool snippet}
+/// {@tool dartpad}
+/// This examples shows how to provide initial text to a [CupertinoSearchTextField]
+/// using the [controller] property.
 ///
-/// ```dart
-/// class MyPrefilledSearch extends StatefulWidget {
-///   @override
-///   _MyPrefilledSearchState createState() => _MyPrefilledSearchState();
-/// }
-///
-/// class _MyPrefilledSearchState extends State<MyPrefilledSearch> {
-///   TextEditingController _textController;
-///
-///   @override
-///   void initState() {
-///     super.initState();
-///     _textController = TextEditingController(text: 'initial text');
-///   }
-///
-///   @override
-///   Widget build(BuildContext context) {
-///     return CupertinoSearchTextField(controller: _textController);
-///   }
-/// }
-/// ```
+/// ** See code in examples/api/lib/cupertino/search_field/cupertino_search_field.0.dart **
 /// {@end-tool}
 ///
 /// It is recommended to pass a [ValueChanged<String>] to both [onChanged] and
 /// [onSubmitted] parameters in order to be notified once the value of the
 /// field changes or is submitted by the keyboard:
 ///
-/// {@tool snippet}
+/// {@tool dartpad}
+/// This examples shows how to be notified of field changes or submitted text from
+/// a [CupertinoSearchTextField].
 ///
-/// ```dart
-/// class MyPrefilledSearch extends StatefulWidget {
-///   @override
-///   _MyPrefilledSearchState createState() => _MyPrefilledSearchState();
-/// }
-///
-/// class _MyPrefilledSearchState extends State<MyPrefilledSearch> {
-///   @override
-///   Widget build(BuildContext context) {
-///     return CupertinoSearchTextField(
-///       onChanged: (value) {
-///         print("The text has changed to: " + value);
-///       },
-///       onSubmitted: (value) {
-///         print("Submitted text: " + value);
-///       },
-///     );
-///   }
-/// }
-/// ```
+/// ** See code in examples/api/lib/cupertino/search_field/cupertino_search_field.1.dart **
 /// {@end-tool}
+///
+/// See also:
+///
+///  * <https://developer.apple.com/design/human-interface-guidelines/ios/bars/search-bars/>
 class CupertinoSearchTextField extends StatefulWidget {
   /// Creates a [CupertinoTextField] that mimics the look and behavior of
   /// UIKit's `UISearchTextField`.
@@ -95,7 +79,7 @@ class CupertinoSearchTextField extends StatefulWidget {
   // TODO(DanielEdrisian): Localize the 'Search' placeholder.
   ///
   /// The [style] and [placeholderStyle] properties allow changing the style of
-  /// the text and placeholder of the textfield. [placeholderStyle] defaults
+  /// the text and placeholder of the text field. [placeholderStyle] defaults
   /// to the gray [CupertinoColors.secondaryLabel] iOS color.
   ///
   /// To set the text field's background color and border radius, pass a
@@ -106,13 +90,16 @@ class CupertinoSearchTextField extends StatefulWidget {
   ///
   /// The [itemColor] and [itemSize] properties allow changing the icon color
   /// and icon size of the search icon (prefix) and X-Mark (suffix).
-  /// They default to [CupertinoColors.secondaryLabel] and [20.0].
+  /// They default to [CupertinoColors.secondaryLabel] and `20.0`.
   ///
   /// The [padding], [prefixInsets], and [suffixInsets] let you set the padding
   /// insets for text, the search icon (prefix), and the X-Mark icon (suffix).
   /// They default to values that replicate the `UISearchTextField` look. These
   /// default fields were determined using the comparison tool in
   /// https://github.com/flutter/platform_tests/.
+  ///
+  /// To customize the prefix icon, pass a [Widget] to [prefixIcon]. This
+  /// defaults to the search icon.
   ///
   /// To customize the suffix icon, pass an [Icon] to [suffixIcon]. This
   /// defaults to the X-Mark.
@@ -125,7 +112,7 @@ class CupertinoSearchTextField extends StatefulWidget {
   /// To customize the X-Mark (suffix) action, pass a [VoidCallback] to
   /// [onSuffixTap]. This defaults to clearing the text.
   const CupertinoSearchTextField({
-    Key? key,
+    super.key,
     this.controller,
     this.onChanged,
     this.onSubmitted,
@@ -135,36 +122,44 @@ class CupertinoSearchTextField extends StatefulWidget {
     this.decoration,
     this.backgroundColor,
     this.borderRadius,
-    this.padding = const EdgeInsetsDirectional.fromSTEB(3.8, 8, 5, 8),
-    Color this.itemColor = CupertinoColors.secondaryLabel,
+    this.keyboardType = TextInputType.text,
+    this.padding = const EdgeInsetsDirectional.fromSTEB(5.5, 8, 5.5, 8),
+    this.itemColor = CupertinoColors.secondaryLabel,
     this.itemSize = 20.0,
-    this.prefixInsets = const EdgeInsetsDirectional.fromSTEB(6, 0, 0, 4),
-    this.suffixInsets = const EdgeInsetsDirectional.fromSTEB(0, 0, 5, 2),
+    this.prefixInsets = const EdgeInsetsDirectional.fromSTEB(6, 8, 0, 8),
+    this.prefixIcon = const Icon(CupertinoIcons.search),
+    this.suffixInsets = const EdgeInsetsDirectional.fromSTEB(0, 8, 5, 8),
     this.suffixIcon = const Icon(CupertinoIcons.xmark_circle_fill),
     this.suffixMode = OverlayVisibilityMode.editing,
     this.onSuffixTap,
     this.restorationId,
     this.focusNode,
-  })  : assert(padding != null),
-        assert(itemColor != null),
-        assert(itemSize != null),
-        assert(prefixInsets != null),
-        assert(suffixInsets != null),
-        assert(suffixIcon != null),
-        assert(suffixMode != null),
-        assert(
-          !((decoration != null) && (backgroundColor != null)),
-          'Cannot provide both a background color and a decoration\n'
-          'To provide both, use "decoration: BoxDecoration(color: '
-          'backgroundColor)"',
-        ),
-        assert(
-          !((decoration != null) && (borderRadius != null)),
-          'Cannot provide both a border radius and a decoration\n'
-          'To provide both, use "decoration: BoxDecoration(borderRadius: '
-          'borderRadius)"',
-        ),
-        super(key: key);
+    this.smartQuotesType,
+    this.smartDashesType,
+    this.enableIMEPersonalizedLearning = true,
+    this.autofocus = false,
+    this.onTap,
+    this.autocorrect = true,
+    this.enabled,
+    this.cursorWidth = 2.0,
+    this.cursorHeight,
+    this.cursorRadius = const Radius.circular(2.0),
+    this.cursorOpacityAnimates = true,
+    this.cursorColor,
+  }) : assert(
+         !((decoration != null) && (backgroundColor != null)),
+         'Cannot provide both a background color and a decoration\n'
+         'The backgroundColor argument is just a shorthand for '
+         '"decoration: BoxDecoration(color: backgroundColor)".\n'
+         'To use both a backgroundColor and other decoration properties, set the color in the BoxDecoration instead.',
+       ),
+       assert(
+         !((decoration != null) && (borderRadius != null)),
+         'Cannot provide both a border radius and a decoration\n'
+         'The borderRadius argument is just a shorthand for '
+         '"decoration: BoxDecoration(borderRadius: borderRadius)".\n'
+         'To use both a radius and other decoration properties, set the radius in the BoxDecoration instead.',
+       );
 
   /// Controls the text being edited.
   ///
@@ -189,7 +184,7 @@ class CupertinoSearchTextField extends StatefulWidget {
   /// Defaults to 'Search' localized in each supported language.
   final String? placeholder;
 
-  /// Sets the style of the placeholder of the textfield.
+  /// Sets the style of the placeholder of the text field.
   ///
   /// Defaults to the gray [CupertinoColors.secondaryLabel] iOS color.
   final TextStyle? placeholderStyle;
@@ -216,48 +211,58 @@ class CupertinoSearchTextField extends StatefulWidget {
   // https://github.com/flutter/flutter/issues/13914.
   final BorderRadius? borderRadius;
 
+  /// The keyboard type for this search field.
+  ///
+  /// Defaults to [TextInputType.text].
+  final TextInputType? keyboardType;
+
   /// Sets the padding insets for the text and placeholder.
   ///
-  /// Cannot be null. Defaults to padding that replicates the
-  /// `UISearchTextField` look. The inset values were determined using the
-  /// comparison tool in https://github.com/flutter/platform_tests/.
+  /// Defaults to padding that replicates the `UISearchTextField` look. The
+  /// inset values were determined using the comparison tool in
+  /// https://github.com/flutter/platform_tests/.
   final EdgeInsetsGeometry padding;
 
   /// Sets the color for the suffix and prefix icons.
   ///
-  /// Cannot be null. Defaults to [CupertinoColors.secondaryLabel].
+  /// Defaults to [CupertinoColors.secondaryLabel].
   final Color itemColor;
 
   /// Sets the base icon size for the suffix and prefix icons.
   ///
-  /// Cannot be null. The size of the icon is scaled using the accessibility
-  /// font scale settings. Defaults to [20.0].
+  /// The size of the icon is scaled using the accessibility font scale
+  /// settings. Defaults to `20.0`.
   final double itemSize;
 
   /// Sets the padding insets for the suffix.
   ///
-  /// Cannot be null. Defaults to padding that replicates the
-  /// `UISearchTextField` suffix look. The inset values were determined using
-  /// the comparison tool in https://github.com/flutter/platform_tests/.
+  /// Defaults to padding that replicates the `UISearchTextField` suffix look.
+  /// The inset values were determined using the comparison tool in
+  /// https://github.com/flutter/platform_tests/.
   final EdgeInsetsGeometry prefixInsets;
+
+  /// Sets a prefix widget.
+  ///
+  /// Defaults to an [Icon] widget with the [CupertinoIcons.search] icon.
+  final Widget prefixIcon;
 
   /// Sets the padding insets for the prefix.
   ///
-  /// Cannot be null. Defaults to padding that replicates the
-  /// `UISearchTextField` prefix look. The inset values were determined using
-  /// the comparison tool in https://github.com/flutter/platform_tests/.
+  /// Defaults to padding that replicates the `UISearchTextField` prefix look.
+  /// The inset values were determined using the comparison tool in
+  /// https://github.com/flutter/platform_tests/.
   final EdgeInsetsGeometry suffixInsets;
 
   /// Sets the suffix widget's icon.
   ///
-  /// Cannot be null. Defaults to the X-Mark [CupertinoIcons.xmark_circle_fill].
-  /// "To change the functionality of the suffix icon, provide a custom
-  /// onSuffixTap callback and specify an intuitive suffixIcon.
+  /// Defaults to the X-Mark [CupertinoIcons.xmark_circle_fill]. "To change the
+  /// functionality of the suffix icon, provide a custom onSuffixTap callback
+  /// and specify an intuitive suffixIcon.
   final Icon suffixIcon;
 
   /// Dictates when the X-Mark (suffix) should be visible.
   ///
-  /// Cannot be null. Defaults to only on when editing.
+  /// Defaults to only on when editing.
   final OverlayVisibilityMode suffixMode;
 
   /// Sets the X-Mark (suffix) action.
@@ -273,21 +278,105 @@ class CupertinoSearchTextField extends StatefulWidget {
   /// {@macro flutter.widgets.Focus.focusNode}
   final FocusNode? focusNode;
 
+  /// {@macro flutter.widgets.editableText.autofocus}
+  final bool autofocus;
+
+  /// {@macro flutter.material.textfield.onTap}
+  final VoidCallback? onTap;
+
+  /// Whether to enable autocorrection.
+  ///
+  /// Defaults to true.
+  final bool autocorrect;
+
+  /// Whether to allow the platform to automatically format quotes.
+  ///
+  /// This flag only affects iOS, where it is equivalent to [`UITextSmartQuotesType`](https://developer.apple.com/documentation/uikit/uitextsmartquotestype?language=objc).
+  ///
+  /// When set to [SmartQuotesType.enabled], it passes
+  /// [`UITextSmartQuotesTypeYes`](https://developer.apple.com/documentation/uikit/uitextsmartquotestype/uitextsmartquotestypeyes?language=objc),
+  /// and when set to [SmartQuotesType.disabled], it passes
+  /// [`UITextSmartQuotesTypeNo`](https://developer.apple.com/documentation/uikit/uitextsmartquotestype/uitextsmartquotestypeno?language=objc).
+  ///
+  /// If set to null, [SmartQuotesType.enabled] will be used.
+  ///
+  /// As an example of what this does, a standard vertical double quote
+  /// character will be automatically replaced by a left or right double quote
+  /// depending on its position in a word.
+  ///
+  /// Defaults to null.
+  ///
+  /// See also:
+  ///
+  ///  * [smartDashesType]
+  ///  * <https://developer.apple.com/documentation/uikit/uitextinputtraits>
+  final SmartQuotesType? smartQuotesType;
+
+  /// Whether to allow the platform to automatically format dashes.
+  ///
+  /// This flag only affects iOS versions 11 and above, where it is equivalent to [`UITextSmartDashesType`](https://developer.apple.com/documentation/uikit/uitextsmartdashestype?language=objc).
+  ///
+  /// When set to [SmartDashesType.enabled], it passes
+  /// [`UITextSmartDashesTypeYes`](https://developer.apple.com/documentation/uikit/uitextsmartdashestype/uitextsmartdashestypeyes?language=objc),
+  /// and when set to [SmartDashesType.disabled], it passes
+  /// [`UITextSmartDashesTypeNo`](https://developer.apple.com/documentation/uikit/uitextsmartdashestype/uitextsmartdashestypeno?language=objc).
+  ///
+  /// If set to null, [SmartDashesType.enabled] will be used.
+  ///
+  /// As an example of what this does, two consecutive hyphen characters will be
+  /// automatically replaced with one en dash, and three consecutive hyphens
+  /// will become one em dash.
+  ///
+  /// Defaults to null.
+  ///
+  /// See also:
+  ///
+  ///  * [smartQuotesType]
+  ///  * <https://developer.apple.com/documentation/uikit/uitextinputtraits>
+  final SmartDashesType? smartDashesType;
+
+  /// {@macro flutter.services.TextInputConfiguration.enableIMEPersonalizedLearning}
+  final bool enableIMEPersonalizedLearning;
+
+  /// Disables the text field when false.
+  ///
+  /// Text fields in disabled states have a light grey background and don't
+  /// respond to touch events including the [prefixIcon] and [suffixIcon] button.
+  final bool? enabled;
+
+  /// {@macro flutter.widgets.editableText.cursorWidth}
+  final double cursorWidth;
+
+  /// {@macro flutter.widgets.editableText.cursorHeight}
+  final double? cursorHeight;
+
+  /// {@macro flutter.widgets.editableText.cursorRadius}
+  final Radius cursorRadius;
+
+  /// {@macro flutter.widgets.editableText.cursorOpacityAnimates}
+  final bool cursorOpacityAnimates;
+
+  /// The color to use when painting the cursor.
+  final Color? cursorColor;
+
   @override
   State<StatefulWidget> createState() => _CupertinoSearchTextFieldState();
 }
 
-class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
-    with RestorationMixin {
+class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField> with RestorationMixin {
   /// Default value for the border radius. Radius value was determined using the
   /// comparison tool in https://github.com/flutter/platform_tests/.
-  final BorderRadius _kDefaultBorderRadius =
-      const BorderRadius.all(Radius.circular(9.0));
+  final BorderRadius _kDefaultBorderRadius = const BorderRadius.all(Radius.circular(9.0));
 
   RestorableTextEditingController? _controller;
+  FocusNode? _focusNode;
 
-  TextEditingController get _effectiveController =>
-      widget.controller ?? _controller!.value;
+  TextEditingController get _effectiveController => widget.controller ?? _controller!.value;
+  FocusNode get _effectiveFocusNode => widget.focusNode ?? _focusNode!;
+
+  ScrollNotificationObserverState? _scrollNotificationObserver;
+  late double _scaledIconSize;
+  double _fadeExtent = 0.0;
 
   @override
   void initState() {
@@ -295,6 +384,17 @@ class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
     if (widget.controller == null) {
       _createLocalController();
     }
+    if (widget.focusNode == null) {
+      _focusNode = FocusNode();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scrollNotificationObserver?.removeListener(_handleScrollNotification);
+    _scrollNotificationObserver = ScrollNotificationObserver.maybeOf(context);
+    _scrollNotificationObserver?.addListener(_handleScrollNotification);
   }
 
   @override
@@ -307,6 +407,12 @@ class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
       _controller!.dispose();
       _controller = null;
     }
+    if (widget.focusNode == null && oldWidget.focusNode != null) {
+      _focusNode = FocusNode();
+    } else if (widget.focusNode != null && oldWidget.focusNode == null) {
+      _focusNode!.dispose();
+      _focusNode = null;
+    }
   }
 
   @override
@@ -314,6 +420,21 @@ class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
     if (_controller != null) {
       _registerController();
     }
+  }
+
+  @override
+  void dispose() {
+    if (_scrollNotificationObserver != null) {
+      _scrollNotificationObserver!.removeListener(_handleScrollNotification);
+      _scrollNotificationObserver = null;
+    }
+    if (widget.focusNode == null) {
+      _focusNode?.dispose();
+    }
+    if (widget.controller == null) {
+      _controller?.dispose();
+    }
+    super.dispose();
   }
 
   void _registerController() {
@@ -337,49 +458,105 @@ class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
   void _defaultOnSuffixTap() {
     final bool textChanged = _effectiveController.text.isNotEmpty;
     _effectiveController.clear();
-    if (widget.onChanged != null && textChanged)
+    if (widget.onChanged != null && textChanged) {
       widget.onChanged!(_effectiveController.text);
+    }
+  }
+
+  void _handleScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final double currentHeight = context.size?.height ?? 0.0;
+      setState(() {
+        _fadeExtent = _calculateScrollOpacity(
+          currentHeight,
+          _scaledIconSize + math.max(widget.prefixInsets.vertical, widget.suffixInsets.vertical),
+        );
+      });
+    }
+  }
+
+  static double _calculateScrollOpacity(double currentHeight, double maxHeight) {
+    final double thresholdHeight = maxHeight * _kMinHeightBeforeTotalTransparency;
+    if (currentHeight >= maxHeight) {
+      return 0.0;
+    } else if (currentHeight <= thresholdHeight) {
+      return 1.0;
+    } else {
+      final double range = maxHeight - thresholdHeight;
+      final double progress = (currentHeight - thresholdHeight) / range;
+      return 1.0 - progress;
+    }
+  }
+
+  // Animate the top padding so that the contents of the search field
+  // move upwards when the search text field is resized on scroll.
+  EdgeInsetsGeometry _animatedInsets(BuildContext context, EdgeInsetsGeometry insets) {
+    final EdgeInsets currentInsets = insets.resolve(Directionality.of(context));
+    final EdgeInsetsGeometry? animatedInsets = EdgeInsetsGeometry.lerp(
+      insets,
+      currentInsets.copyWith(top: currentInsets.top / 2),
+      _fadeExtent,
+    );
+    return animatedInsets ?? insets;
   }
 
   @override
   Widget build(BuildContext context) {
-    final String placeholder = widget.placeholder ??
-        CupertinoLocalizations.of(context).searchTextFieldPlaceholerLabel;
-
-    final TextStyle placeholderStyle = widget.placeholderStyle ??
-        const TextStyle(color: CupertinoColors.systemGrey);
+    final String placeholder =
+        widget.placeholder ?? CupertinoLocalizations.of(context).searchTextFieldPlaceholderLabel;
+    final Color defaultPlaceholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final TextStyle placeholderStyle =
+        widget.placeholderStyle ??
+        TextStyle(
+          color: defaultPlaceholderColor.withAlpha(
+            (255 * (defaultPlaceholderColor.a * (1 - _fadeExtent))).round(),
+          ),
+        );
 
     // The icon size will be scaled by a factor of the accessibility text scale,
     // to follow the behavior of `UISearchTextField`.
-    final double scaledIconSize =
-        MediaQuery.textScaleFactorOf(context) * widget.itemSize;
+    _scaledIconSize = MediaQuery.textScalerOf(context).scale(widget.itemSize);
 
     // If decoration was not provided, create a decoration with the provided
     // background color and border radius.
-    final BoxDecoration decoration = widget.decoration ??
+    final BoxDecoration decoration =
+        widget.decoration ??
         BoxDecoration(
           color: widget.backgroundColor ?? CupertinoColors.tertiarySystemFill,
           borderRadius: widget.borderRadius ?? _kDefaultBorderRadius,
         );
 
-    final IconThemeData iconThemeData = IconThemeData(
-        color: CupertinoDynamicColor.resolve(widget.itemColor, context),
-        size: scaledIconSize);
-
-    final Widget prefix = Padding(
-      child: IconTheme(
-          child: const Icon(CupertinoIcons.search), data: iconThemeData),
-      padding: widget.prefixInsets,
+    final Color iconColor = CupertinoDynamicColor.resolve(widget.itemColor, context);
+    final suffixIconThemeData = IconThemeData(color: iconColor, size: _scaledIconSize);
+    final prefixIconThemeData = IconThemeData(
+      color: iconColor,
+      size: _scaledIconSize >= _kMaxPrefixIconSize && _effectiveFocusNode.hasFocus
+          ? 0.0
+          : _scaledIconSize,
     );
 
-    final Widget suffix = Padding(
-      child: CupertinoButton(
-        child: IconTheme(child: widget.suffixIcon, data: iconThemeData),
-        onPressed: widget.onSuffixTap ?? _defaultOnSuffixTap,
-        minSize: 0,
-        padding: EdgeInsets.zero,
+    final Widget prefix = Opacity(
+      opacity: 1.0 - _fadeExtent,
+      child: Padding(
+        padding: _animatedInsets(context, widget.prefixInsets),
+        child: IconTheme(data: prefixIconThemeData, child: widget.prefixIcon),
       ),
-      padding: widget.suffixInsets,
+    );
+
+    final Widget suffix = Opacity(
+      opacity: 1.0 - _fadeExtent,
+      child: Padding(
+        padding: _animatedInsets(context, widget.suffixInsets),
+        child: CupertinoButton(
+          onPressed: widget.onSuffixTap ?? _defaultOnSuffixTap,
+          minSize: 0,
+          padding: EdgeInsets.zero,
+          child: IconTheme(data: suffixIconThemeData, child: widget.suffixIcon),
+        ),
+      ),
     );
 
     return CupertinoTextField(
@@ -388,13 +565,27 @@ class _CupertinoSearchTextFieldState extends State<CupertinoSearchTextField>
       style: widget.style,
       prefix: prefix,
       suffix: suffix,
+      keyboardType: widget.keyboardType,
+      onTap: widget.onTap,
+      enabled: widget.enabled ?? true,
+      cursorWidth: widget.cursorWidth,
+      cursorHeight: widget.cursorHeight,
+      cursorRadius: widget.cursorRadius,
+      cursorOpacityAnimates: widget.cursorOpacityAnimates,
+      cursorColor: widget.cursorColor,
       suffixMode: widget.suffixMode,
       placeholder: placeholder,
       placeholderStyle: placeholderStyle,
-      padding: widget.padding,
+      padding: _animatedInsets(context, widget.padding),
       onChanged: widget.onChanged,
       onSubmitted: widget.onSubmitted,
-      focusNode: widget.focusNode,
+      focusNode: _effectiveFocusNode,
+      autofocus: widget.autofocus,
+      autocorrect: widget.autocorrect,
+      smartQuotesType: widget.smartQuotesType,
+      smartDashesType: widget.smartDashesType,
+      enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
+      textInputAction: TextInputAction.search,
     );
   }
 }

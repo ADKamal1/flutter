@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/widgets.dart';
+library;
 
-import 'arena.dart';
-import 'events.dart';
 import 'recognizer.dart';
+
+export 'dart:ui' show PointerDeviceKind;
+
+export 'events.dart' show PointerDownEvent, PointerEvent;
 
 /// A gesture recognizer that eagerly claims victory in all gesture arenas.
 ///
@@ -15,13 +19,12 @@ import 'recognizer.dart';
 class EagerGestureRecognizer extends OneSequenceGestureRecognizer {
   /// Create an eager gesture recognizer.
   ///
-  /// {@macro flutter.gestures.GestureRecognizer.kind}
-  EagerGestureRecognizer({ PointerDeviceKind? kind }) : super(kind: kind);
+  /// {@macro flutter.gestures.GestureRecognizer.supportedDevices}
+  EagerGestureRecognizer({super.supportedDevices, super.allowedButtonsFilter});
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    // We call startTrackingPointer as this is where OneSequenceGestureRecognizer joins the arena.
-    startTrackingPointer(event.pointer, event.transform);
+    super.addAllowedPointer(event);
     resolve(GestureDisposition.accepted);
     stopTrackingPointer(event.pointer);
   }
@@ -30,8 +33,8 @@ class EagerGestureRecognizer extends OneSequenceGestureRecognizer {
   String get debugDescription => 'eager';
 
   @override
-  void didStopTrackingLastPointer(int pointer) { }
+  void didStopTrackingLastPointer(int pointer) {}
 
   @override
-  void handleEvent(PointerEvent event) { }
+  void handleEvent(PointerEvent event) {}
 }

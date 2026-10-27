@@ -4,21 +4,23 @@
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const Color _kBlue = Color(0xFF0000FF);
+const Color _kRed = Color(0xFFFF0000);
 
 void main() {
   testWidgets('Scrollable scaled up', (WidgetTester tester) async {
-    final ScrollController controller = ScrollController();
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(
-      MaterialApp(
+      TestWidgetsApp(
         home: Transform.scale(
           scale: 2.0,
           child: Center(
-            child: Container(
+            child: SizedBox(
               width: 200,
               child: ListView.builder(
                 controller: controller,
@@ -26,7 +28,7 @@ void main() {
                 itemBuilder: (BuildContext context, int index) {
                   return Container(
                     height: 100.0,
-                    color: index.isEven ? Colors.blue : Colors.red,
+                    color: index.isEven ? _kBlue : _kRed,
                     child: Text('Tile $index'),
                   );
                 },
@@ -56,13 +58,15 @@ void main() {
   });
 
   testWidgets('Scrollable scaled down', (WidgetTester tester) async {
-    final ScrollController controller = ScrollController();
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(
-      MaterialApp(
+      TestWidgetsApp(
         home: Transform.scale(
           scale: 0.5,
           child: Center(
-            child: Container(
+            child: SizedBox(
               width: 200,
               child: ListView.builder(
                 controller: controller,
@@ -70,7 +74,7 @@ void main() {
                 itemBuilder: (BuildContext context, int index) {
                   return Container(
                     height: 100.0,
-                    color: index.isEven ? Colors.blue : Colors.red,
+                    color: index.isEven ? _kBlue : _kRed,
                     child: Text('Tile $index'),
                   );
                 },
@@ -100,13 +104,15 @@ void main() {
   });
 
   testWidgets('Scrollable rotated 90 degrees', (WidgetTester tester) async {
-    final ScrollController controller = ScrollController();
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(
-      MaterialApp(
+      TestWidgetsApp(
         home: Transform.rotate(
           angle: math.pi / 2,
           child: Center(
-            child: Container(
+            child: SizedBox(
               width: 200,
               child: ListView.builder(
                 controller: controller,
@@ -114,7 +120,7 @@ void main() {
                 itemBuilder: (BuildContext context, int index) {
                   return Container(
                     height: 100.0,
-                    color: index.isEven ? Colors.blue : Colors.red,
+                    color: index.isEven ? _kBlue : _kRed,
                     child: Text('Tile $index'),
                   );
                 },
@@ -140,15 +146,17 @@ void main() {
   });
 
   testWidgets('Perspective transform on scrollable', (WidgetTester tester) async {
-    final ScrollController controller = ScrollController();
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
     await tester.pumpWidget(
-      MaterialApp(
+      TestWidgetsApp(
         home: Transform(
           transform: Matrix4.identity()
             ..setEntry(3, 2, 0.001)
             ..rotateX(math.pi / 4),
           child: Center(
-            child: Container(
+            child: SizedBox(
               width: 200,
               child: ListView.builder(
                 controller: controller,
@@ -156,7 +164,7 @@ void main() {
                 itemBuilder: (BuildContext context, int index) {
                   return Container(
                     height: 100.0,
-                    color: index.isEven ? Colors.blue : Colors.red,
+                    color: index.isEven ? _kBlue : _kRed,
                     child: Text('Tile $index'),
                   );
                 },
@@ -205,10 +213,7 @@ void main() {
 
     // The tracked point (in the coordinate space of the screen) and the finger
     // should have moved the same vertical distance over the screen.
-    expect(
-      pointOnScreenStart.dy - pointOnScreenEnd.dy,
-      within(distance: 0.00001, from: 50.0),
-    );
+    expect(pointOnScreenStart.dy - pointOnScreenEnd.dy, within(distance: 0.00001, from: 50.0));
 
     // While the point traveled the same distance as the finger in the
     // coordinate space of the screen, the scroll view actually moved far more

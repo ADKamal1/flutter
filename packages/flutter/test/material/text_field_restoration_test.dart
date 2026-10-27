@@ -3,33 +3,21 @@
 // found in the LICENSE file.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart';
 
 const String text = 'Hello World! How are you? Life is good!';
 const String alternativeText = 'Everything is awesome!!';
 
 void main() {
   testWidgets('TextField restoration', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        restorationScopeId: 'app',
-        home: TestWidget(),
-      ),
-    );
+    await tester.pumpWidget(const MaterialApp(restorationScopeId: 'app', home: TestWidget()));
 
     await restoreAndVerify(tester);
   });
 
   testWidgets('TextField restoration with external controller', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        restorationScopeId: 'root',
-        home: TestWidget(
-          useExternal: true,
-        ),
-      ),
+      const MaterialApp(restorationScopeId: 'root', home: TestWidget(useExternal: true)),
     );
 
     await restoreAndVerify(tester);
@@ -72,7 +60,7 @@ Future<void> restoreAndVerify(WidgetTester tester) async {
 }
 
 class TestWidget extends StatefulWidget {
-  const TestWidget({Key? key, this.useExternal = false}) : super(key: key);
+  const TestWidget({super.key, this.useExternal = false});
 
   final bool useExternal;
 
@@ -101,7 +89,6 @@ class TestWidgetState extends State<TestWidget> with RestorationMixin {
   Widget build(BuildContext context) {
     return Material(
       child: Align(
-        alignment: Alignment.center,
         child: SizedBox(
           width: 50,
           child: TextField(

@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math.dart' show Vector2;
 
 // Provides calculations for an object moving with inertia and friction using
 // the equation of motion from physics.
 // https://en.wikipedia.org/wiki/Equations_of_motion#Constant_translational_acceleration_in_a_straight_line
-// TODO(justinmc): Can this be replaced with friction_simulation.dart?
 @immutable
 class InertialMotion {
   const InertialMotion(this._initialVelocity, this._initialPosition);
@@ -30,15 +30,11 @@ class InertialMotion {
 
   // The acceleration opposing the initial velocity in x and y components.
   Vector2 get _acceleration {
-    // TODO(justinmc): Find actual velocity instead of summing?
-    final double velocityTotal = _initialVelocity.pixelsPerSecond.dx.abs()
-      + _initialVelocity.pixelsPerSecond.dy.abs();
+    final double velocityTotal =
+        _initialVelocity.pixelsPerSecond.dx.abs() + _initialVelocity.pixelsPerSecond.dy.abs();
     final double vRatioX = _initialVelocity.pixelsPerSecond.dx / velocityTotal;
     final double vRatioY = _initialVelocity.pixelsPerSecond.dy / velocityTotal;
-    return Vector2(
-      _kFrictionalAcceleration * vRatioX,
-      _kFrictionalAcceleration * vRatioY,
-    );
+    return Vector2(_kFrictionalAcceleration * vRatioX, _kFrictionalAcceleration * vRatioY);
   }
 
   // The position at a given time.
@@ -60,7 +56,7 @@ class InertialMotion {
 
   // Solve the equation of motion to find the position at a given point in time
   // in one dimension.
-  double _getPosition({double r0, double v0, int t, double a}) {
+  double _getPosition({required double r0, required double v0, required int t, required double a}) {
     // Stop movement when it would otherwise reverse direction.
     final double stopTime = (v0 / a).abs();
     if (t > stopTime) {
